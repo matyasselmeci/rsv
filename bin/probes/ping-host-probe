@@ -1,0 +1,83 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+##
+## Type ./ping-host-probe -h for information
+##
+## REQUIRES
+##  'RSV::Probe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.general.ping-host");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-CE");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 0.8.0");
+    &RSVProbeBase::Set_ProbeType ("OSG-CE");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("7,27,47 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("Probe to check if a remote host is responding to pings. The number of ping\n".
+	 " packets sent, and the time waited by the ping command can be set using \n".
+	 " arguments shown below.");
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+	(" [--ping-count <integer>]         Number of ping packets to send\n".
+	 " [--ping-timeout <integer>]       Time (in seconds) that ping command should".
+	 "\n                                    wait per packet");
+
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("ping-count=i","pingCount");
+    &RSVProbeBase::Extra_CLI_Option ("ping-timeout=i","pingTimeout");
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ## This test is already available in perl module; so just invoke it.
+    &RSVProbeBase::Ping_Host ();
+}

@@ -1,0 +1,118 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+##
+## Type ./srm-ping-probe -h for more information
+##
+## REQUIRES
+##  'RSV::Probe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+    &RSVProbeBase::Set_MetricName ("org.osg.srm.srmping");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-SRM");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG SE 1.0.0");
+    &RSVProbeBase::Set_ProbeType ("OSG-SRM");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("13,33,53 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("Probe to check if a SRM server node is responding to srm-pings. \n");
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+	(" --srm-destination-dir            Dummy PNFS path (where files can be written)\n        <full pnfs path>           (NO DEFAULT, Required parameter)\n".
+	 " [--srm-client-type <value>]      Type of SRM client: \"fnal\" or \"lbnl\"\n                                   (Default: \"fnal\"\n".
+	 " [--srm-client-loc <dir>]         Full path where SRM client is installed\n                                   (Default: \$VDT_LOCATION/srm-client-fermi\n". 
+	 "                                    or -lbnl if above parameter is set to \"lbnl\")\n".
+	 " [--srm-webservice-path <value>]  Bestman users set this to \"srm/v2/server\"\n                                   (Default: \"srm/managervN\", N is protocol#)\n".
+	 " [--srm-protocol-version          SRM Protocol version to use.\n               <integer>]          (Default: protocol 2)\n");
+
+
+    ## Uncomment if you want additional command line options 
+    &RSVProbeBase::Extra_CLI_Option ("srm-client-type=s","srmClientType");
+    &RSVProbeBase::Extra_CLI_Option ("srm-client-loc=s","srmClientDir");
+    &RSVProbeBase::Extra_CLI_Option ("srm-protocol-version=i","srmProtocolVersion");
+    &RSVProbeBase::Extra_CLI_Option ("srm-webservice-path=s","srmWebservicePath");
+    &RSVProbeBase::Extra_CLI_Option ("srm-destination-dir=s","srmcpDestinationDir" );
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ## Is proxy valid?
+    &RSVProbeBase::Check_Proxy_Validity ();
+
+    ## Check if host is responding to pings -- Call Ping function
+    $o{'callingRoutine'} = "Srm_Ping_Host ()";
+
+    ## Cannot handle (pinging of )protocol 1 for now .. so exit error w/ unknown status
+    &RSVProbeBase::Exit_Error (3, "SRM ping test is currently only available for SRM V2.2 based Storage Elements, because srmping functionality is not yet implemented for SRM V1.1.") if ($o{'srmProtocolVersion'} == 1);
+    &Setup_Srm_Metric ();
+
+    ## -2 or -1 can be used as shortcut for -srm_protocol_version=
+    my $srm_ping_cmd = "$o{'srmpingCmd'} -retry_num=0 -debug -" . $o{'srmProtocolVersion'}.
+	" -x509_user_proxy=" . $o{'proxyFile'} . " " . $o{'srmServiceType'} . 
+	"://". $o{'hostName'}. ":" . $o{'srmPortNumber'}.
+	" -webservice_path=$o{'srmWebservicePath'} 2>&1 " ;
+    &RSVProbeBase::Run_Command($srm_ping_cmd, "backtick");
+
+    ## Set metric status based on srmping command's exit value
+    if ($o{'cmdExitValue'} == 0) {
+	&RSVProbeBase::Set_Summary_Metric_Results (0, "SRM server running on $metric{'hostName'} is alive and responding to the srmping command.\nGot this from srm-ping command: $o{'cmdOut'}");
+	## Print metric, and we're all done!
+	&RSVProbeBase::Print_Metric ();
+    } elsif ($o{'cmdExitValue'} == 1) {
+	&RSVProbeBase::Exit_Error (2, "SRM server running on $metric{'hostName'} is not responding to the srmping command. The error message printed by srmping was: \n $o{'cmdOut'}\n");
+    } else {
+	&RSVProbeBase::Exit_Error (3, "SRM server running on $metric{'hostName'} returned unknown exit code upon runnnig [$srm_ping_cmd]. The message printed by srmping was: \n $o{'cmdOut'}\n");
+    }
+}
+
+
+sub Setup_Srm_Metric {
+    $o{'srmPortNumber'}  = $o{'portNumber'} if ($o{'portNumber'});
+    $o{'srmServiceType'} = $o{'serviceType'} if ($o{'serviceType'});
+}

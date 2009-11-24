@@ -1,0 +1,161 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+##
+## This Perl script tests if a CE's gratia is working properly
+##
+## Type ./gratia-config-probe -h for more information
+##
+## REQUIRES
+##  'RSVProbe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+
+    ## This probe allows discovery of Gratia Probe types, and metricnames based 
+    ##  on that. So setting it to be multimetric, so -l (listmetric) is processed
+    ##  within probe, and not in perl module by default
+    &RSVProbeBase::Set_MultiMetric ("true");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-CE");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 1.0.0");
+    &RSVProbeBase::Set_ProbeType ("OSG-CE");
+
+    ## Define this value from RCS/SVN version
+    &RSVProbeBase::Set_ProbeRevision ('3079'); ## ('$Revision: 3215 $');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("Probe to check whether Gratia probes are configured and operating. ");
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions (" --worker-script-file </path/file>\n".
+					 "                                  Default: \$VDT_LOCATION/osg-rsv/bin/probes/\n".
+					 "                                   /worker-scripts/gratia-config-probe-helper");
+
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("worker-script-file=s","gratiaConfigProbeWorkerScriptFile");
+    
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    
+    ## agopu: Moved to area below Process_Informational_Arguments () so 
+    ##   -m all -l will work like it does for all other probes
+    ## &RSVProbeBase::Get_Remote_Env ();
+    &Process_Informational_Arguments ();
+
+    ## If we this far then probe is in normal operation
+    &RSVProbeBase::Get_Remote_Env ();
+
+    ## Extract probe name from metric name which is in format org.osg.gratia.<probe_name>
+    my $gratia_probe_name = &RSVProbeBase::Get_MetricName();
+    $gratia_probe_name    =~ /.*\.(.*)$/;
+    $gratia_probe_name    = $1;
+
+    ## Stage and run helper script that has the business logic using a Globus job
+    &RSVProbeBase::Globus_Job_Run (" -s $o{'gratiaConfigProbeWorkerScriptFile'} -- --vdt-location $o{'REMOTE_ENV'}{'OSG_LOCATION'} --gratia-probe-name $gratia_probe_name 2>&1 ", "backtick");
+    &Parse_Xml ("Attempted to test if Gratia Probe $gratia_probe_name on CE is configured properly using  -s $o{'gratiaConfigProbeWorkerScriptFile'} -- --vdt-location $o{'REMOTE_ENV'}{'OSG_LOCATION'} --gratia-probe-name $gratia_probe_name  2>&1");
+
+    ## The XML is stored in $o{'cmdOutHash'}. As can be seen in the helper script:
+    ##  The XML will have elements ExitCode, StdOut, StdErr
+    ##   StdOut will have tags MetricStatus (0,1,2,3) and DetailsData (text)
+    ##   Passing those tags to &RSVProbeBase::Set_Summary_Metric_Results()
+    &RSVProbeBase::Set_Summary_Metric_Results ($o{'cmdOutHash'}{'StdOut'}{'MetricStatus'}, $o{'cmdOutHash'}{'StdOut'}{'DetailsData'});
+
+    &RSVProbeBase::Print_Metric();
+}
+
+
+sub Process_Informational_Arguments {
+    ## Just print metric names like all other probes do
+    my @job_managers = ("condor",	
+			"gridftp-transfer",
+			"hadoop-transfer",
+			"lsf",
+			"metric",
+			"pbs",
+			"sge",
+			);
+    if (defined ($o{'listmetric'})) {
+	## Array probes within XML will have <probe>name</probe> elements
+	foreach my $gratia_probe_name (@job_managers) {
+	    &RSVProbeBase::Set_MetricName("org.osg.gratia.".$gratia_probe_name);
+	    &RSVProbeBase::Set_EnableByDefault("false");
+	    ## Unix cron type metric interval
+	    &RSVProbeBase::Set_MetricInterval (int(rand(60)). " * * * *");
+	    &RSVProbeBase::List_Summary_Metric();
+	}
+	exit 0;
+    }
+
+    ######
+    ## OLD Code that requires globus credentials to be setup - will NEVER get here due to above exit statement
+    ######
+    if (defined ($o{'listmetric'})) {
+	## Stage and run helper script that has the business logic using a Globus job
+	&RSVProbeBase::Globus_Job_Run (" -s $o{'gratiaConfigProbeWorkerScriptFile'} -- --discover --vdt-location $o{'REMOTE_ENV'}{'OSG_LOCATION'} 2>&1 ", "backtick");
+	&Parse_Xml ("Attempted to discover relevant Gratia Probes on CE using  -s $o{'gratiaConfigProbeWorkerScriptFile'} -- --discover --vdt-location $o{'REMOTE_ENV'}{'OSG_LOCATION'} 2>&1");
+	
+	## Array probes within XML will have <probe>name</probe> elements
+	foreach my $gratia_probe_name (@{$o{'cmdOutHash'}{'StdOut'}{'probes'}}) {
+	    &RSVProbeBase::Set_MetricName("org.osg.gratia.".$gratia_probe_name->{'probe'});
+	    &RSVProbeBase::Set_EnableByDefault("true");
+	    ## Unix cron type metric interval
+	    &RSVProbeBase::Set_MetricInterval (int(rand(60)). " * * * *");
+	    &RSVProbeBase::List_Summary_Metric();
+	}
+	exit 0;
+    }
+}
+
+## Replicating this routine from RSVProbeBase for the time being to allow forcearray on 'probes'
+sub Parse_Xml {
+    my $err_string = "";
+    $err_string    = $_[0] if ($_[0]);
+
+    ## Now process worker script output from $o{'cmdOut'}
+    my $xml = new XML::Simple (KeyAttr=>[]);
+    %{$o{'cmdOutHash'}} = %{$xml->XMLin($o{'cmdOut'}, forcearray => [ 'probes' ])};
+    &RSVProbeBase::Verbose (&Data::Dumper::Dumper($o{'cmdOutHash'}));
+
+    &RSVProbeBase::Exit_Error (3,"$err_string\n"."Worker script exit code: $o{'cmdOutHash'}{'ExitCode'}\n".
+                 "Worker script error Received via XML stderr element: \n".
+                 &Data::Dumper::Dumper($o{'cmdOutHash'}{'StdErr'}{'Error'}))
+        if ($o{'cmdOutHash'}{'ExitCode'} != 0);
+
+    return \%{$o{'cmdOutHash'}}
+}

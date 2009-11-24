@@ -1,0 +1,100 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+##
+## This Perl script tests for available job-managers on a remote host
+## Type ./jobmanagers-available-probe -h for more information
+##
+## REQUIRES
+##  'RSV::Probe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.batch.jobmanagers-available");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-CE");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 0.8.0");
+    &RSVProbeBase::Set_ProbeType ("OSG-CE");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("59 4 * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("Probe to report the job-managers available on the remote host. Checks the\n".
+	 " \$OSG_LOCATION/globus/lib/perl/Globus/GRAM/JobManager directory.");
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    ## &RSVProbeBase::Set_ProbeHelpOptions ("");
+
+    ## Uncomment if you want additional command line options
+    ## &RSVProbeBase::Extra_CLI_Option ("ping-count=i","pingCount");
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    &RSVProbeBase::Get_Remote_Env();
+
+    ## If we can authenticate, then find out batch scheds available
+    $o{'callingRoutine'} = "Get_Job_Manager_List()";
+   
+    &RSVProbeBase::Globus_Job_Run (" $o{'lsCmd'} $o{'globusJobManagerDir'} 2>&1 ", "backtick");
+
+    ## We expect a list of .pm files; if none found, then print unknown status
+    &RSVProbeBase::Exit_Error 
+	(3,"Cannot display available job managers; No job managers (*.pm) files found in $metric{'globusJobManagerDir'} directory on remote host.")
+	if ($o{'cmdOut'} !~ /\.pm/);
+
+    ## Split the available job manager (files) into a tmp array within the hash
+    my @arr_jobmanagers = split (/\s+/, $o{'cmdOut'});
+
+    &RSVProbeBase::Set_DetailsData ("Available Batch Schedulers are ");
+    for (my $i = 0; $i <= $#arr_jobmanagers; $i++) {
+        ##  Use only those values that are *.pm (i.e ignore .saved versions)
+	next if ($arr_jobmanagers[$i] !~ /\.pm$/);
+	&RSVProbeBase::Append_DetailsData ("$arr_jobmanagers[$i] ");
+    }
+
+    &RSVProbeBase::Print_Metric();
+}

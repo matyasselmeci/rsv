@@ -1,0 +1,332 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+##
+## This Perl script tests if the specified job manager functions normally
+## Type ./jobmanagers-status-probe -h for more information
+##
+## REQUIRES
+##  'RSV::Probe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+
+    &RSVProbeBase::Set_MultiMetric ("true");
+
+    &RSVProbeBase::Set_MetricName ("org.osg.batch.jobmanager-default-status");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-CE");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 1.0.0");
+    &RSVProbeBase::Set_ProbeType ("OSG-CE");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("false");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval (int(rand(60)). " * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("IMPORTANT NOTE: This probe can test status of different job managers; So\n".
+	 " it is REQUIRED to specify a metric using the -m argument as shown below.\n\n".
+	 "Probe to verify if a job manager works as expected, on the remote host.\n".
+	 " Submits a test job to the specified job manager, and check its status. ".
+	 "\nIf -m org.osg.batch.jobmanager-default-status is specified, then the probe\n".
+	 " tries to submit a test job to the default jobmanager on the resource, ie.\n".
+	 " the jobmanager indicated by \$OSG_JOB_CONTACT on the CE.\n");
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+	("                                  To list all the possible metric names you\n".
+	 "                                   can specify as value to this switch, type\n".
+	 "                                   \"./jobmanagers-status-probe -m all -l\"\n".
+	 " [--status-check-wait-time        Time (in seconds) to wait before checking\n".
+	 "                 <integer>]        status of submitted test job.");
+
+    ## Uncomment if you want additional command line options
+     &RSVProbeBase::Extra_CLI_Option ("status-check-wait-time=i","globusJobStatusDelaySeconds");
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ###########################################################################
+    ##### Begin special section since this is a multi metric probe ##### 
+    ###########################################################################
+
+    ## Process some simple options, and exit if they're specified after acting
+    &Process_Multi_Metrics ();
+
+    ## Copy jobManager provided -- AG: not ideal programming but this version is
+    ##  200 times cleaner than previous version! :)
+    $o{'jobManager'} = $o{'jobmanagerMetricJmString'}{$o{'metric'}};
+    &RSVProbeBase::Verbose ("JM being tested for: $o{'jobManager'} =  o {'jobmanagerMetricJmString'}{$o{'metric'}}\n");
+
+    ###########################################################################
+    ##### End special section since this is a multi metric probe ##### 
+    ###########################################################################
+
+
+    ###########################################################################
+    &RSVProbeBase::Get_Remote_Env();
+    
+    ##  Test if jobmanager specified works fine, and then print metric results
+    ##  using the jobmanagerStringSuffix key value in our hash
+    $o{'callingRoutine'} = "$o{'probeName'}::Run ()";
+
+    &Test_Job_Manager_Smart ();
+	
+#    &RSVProbeBase::Globus_Job_Submit_Error_Code (" $o{'sleepCmd'} 300 2>&1 ", "backtick",3);
+
+    ## First, sleep for a little while after submitting job
+#    &RSVProbeBase::Verbose ("Going to sleep $o{'globusJobStatusDelaySeconds'} seconds...\n");
+#    sleep $o{'globusJobStatusDelaySeconds'};  
+
+    ## Check job status using $metric{'globusjobId'}
+#    &RSVProbeBase::Globus_Job_Status ($o{'globusjobId'}, "backtick");
+
+    ## Check for possibly busy batch system -- sleep longer, and check again
+#    if ($o{'globusjobStatus'} =~ "UNSUBMITTED") {
+#	&RSVProbeBase::Verbose (" Got status $o{'globusjobStatus'} for Job ID:[$o{'globusjobId'}];\n\t Sleeping again - possibly busy system\n");
+#	sleep ($o{'globusJobStatusDelaySeconds'} * 2);  
+#	&RSVProbeBase::Globus_Job_Status ($o{'globusjobId'},"backtick");
+#    }
+
+    ## Using same method I used in osg-directories-probe
+#    &RSVProbeBase::Exit_Error(2, "Job submission to \"$o{'hostName'}/$o{'jobManager'}\" succeeded and job status when last checked was an invalid one (\"$o{'globusjobStatus'}\");\"") if (!($o{'validBatchJobStatuses'} =~ $o{'globusjobStatus'}));
+
+    &RSVProbeBase::Set_Summary_Metric_Results (0, "Job submission to \"$o{'hostName'}/$o{'jobManager'}\" succeeded and job status when last checked was a valid one (\"$o{'globusjobStatus'}\"); ");
+
+    &RSVProbeBase::Print_Metric();
+}
+
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+###### Local Sub routines begin ###########
+################################################################################
+
+
+
+
+
+
+################################################################################
+##
+## SUB-ROUTINE
+##  Process_Multi_Metrics
+##
+## ARGUMENTS: 
+##  None
+##
+## CALLS:
+##  Process_Informational_Arguments ()
+##
+## OUTPUT: 
+##  None
+##
+## RETURNS:
+##  None
+## 
+################################################################################
+
+sub Process_Multi_Metrics {
+
+    ## Additional details for this multi-metric probe
+    $o{'jobmanagerMetricJmString'}{'org.osg.batch.jobmanager-ext-default-status'} = "jobmanager";
+    $o{'jobmanagerMetricJmString'}{'org.osg.batch.jobmanager-fork-ext-status'} = "jobmanager-fork";
+    $o{'jobmanagerMetricJmString'}{'org.osg.batch.jobmanager-managedfork-ext-status'} = "jobmanager-managedfork";
+    $o{'jobmanagerMetricJmString'}{'org.osg.batch.jobmanager-condor-ext-status'} = "jobmanager-condor";
+    $o{'jobmanagerMetricJmString'}{'org.osg.batch.jobmanager-pbs-ext-status'} = "jobmanager-pbs";
+    $o{'jobmanagerMetricJmString'}{'org.osg.batch.jobmanager-loadleveler-ext-status'} = "jobmanager-loadleveler";
+    $o{'jobmanagerMetricJmString'}{'org.osg.batch.jobmanager-lsf-ext-status'} = "jobmanager-lsf";
+
+    ## Do above step for each metric possible
+    if (defined ($o{'listmetric'})) {
+	foreach my $metric_name (sort keys %{$o{'jobmanagerMetricJmString'}}) {
+	    &RSVProbeBase::Set_MetricName($metric_name);
+	    if ($metric_name =~ /default/) {
+		&RSVProbeBase::Set_EnableByDefault("false");
+	    } else { &RSVProbeBase::Set_EnableByDefault("false"); } 
+	    &RSVProbeBase::Set_MetricInterval (int(rand(60)). " * * * *");
+	    &RSVProbeBase::List_Summary_Metric();
+	}
+	exit 0;
+    } 
+}
+
+
+################################################################################
+##
+## SUB-ROUTINE
+##  Test_Job_Manager_Smart ()
+##
+## ARGUMENTS: 
+##  First arg: 
+##   % hash containing at least the following key-values:
+##    'globusjobsubmitCmd'    globus-job-submit command including its path
+##    'globusjobstatusCmd'    globus-job-status command including its path
+##    'globusjobcleanCmd'     globus-job-clean command including its path
+##    'sleepCmd'                 ls command including its path
+##  Second arg: 
+##   % metric hash that output status will entered into
+##  Third arg:
+##   "job_manager_string"     job manager string XYZ that will be appended to 
+##                              "hostname/jobmanager-XYZ"
+##
+## CALLS:
+##  Run_Command (\%o,\%metric, "cmd string", "method string")
+##  Set_Summary_Metric_Results (\%o,\%metric, integer, "string")
+##
+## OUTPUT: 
+##  None
+##
+## RETURNS:
+##  Pointer to metric hash that output status will entered into
+## 
+################################################################################
+
+sub Test_Job_Manager_Smart {
+    $o{'callingRoutine'} = "Test_Job_Manager_Smart()";
+
+    ## Karthik - test to see if a job id is already available. If so it means that already a job was submitted and a job id is available to check the job status. No need to submit another job. This job id has to be removed if the job status checked is DONE i.e. the job finished successfully. Otherwise it could be checked again and again once in a while until we decide to time out and mark the probe as critical.
+
+    #karthik - need to include the full path here
+    ## AG: Need to periodically clean this file up incase a probe leaves it in place?
+    my $job_id_file="$o{'VDT_LOCATION_LOCAL'}/osg-rsv/logs/probes/jobid-smart"."$o{'jobManager'}-$o{'hostName'}"; 
+    my $job_alredy_submitted=0;
+    my $job_id="null";
+    my $jobTimeOutSeconds=3600; # give one hour for the job to complete (for the /bin/date command)
+    my $jobStartEpoch;
+    my $currentEpoch;
+    my $timeElapsedSinceSubmission=0;
+
+    if (-e "$job_id_file") ## Redundant ## && defined($o{'jobManager'}))
+    {
+     	open(IN,"<$job_id_file") or die "Could not open the file jobid$o{'jobManager'} for reading. $!";
+        my @jobidArr=<IN>;
+        $job_id=$jobidArr[0]; $job_id=~s/\n//; # remove the end of line character if any
+        $jobStartEpoch=$jobidArr[1]; $jobStartEpoch=~s/\n//; # remove the end of line character if any
+	$currentEpoch=`date +%s`;
+	$timeElapsedSinceSubmission = $currentEpoch - $jobStartEpoch;
+	$job_alredy_submitted=1 if($job_id ne "null");
+   	&RSVProbeBase::Verbose ("VERBOSE $o{'callingRoutine'} ".  " Job ID of previously submitted job :[$job_id]\n");
+    }
+
+   ## if job is not already running, then submit a new job and store the resulting job_id in a file, along with the job start time in epoch seconds (gathered from the local host in which the probe is running)
+   if($job_alredy_submitted==0)  ## Redundant ## && defined($o{'jobManager'})) && defined($o{'jobManager'}))
+   {
+       my $job_submit_cmd = " $o{'systemDateCmd'} 2>&1 ";
+       &RSVProbeBase::Globus_Job_Submit_Error_Code ($job_submit_cmd, "backtick",3);
+
+       $job_id = $o{'globusjobId'};
+       ### store job_id in $job_id_file 
+       open(OUT,">$job_id_file") or die "Could not open the file $job_id_file for writing. $!";
+       print OUT "$job_id\n"; # write the job id to the file
+       print OUT `date +%s`;
+       print OUT "job command is $job_submit_cmd\n";
+       close(OUT);
+
+       &RSVProbeBase::Verbose (" VERBOSE $o{'callingRoutine'} ".  " Job ID:[$job_id]\n");
+   }
+
+    ## First, sleep for a little while after submitting job
+    #    &RSVProbeBase::Verbose ("Going to sleep $o{'globusJobStatusDelaySeconds'} seconds...\n");
+    sleep $o{'globusJobStatusDelaySeconds'};  
+
+    ## Check job status using $o{'globusjobId'}
+#    &RSVProbeBase::Globus_Job_Status ($o{'globusjobId'}, "backtick");
+
+    ## Check job status using job_id
+    my $job_status_cmd = "$o{'globusjobstatusCmd'} $job_id 2>&1";
+    %metric = %{&RSVProbeBase::Run_Command (\%o, \%metric, $job_status_cmd, "backtick")};
+
+    my $job_status = $o{'cmdOut'}; # $o{'globusjobStatus'};
+	
+    if ($o{'cmdExitValue'} != 0) {
+	&RSVProbeBase::Set_Summary_Metric_Results (3, "Job submission to \"$o{'jobManager'}\" succeeded but could not check job status; error message from remote site was: \"$o{'cmdOut'}\".;" );
+	$o{'testJobManagerStatusBail'} = "true";
+	# remove the job_id file if any, since the probe has failed
+	if(-e $job_id_file) 
+	{
+	    unlink($job_id_file) or die "Could not remove the file $job_id_file. $!\n";
+	}
+    } 
+	
+    else { ## Using same method I used in osg-directories-probe
+	if (!($o{'validBatchJobStatuses'} =~ $job_status)) {
+	    ## AG: Setting metric status twice? Why?
+	    &RSVProbeBase::Set_Summary_Metric_Results (2, "Job submission to \"$o{'jobManager'}\" succeeded but job may have failed to run, and the status returned from remote site was: \"$o{'cmdOut'}\"; Will still attempt to clean up the submitted test job before bailing " );
+	    &RSVProbeBase::Set_Summary_Metric_Results (2, "Job submission to \"$o{'jobManager'}\" succeeded and job status when last checked was an invalid one (\"$job_status\");\"");
+
+	    if(-e $job_id_file)
+	    {
+		&RSVProbeBase::Verbose ("!!! Removing $job_id_file since the job status $job_status is invalid !!!\n");
+		unlink($job_id_file);
+	    }
+	}
+	else { # valid job status
+	    &RSVProbeBase::Set_Summary_Metric_Results (0, "Job submission to \"$o{'jobManager'}\" succeeded. $timeElapsedSinceSubmission seconds have elapsed since job submission and the job status when last checked was a valid one (\"$job_status\"); ");
+	    # check and see how long it has been since the job was submitted
+	    if($job_status ne "DONE" && $timeElapsedSinceSubmission > $jobTimeOutSeconds && $job_alredy_submitted!=0)
+	    {
+		# The job has ran for more than the expected cut-off time and hence the metric has to be declared CRITICAL and the job id file if any removed
+		#%metric = %{&RSVProbeBase::Set_Summary_Metric_Results (\%o,\%metric, 2, "Job submission to \"$o{'jobManager'}\" succeeded and the job status is $job_status. But the job has not been finished for $timeElapsedSinceSubmission seconds, which is more than the allowable cut-off time of $jobTimeOutSeconds. Hence the probe has to be declared as failed. Will still attempt to clean up the submitted test job before bailing " )};
+		&RSVProbeBase::Set_Summary_Metric_Results (2, "Job submission to \"$o{'jobManager'}\" succeeded but the the job has been running for $timeElapsedSinceSubmission seconds and it hasn't finished within the allowed cut-off time of \"$jobTimeOutSeconds\" seconds.");
+		if(-e $job_id_file)
+		{
+		    &RSVProbeBase::Verbose ("!!! Removing file $job_id_file since the job has been running for $timeElapsedSinceSubmission seconds and it hasn't finished within the cut-off time of $jobTimeOutSeconds. !!!\n");
+		    unlink($job_id_file) or die "Could not remove $job_id_file. $!";
+		}
+	    }
+	    #else if($job_status eq "DONE" && $timeElapsedSinceSubmission <= $jobTimeOutSeconds)
+	    elsif($job_status eq "DONE")
+	    {
+		if(-e $job_id_file)
+		{
+		    &RSVProbeBase::Verbose ("!!! Removing file $job_id_file since the job has finished successfully!!! n");
+		    unlink($job_id_file);
+		}
+	    }
+	}
+    }
+    return \%metric;
+}

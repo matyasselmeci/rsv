@@ -1,0 +1,114 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+##
+## Original Author: Anand Padmanabhan
+##
+## This Perl script tests if CA certificates on the local host are still valid
+## Type ./cacert-expiry-central-probe -h for more information
+##
+##
+## REQUIRES
+##  'RSVProbeBase
+##  'RSVProbeCACert;
+##
+##
+################################################################################
+
+## Perl modules to use
+use strict;
+use RSVProbeBase;
+use RSVProbeCACert;
+
+######## Global variables go here ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+################## Local Variables for this probe #####################
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.central.cacert.expiry");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-Central-Monitor");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CA 1.1 / VDT CA v40");
+    &RSVProbeBase::Set_ProbeType ("OSG-Central-CA-Install");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("30 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("IMPORTANT NOTE: This is a probe that will work on the system it's run on"
+    ."\n\nProbe to check for expired CA certs on local host; Checks the *.0 files".
+    "\n in \$VDT_LOCATION'/globus/TRUSTED_CA or location provided.".
+     "\nThough this probe is designed to run on the central probe, but it can be used as a non-critical local probe.\n");
+	
+    ## Flag this as a local probe
+    ## &RSVProbeBase::Set_LocalProbe();
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+    (" [--warning-hours <\# hours>]      Threshold value to use when checking\n".
+    "                                   for expiring-soon CA certs.\n".
+    " [--cacerts-dir <directory> ]      Location of CA certificate files\n".
+    "                                   (Default: \$VDT_LOCATION'/globus/TRUSTED_CA\n");
+    
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("cacerts-dir=s","certDir");
+    &RSVProbeBase::Extra_CLI_Option ("warning-hours=i","warnHrs");
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ## Initialize local variables
+    &Initialize_Local();
+
+    ## Real tests begin now - check for expired certs now 
+    &RSVProbeCACert::Verify_CA();
+
+    ## Print metric, and we're all done!
+    &RSVProbeBase::Print_Metric ();
+}
+
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+###### Local Sub routines begin ###########
+################################################################################
+## Initialize local variables
+sub Initialize_Local{
+    $o{'certDir'} =  $o{'VDT_LOCATION_LOCAL'}."/globus/TRUSTED_CA" if (! $o{'certDir'});
+    $o{'warnHrs'} = 14*24 if (! $o{'warnHrs'});
+}
+
+## None for now

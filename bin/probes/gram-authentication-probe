@@ -1,0 +1,80 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+##
+## Type ./gram-authentication-probe -h for more information
+##
+## REQUIRES
+##  'RSVProbe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.globus.gram-authentication");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-CE");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 1.0.0");
+    &RSVProbeBase::Set_ProbeType ("OSG-CE");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("31 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("Probe to check if we can authenticate to remote site with available proxy.\n".
+	 " Basically a globusrun -a -r <host> test. Also checks for expiring-soon \n".
+	 " proxy (and obviously expired proxy!).");
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    ## &RSVProbeBase::Set_ProbeHelpOptions ("");
+
+    ## Uncomment if you want additional command line options
+    ## &RSVProbeBase::Extra_CLI_Option ("ping-count=i","pingCount");
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ## This test is already available in perl module; so just invoke it.
+    &RSVProbeBase::Check_Gram_Authentication ();
+}
+

@@ -1,0 +1,328 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+##
+## Type ./gridftp-simple-probe -h for more information
+##
+## REQUIRES
+##  'RSV::Probe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.globus.gridftp-simple");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-GridFtp");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 0.8.0");
+    &RSVProbeBase::Set_ProbeType ("OSG-GridFTP");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("8 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("Probe to check if GridFTP works to and from remote host. A test file (which\n can be specified using argument shown below) is gridftp'ed to remote host,\n and back. Then the files are checked for consistency.");
+    
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+	(" [--test-file <file>]             Test file to be used for testing\n".
+	 "                                   (Default: `pwd`/gridftp-probe-test-file)\n".
+	 " [--gridftp-destination-dir<dir>] Directory on remote host to copy test file\n".
+	 "                                   (Default: /tmp/".
+	 " [--gridftp-delay <\# seconds>]   Time to wait before copying file back\n".
+	 "                                   (Default: 60 seconds");
+
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("test-file=s","globusurlcopyTestfile");
+    &RSVProbeBase::Extra_CLI_Option ("gridftp-destination-dir=s","gridftpDestinationDir");
+    &RSVProbeBase::Extra_CLI_Option ("gridftp-delay=i","gridftpDelaySeconds");
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ## This test is already available in perl module; so just invoke it.
+    &RSVProbeBase::Ping_Host ();
+    
+    ## Not doing GRAM Auth test since Gridftp provides better diagnostics if
+    ##  Gram auth is failing 
+
+    ## If we can authenticate, then some gridftp action now ...
+    ## Transfer file to remote host; then back 
+    &Setup_GridFtp_Metric ();
+    &Do_Gridftp_File_Transfer_To ();
+    &Do_Gridftp_File_Transfer_From ();
+    ## Compare remote file and the one copied back; set metric accordingly
+    &Diff_Files ();
+    ## Clean up remote file and the one copied back;
+    &Cleanup()
+    ## Print metric, and we're all done!
+    &RSVProbeBase::Print_Metric ();
+}
+
+
+
+sub Setup_GridFtp_Metric {
+    $o{'globusurlcopyPortNumber'}  = $o{'portNumber'} if ($o{'portNumber'}) ; 
+    $o{'globusurlcopyServiceType'} = $o{'serviceType'} if ($o{'serviceType'});
+   
+    ## First below, file that'll be copied TO remote host
+    $o{'globusurlcopyTestfileUri'} = 
+	    "file:///". $o{'globusurlcopyTestfile'};
+    ## File that'll be created ON remote host
+    $o{'globusurlcopyRemoteTestfile'} = 
+	$o{'gridftpDestinationDir'} ."/".
+	$o{'timestampUnixSeconds'}. "-gridftp-probe-test-file-remote.$$"; 
+    ## File URI that'll be created ON remote host
+    $o{'globusurlcopyRemoteTestfileUri'} = 
+	$o{'globusurlcopyServiceType'}. "://". $o{'hostName'} . 
+	":" . $o{'globusurlcopyPortNumber'}. "/".
+        $o{'globusurlcopyRemoteTestfile'};
+    ## File that'll be copied back for comparison
+    $o{'globusurlcopyBackTestfile'} = $o{'slashTmp'} ."/".
+	$o{'timestampUnixSeconds'}. "-gridftp-probe-test-file-copy.$$";
+    $o{'globusurlcopyBackTestfileUri'} = "file:///".$o{'globusurlcopyBackTestfile'};
+}
+
+
+################################################################################
+##
+## SUB-ROUTINE
+##  Do_Gridftp_File_Transfer_To ()
+##
+## ARGUMENTS: 
+##  First arg: 
+##   % hash containing at least the following key-values:
+##    'globusurlcopyCmd'           globus-url-copy command including its path
+##    'globusurlcopyTestfile'      Our test file to be copied incl. path
+##    'globusurlcopyRemoteTestfile' File that will be created on remote location
+##
+##  Second arg: 
+##   % metric hash that output status will entered into
+##
+## CALLS:
+##  Run_Command (\%o,\%metric, "cmd string", "method string")
+##  Check_Gridftp_Transfer_Status (\%o,\%metric, "true/false")
+##
+## OUTPUT: 
+##  None
+##
+## RETURNS:
+##  Pointer to metric hash that output status is entered into
+## 
+################################################################################
+
+sub Do_Gridftp_File_Transfer_To {
+    $o{'callingRoutine'} = "Do_Gridftp_File_Transfer_To()";
+    
+    my $gridftp_cmd = "$o{'globusurlcopyCmd'} $o{'globusurlcopyTestfileUri'} $o{'globusurlcopyRemoteTestfileUri'} 2>&1";
+    &RSVProbeBase::Run_Command ($gridftp_cmd, "backtick");
+
+    &Check_Gridftp_Transfer_Status ("true");
+}
+
+
+
+################################################################################
+##
+## SUB-ROUTINE
+##  Do_Gridftp_File_Transfer_From ()
+##
+## ARGUMENTS: 
+##
+## CALLS:
+##  Run_Command (\%o,\%metric, "cmd string", "method string")
+##  Check_Gridftp_Transfer_Status (\%o,\%metric, "true/false")
+##
+## OUTPUT: 
+##  None
+##
+## RETURNS:
+##  Pointer to metric hash that output status is entered into
+## 
+################################################################################
+
+sub Do_Gridftp_File_Transfer_From {
+    $o{'callingRoutine'} = "Do_Gridftp_File_Transfer_From()";
+    
+    my $gridftp_cmd = "$o{'globusurlcopyCmd'} $o{'globusurlcopyRemoteTestfileUri'} $o{'globusurlcopyBackTestfileUri'} 2>&1";
+    &RSVProbeBase::Verbose ("Sleeping for $o{'gridftpDelaySeconds'} seconds before attempting to transfer file back ... \n");
+    sleep ($o{'gridftpDelaySeconds'});
+    &RSVProbeBase::Run_Command ($gridftp_cmd, "backtick");
+    
+    &Check_Gridftp_Transfer_Status ("false");
+}
+
+
+
+################################################################################
+##
+## SUB-ROUTINE
+##  Check_Gridftp_Transfer_Status ()
+##
+## ARGUMENTS: 
+##  First arg: 
+##   % hash containing at least the following key-values:
+##    'globusurlcopyCmdReturn'     globus-url-copy command's return value
+##    'globusurlcopyCmdOut'        globus-url-copy command's output (stderr)
+##    'globusurlcopyTestfile'      Our test file to be copied incl. path
+##    'globusurlcopyRemoteTestfile' File that will be created on remote location
+##    'globusurlcopyBackTestfile'   File that will copied back for comparison
+##
+##  Second arg: 
+##   % metric hash that output status will entered into
+##
+##  Third arg: 
+##   $bool value = true or false (if file is being transferred TO remote host)
+##
+## CALLS:
+##  Run_Command (\%o,\%metric, "cmd string", "method string")
+##  Set_Summary_Metric_Results (\%o,\%metric, integer, "string")
+##  Print_Summary_Metric_Results (\%o,\%metric)
+##
+## OUTPUT: 
+##  If gridftp file transfer failes, then prints error metric and exits!
+##
+## RETURNS (Also see above note about output):
+##  Pointer to metric hash that output status is entered into
+## 
+################################################################################
+
+sub Check_Gridftp_Transfer_Status {
+    my $bool_to       = $_[0]; ## Note: not a reference
+
+    ## Assign file names for source and remote files based on if this transfer
+    ##  is to or from remote host
+    my ($source_file,$dest_file) = undef;
+
+    if ($bool_to eq "true") {
+	$source_file = "$o{'globusurlcopyTestfileUri'}";
+	$dest_file   = "$o{'globusurlcopyRemoteTestfileUri'}";
+
+    } else {
+	$source_file = "$o{'globusurlcopyRemoteTestfileUri'}";
+	$dest_file   = "$o{'globusurlcopyBackTestfileUri'}";
+    }
+    
+    ## Check if gridftp x'fer failed; if it did, print failure metric and exit
+    &RSVProbeBase::Exit_Error (2, "ERROR: Cannot copy file: $source_file to $dest_file ... Bailing now. Actual error message was: $metric{'cmdOut'}") 
+	if ($o{'cmdExitValue'} !=0);
+
+    ## Default
+    &RSVProbeBase::Set_Summary_Metric_Results 
+	(0,"Gridftp was succesfully tested! Upload to and download from remote host succeeded; Received file is valid.");
+}
+
+
+
+################################################################################
+##
+## SUB-ROUTINE
+##  Diff_Files ()
+##
+## ARGUMENTS: 
+##
+## CALLS:
+##  Run_Command (\%o,\%metric, "cmd string", "method string")
+##  Set_Summary_Metric_Results (\%o,\%metric, integer, "string")
+##
+## OUTPUT: 
+##  None
+##
+## RETURNS:
+##  Pointer to metric hash that output status will entered into
+## 
+################################################################################
+
+sub Diff_Files {
+    $o{'callingRoutine'} = "Diff_Files()";
+
+    ## Compare remote file and the one copied back; set metric accordingly
+    my $diff_files_cmd = "$o{'diffCmd'} $o{'globusurlcopyTestfile'} $o{'globusurlcopyBackTestfile'} 2>&1";
+
+    &RSVProbeBase::Run_Command ($diff_files_cmd, "backtick");
+
+    if (($o{'cmdOut'} ne '') ||  
+	($o{'cmdExitValue'} != 0 )){
+	&RSVProbeBase::Set_Summary_Metric_Results (2,"ERROR: Either file copied to $o{'hostName'} was different from our testfile or $o{'diffCmd'} could not be found; Absolute error message was: $metric{'cmdOut'}");
+    }
+}
+
+
+
+################################################################################
+##
+## SUB-ROUTINE
+##  Cleanup ()
+##
+## ARGUMENTS: 
+##  None
+##
+## CALLS:
+##  Run_Command ()
+##  Set_Summary_Metric_Results ()
+##
+## OUTPUT: 
+##  None
+##
+## RETURNS:
+##  None
+## 
+################################################################################
+
+sub Cleanup {
+    return  if ($o{'cleanUp'} != 1);
+
+    $o{'callingRoutine'} = "Cleanup ()";
+
+    ## Still incomplete -- does not remove remote file
+    my $cleanup_local_cmd = "$o{'rmCmd'} $o{'globusurlcopyBackTestfile'} 2>&1";
+    &RSVProbeBase::Run_Command ($cleanup_local_cmd, "backtick");
+    my $cleanup_remote_cmd = "$o{'rmCmd'} $o{'globusurlcopyRemoteTestfile'} 2>&1";
+    &RSVProbeBase::Globus_Job_Run($cleanup_remote_cmd, "backtick");
+}
+
+
+
+
+
+

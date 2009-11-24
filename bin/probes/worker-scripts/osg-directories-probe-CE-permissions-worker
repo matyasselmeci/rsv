@@ -1,0 +1,120 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+## Open Science Grid Operations Team, Indiana University
+##
+## This is a worker script that will be called by osg-directories-probe 
+##  (more often than not from a remote metric gathering host)
+##
+## It returns a string on stdout with "ls -ld" info, df info, etc. in XML format
+##
+################################################################################
+
+my ($cmd_out,  $cmd_exit, $combined_err, $combined_out) = undef;
+my $error_count = 0;
+
+&Print_Worker_Script_Xml (1, "", &Error_String("This worker script requires two arguments")) if ($#ARGV < 1);
+
+## If calling script mistakenly split the first argument in some environments, join it
+## Patch from: Richard Jones @ UConn
+while ($#ARGV > 1) {
+    my $arg0 = shift @ARGV;
+    @ARGV[0] = "$arg0 $ARGV[0]";
+}
+
+## Split the first argument into env variables
+my @directories = split (/ /,$ARGV[0]);
+my $type        = $ARGV[1];
+
+for (my $i = 0; $i <=$#directories; $i++) {
+
+    my $tmp_out = undef;
+    my $name = $directories[$i];
+    my $path = $ENV{$name} if ($ENV{$name});
+
+    ## Is this environment variable even defined
+    next if &isError ((!defined($path)), "\$$name not set properly, skipping.");
+
+    ## Change into directory being tested; error out if we cannot
+    next if &isError ((!chdir ($path)), "Could not chdir into \$$name=$path, skipping.");
+
+    $tmp_out .= "   <Name>". &Escape_String($name) ."</Name>\n".
+	"   <Path>" . &Escape_String($path) ."</Path>\n";
+
+    if ($type eq "type-permission") {
+	## Permissions
+	$cmd = "stat --format=%a . 2>&1";
+	$cmd_out = `$cmd`;
+	$cmd_exit = ($? >> 8);
+	next if (&isError ($cmd_exit, "$cmd_err while executing stat on current directory after chdir into path"));
+
+	$cmd_out =~ s/\s*$//s; ## Remove trailing spaces/newlines;
+	$tmp_out .= "   <Permission>". &Escape_String($cmd_out). "</Permission>\n";
+    }
+    
+    if ($type eq "type-diskspace") {
+	## Disk space
+	# /dev/hda2              16G  9.9G  4.5G  69% /
+	$cmd = "df -Ph . 2>&1 | grep ^/ 2>&1";
+	$cmd_out = `$cmd`;
+	$cmd_exit = ($? >> 8);
+	next if  (&isError ($cmd_exit, "Got nothing after executing df -Ph on current directory"));
+
+	$cmd_out =~ /\S+\s+(\S+)\s+\S+\s+(\S+)\s+\S+\s+\S+/;
+	$tmp_out .="   <DiskSpace>\n";
+	$tmp_out .="    <Size>".      &Escape_String($1) ."</Size>\n";
+	$tmp_out .="    <Available>" .&Escape_String($2) ."</Available>\n";
+	$tmp_out .="   </DiskSpace>\n";
+    }
+
+    $combined_out .= "\n  <Directory>\n";
+    $combined_out .= $tmp_out;
+    $combined_out .="  </Directory>\n";
+}
+
+
+&Print_Worker_Script_Xml ($error_count, $combined_out, $combined_err);
+
+
+###### END MAIN PROGRAM #####
+
+## Print exit code, stdout, stderr in format expected by RSVProbeBase perl module
+sub Print_Worker_Script_Xml {
+    print "<?xml version=\"1.0\" encoding=\"ISO8859-1\" ?>\n<WorkerScriptOutput>\n";
+    print " <ExitCode>".$_[0] ."</ExitCode>\n";
+    print " <StdOut>".  $_[1]. "</StdOut>\n";
+    print " <StdErr>".  $_[2]. "\n </StdErr>\n";
+    print "</WorkerScriptOutput>\n";
+    exit $_[0];
+}
+
+sub isError {
+    my $tmp_exit   = $_[0];
+    my $err_string = $_[1];
+
+    if ($tmp_exit != 0) {
+	$error_count ++;
+	$combined_err .= &Error_String($err_string);
+	return 1;
+    }
+    return 0;
+}
+
+
+sub Error_String {
+    my $string = shift;
+    return "\n  <Error>" . &Escape_String($string) . "</Error>";
+}
+
+sub Escape_String {
+    my $string = shift;
+    $string =~ s/\"/\\\"/g;
+    $string =~ s/\$/\\\$/g;
+    $string =~ s/\'/\\\'/g;
+    $string =~ s/\&/\\\&/g;
+#    $string =~ s/\n/\\n/g;
+#    $string =~ s/\>/\\\>/g;
+    return $string;
+}

@@ -1,0 +1,109 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+##
+## Original Author: Anand Padmanabhan
+##
+## This Perl script tests if CRLs on the local direfctory are still valid
+## Type ./cacert-crl-expiry-centralized-probe -h for more information
+##
+##
+## REQUIRES
+##  'RSVProbeBase
+##  'RSVProbeCACert;
+##
+##
+################################################################################
+
+## Perl modules to use
+use strict;
+use RSVProbeBase;
+use RSVProbeCACert;
+
+######## Global variables go here ################################
+our %o;         *o         = \%RSVProbeBase::o;
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+################## Local Variables for this probe #####################
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+###### Local Sub routines begin ###########
+################################################################################
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.central.crl.expiry");
+
+    ## Pass "status" or "performance" depending on metric type
+            
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-Central-Monitor");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CA 1.1 / VDT CA v40");
+    &RSVProbeBase::Set_ProbeType ("OSG-Central-CA-Install");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("15 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("IMPORTANT NOTE: This is a central probe that checks is all the CRLs distributed by the CA are valid and not about to expire.\n\n");
+	
+    ## Flag this as a local probe
+    ## &RSVProbeBase::Set_LocalProbe();
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+    (" [--warning-hours <\# hours>]            Threshold value to use when checking\n".
+    "                                         CRLs for imminent expiry.\n".
+    " [--short-warning-hours <\# hours>]      Threshold value to use when checking\n".
+    "                                         short lived CRLs for imminent expiry.\n".
+    " [--cacerts-dir <directory> ]            Location of CA certificate files\n".
+    "                                         (Default: \$VDT_LOCATION'/globus/TRUSTED_CA\n"
+   );
+
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("cacerts-dir=s","certDir");
+    &RSVProbeBase::Extra_CLI_Option ("warning-hours=i","warnHrs");
+    &RSVProbeBase::Extra_CLI_Option ("short-warning-hours=i","warnShortHrs");
+    
+     ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ## Initialize local variables
+    &Initialize_Local();
+
+    ## Real tests begin now - check for expired certs now 
+    &RSVProbeCACert::Verify_CA_CRL();
+
+    ## Print metric, and we're all done!
+    &RSVProbeBase::Print_Metric ();
+}
+
+
+## Initialize local variables
+sub Initialize_Local{
+    $o{'certDir'} =  $o{'VDT_LOCATION_LOCAL'}."/globus/TRUSTED_CA" if (! $o{'certDir'});
+    $o{'warnHrs'} = 3*24 if (! $o{'warnHrs'});
+    $o{'warnShortHrs'} = 1*24 if (! $o{'warnShortHrs'});
+}
+
+## None for now

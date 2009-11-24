@@ -1,0 +1,179 @@
+#!/bin/sh
+
+dir=`pwd`
+
+if [ ! -w $dir ]; then
+    echo "I'm sorry, I don't have permission to create rsv-profile.tar.gz"
+    echo "in the current directory. Please change into a directory where"
+    echo "you have permission, or switch to a user that does have permission"
+    exit 1
+fi
+
+if [ "${VDT_LOCATION}" = "" ]
+then
+    echo "VDT_LOCATION is not defined. You need to source"
+    echo "setup.sh or setup.csh before you can run osg-rsv-profiler"
+    exit 1
+fi
+
+cd $VDT_LOCATION
+
+filedirname=rsv-profiler.files
+filedir=$dir/$filedirname
+if [ -e $filedir ]; then
+  rm -fr $filedir
+fi
+mkdir $filedir
+export log=$filedir/rsv-profiler.txt
+rm -f $log
+
+echo "OSG-RSV Profiler"
+echo "Analyzing..."
+
+
+##
+## Basic stuff
+##
+
+echo "OSG-RSV Profile " >> $log
+date                    >> $log
+echo ""                 >> $log
+echo "Hostname:"        >> $log
+/bin/hostname           >> $log
+echo ""                 >> $log
+echo "uname:"           >> $log
+/bin/uname -a           >> $log
+echo ""                 >> $log
+echo "current user:"    >> $log
+/usr/bin/whoami         >> $log
+echo ""                 >> $log
+echo "vdt-version:"     >> $log
+vdt/bin/vdt-version     >> $log
+echo ""                 >> $log
+echo ""                 >> $log
+
+
+##
+## Condor stuff
+##
+echo "Condor information" >> $log
+
+echo "Condor version:" >> $log
+if [ -r condor-cron/wrappers/condor_cron_version ]; then 
+  condor-cron/wrappers/condor_cron_version  >> $log
+else
+  echo "cannot find condor_cron_version"    >> $log
+fi
+echo ""                                     >> $log
+
+
+echo "condor_cron_q:" >> $log
+if [ -r condor-cron/wrappers/condor_cron_q ]; then 
+  condor-cron/wrappers/condor_cron_q  >> $log
+else
+  echo "cannot find condor_cron_q"    >> $log
+fi
+echo ""                               >> $log
+
+condor_log_dir=`condor-cron/wrappers/condor_cron_config_val log`
+echo "Trying to copy condor logs from $condor_log_dir:" >> $log
+if [ -d $condor_log_dir ]; then
+  cp -p $condor_log_dir/*Log $filedir
+  echo "copied condor logs"      >> $log
+else
+  echo "cannot find condor logs" >> $log
+fi
+
+echo "Trying to copy condor_conf file..." >> $log
+if [ -r condor-cron/etc/condor_config ]; then
+  cp condor-cron/etc/condor_config $filedir
+  echo "copied condor_config"      >> $log
+else
+  echo "cannot find condor_config" >> $log
+fi
+
+echo "Trying to copy local condor config file..." >> $log
+local_config=`condor-cron/wrappers/condor_cron_config_val LOCAL_CONFIG_FILE`
+if [ -r $local_config ]; then
+  cp $local_config $filedir
+  echo "copied local config file $local_config"    >> $log
+else
+  echo "cannot find local condor-cron config file" >> $log
+fi
+
+
+##
+## RSV stuff
+##
+echo "" >> $log
+echo "" >> $log
+echo "RSV information" >> $log
+echo "" >> $log
+echo "" >> $log
+
+echo "Trying to copy submission files..." >> $log
+if [ -d osg-rsv/submissions ]; then
+  cp -pr osg-rsv/submissions $filedir
+  echo "copying submission files"     >> $log
+else
+  echo "cannot find submission files" >> $log
+fi
+echo "" >> $log
+
+echo "Trying to copy config directory..." >> $log
+if [ -e osg-rsv/config ]; then
+  cp -pr osg-rsv/config/ $filedir
+  echo "copying config dir"     >> $log
+else
+  echo "cannot find config dir" >> $log
+fi
+echo "" >> $log
+
+# See if there is anything in this directory
+echo "Failed gratia directory:" >> $log
+ls osg-rsv/output/failed-gratia-scripts >> $log 2>&1
+echo "" >> $log
+
+# Attempt to see if proxy exists
+echo "Looking for RSV proxy..." >> $log
+proxy=`grep proxy osg-rsv/submissions/probes/* | perl -e '$t = <STDIN>; if($t =~ /--proxy\s+(\S+)/) { print "$1\n" }'`
+if [ ${proxy} = "" ]; then
+  echo "Cannot figure out where proxy is.  Will run `ls -l /tmp/x509*` instead." >> $log
+  ls -l /tmp/x509* >> $log
+else
+  echo "Proxy information:" >> $log
+  ls -l $proxy >> $log
+fi
+echo "" >> $log
+
+# Get proxy information
+echo "Proxy information:" >> $log
+id=`id -u`
+user=`grep RUN_AS_USER post-install/osg-rsv | perl -e '$t = <STDIN>; if($t =~ /RUN_AS_USER\s*=\s*(\S+)/) { print "$1\n" }'`
+if [ ${id} == "0" ]; then
+  echo "grid-proxy-info:"                  >> $log
+  su -c 'globus/bin/grid-proxy-info' $user >> $log
+else
+  echo "Not root, cannot get grid-proxy-info info" >> $log
+fi
+echo "" >> $log
+
+
+# Get some information from the RSV and consumer logs
+echo "Getting RSV probe and consumer logs:" >> $log
+mkdir $filedir/logs
+perl -e 'foreach $file (`ls -1 osg-rsv/logs/probes`) { chomp($file); system("echo $file >> $ENV{log}"); system("tail -1000 osg-rsv/logs/probes/$file > rsv-profiler.files/logs/$file") }'
+perl -e 'foreach $file (`ls -1 osg-rsv/logs/consumers`) { chomp($file); system("echo $file >> $ENV{log}"); system("tail -1000 osg-rsv/logs/consumers/$file > rsv-profiler.files/logs/$file") }'
+echo "" >> $log
+
+echo "Done, making tarball" >> $log
+
+# Make the tarball
+echo "Making tarball (rsv-profile.tar.gz)"
+cd $dir
+if [ -e rsv-profile.tar.gz ]; then
+  rm rsv-profile.tar.gz
+fi
+
+tar czf rsv-profile.tar.gz $filedirname
+rm -fr $filedirname

@@ -1,0 +1,141 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+## Last modified by Arvind Gopu (2009-06-17) 
+##
+##
+## This Perl script tests if the host/container/http cert on local host
+##  is still valid
+## Type ./certificate-expiry-local-probe -h for more information
+##
+##
+## REQUIRES
+##  'RSVProbeBase.pm'
+##
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+
+    &RSVProbeBase::Set_MultiMetric ("true");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-Local-Monitor");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 0.6.0");
+    &RSVProbeBase::Set_ProbeType ("OSG-Local-Monitor");
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Flag this as a local probe
+    &RSVProbeBase::Set_LocalProbe();
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("IMPORTANT NOTE: This is a local probe that will work on the host it\'s ".
+	 "run on.\n\nProbe to verify if the certificate specified is expired or is ".
+	 "expiring soon.\n Can check host cert, container cert and http cert.\n\n".
+	 "IMPORTANT NOTE 2: This probe can test for expiry of different certificates;\n".
+	 " so it is REQUIRED to specify a metric; refer to metric names shown below or".
+	 " \n type $0 -m all -l to retrieve all metric names.\n");
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+	("Valid values include: all,\n".
+	 "                                    org.osg.local.hostcert-expiry,\n".
+	 "                                    org.osg.local.containercert-expiry,\n".
+	 "                                    org.osg.local.httpcert-expiry\n".
+	 " [--host-cert-file <file>]        Host certificate to check \n".
+	 " [--containter-cert-file <file>]  Container certificate to check \n".
+	 " [--http-cert-file <file>]        HTTP certificate to check \n".
+	 "                                   (Defaults defined in perl module\n".
+	 "                                    RSVProbeBase.pm)\n".
+	 " [--warning-hours <\# hours>]      Threshold value to use when checking certs");
+
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("host-cert-file=s","org.osg.local.hostcert-expiry");
+    &RSVProbeBase::Extra_CLI_Option ("containter-cert-file=s","org.osg.local.containercert-expiry");
+    &RSVProbeBase::Extra_CLI_Option ("http-cert-file=s","org.osg.local.httpcert-expiry");
+    &RSVProbeBase::Extra_CLI_Option ("warning-hours=i","certWarningHours");
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ##### Begin special section since this is a multi metric probe ##### 
+    ## Process some simple options, and exit if they're specified after acting
+    &Process_Multi_Metrics ();
+    ##### End special section since this is a multi metric probe ##### 
+
+    &RSVProbeBase::Test_Certificate ();
+}
+
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+###### Local Sub routines begin ###########
+################################################################################
+
+################################################################################
+##
+## SUB-ROUTINE
+##  Process_Multi_Metrics
+##
+## ARGUMENTS: 
+##  None
+##
+## CALLS:
+##  Process_Informational_Arguments ()
+##
+## OUTPUT: 
+##  None
+##
+## RETURNS:
+##  None
+## 
+################################################################################
+
+sub Process_Multi_Metrics {
+    ## Do above step for each metric possible
+    if (defined ($o{'listmetric'})) {
+	foreach my $metric_name (sort keys %{$o{'localCertificates'}}) {
+	    &RSVProbeBase::Set_MetricName($metric_name);
+	    if (-r $o{'localCertificates'}{$metric_name}) {
+		&RSVProbeBase::Set_EnableByDefault("true");
+	    } else { &RSVProbeBase::Set_EnableByDefault("false"); } 
+	    &RSVProbeBase::Set_MetricInterval (int(rand(60)). " 1 * * *");
+	    &RSVProbeBase::List_Summary_Metric();
+	}
+	exit 0;
+    } 
+}
+

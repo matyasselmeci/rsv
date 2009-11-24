@@ -1,0 +1,297 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+##
+## Type ./srmcp-srm-probe -h for more information
+##
+## REQUIRES
+##  'RSV::Probe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+    &RSVProbeBase::Set_MetricName ("org.osg.srm.srmcp-readwrite");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-SRM");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG SE 1.0.0");
+    &RSVProbeBase::Set_ProbeType ("OSG-SRM");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("28 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## AG: still necessary to set this?
+    $o{'seprobe'} = "true";
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("Probe to check if srmcp can perform a data transfer to and from a stroage element using the srm protocol.\n A test file (which can be specified using arguments shown below) is srmcp'd to remote host,\n and back. Then the files are checked for consistency.");
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+	(" --srm-destination-dir            Dummy PNFS path (where files can be written)\n        <full pnfs path>           (NO DEFAULT, Required parameter)\n".
+	 " [--srm-client-type <value>]      Type of SRM client: \"fnal\" or \"lbnl\"\n                                   (Default: \"fnal\"\n".
+	 " [--srm-client-loc <dir>]         Full path where SRM client is installed\n                                   (Default: \$VDT_LOCATION/srm-client-fermi\n". 
+	 "                                    or -lbnl if above parameter is set to \"lbnl\")\n".
+	 " [--srm-webservice-path <value>]  Bestman users set this to \"srm/v2/server\"\n                                   (Default: \"srm/managervN\", N is protocol#)\n".
+	 " [--srm-protocol-version          SRM Protocol version to use.\n               <integer>]          (Default: protocol 2)\n".
+	 " [--test-file <file>]             Test file to be used for testing\n                                   (Default: `pwd`/storage-probe-test-file)\n");
+
+
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("srm-client-type=s","srmClientType");
+    &RSVProbeBase::Extra_CLI_Option ("srm-client-loc=s","srmClientDir");
+    &RSVProbeBase::Extra_CLI_Option ("srm-protocol-version=i","srmProtocolVersion");
+    &RSVProbeBase::Extra_CLI_Option ("srm-webservice-path=s","srmWebservicePath");
+    &RSVProbeBase::Extra_CLI_Option ("srm-destination-dir=s","srmcpDestinationDir" );
+    &RSVProbeBase::Extra_CLI_Option ("test-file=s","srmcpTestfile" );
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+
+    ## Check for required parameters
+    &RSVProbeBase::Exit_Error (3,"Destination directory to write test files to is not specified, quitting. Type ./srmcp-srm-probe -h for more information") 
+	if (!defined($o{'srmcpDestinationDir'}));
+
+    ## Is proxy valid?
+    &RSVProbeBase::Check_Proxy_Validity ();
+
+    ## Check if host is responding to pings -- Call Ping function
+    $o{'callingRoutine'} = "Run()";
+    &Setup_Srmcp_Metric ();
+    ## If proxy is good then perform srmcp actions
+    ## Transfer file to remote host; then back, etc 
+    my $srmcp_cmd = "$o{'srmcpCmd'} -srm_protocol_version=".
+	"$o{'srmProtocolVersion'}  $o{'srmcpTestfileUri'} ".
+	"$o{'srmcpRemoteTestfileUri'} 2>&1";
+    &RSVProbeBase::Run_Command ($srmcp_cmd, "backtick");
+    &Check_Srmcp_Srm_Transfer_Status ("true");
+
+    $srmcp_cmd = "$o{'srmcpCmd'} -srm_protocol_version=".
+	"$o{'srmProtocolVersion'} $o{'srmcpRemoteTestfileUri'} ".
+	" $o{'srmcpBackTestfileUri'} 2>&1";
+    &RSVProbeBase::Run_Command ($srmcp_cmd, "backtick");
+    &Check_Srmcp_Srm_Transfer_Status ("false");
+    
+    ## Compare remote file and the one copied back; set metric accordingly
+    &Diff_Srmcp_Srm_Files ();
+    &List_Remote_File ();
+    &Cleanup ();
+
+    ## Print metric, and we're all done!
+    &RSVProbeBase::Print_Metric ();
+}
+
+
+
+
+
+################################################################################
+##
+## SUB-ROUTINE
+##  Setup_Srmcp_Metric *(
+##
+## ARGUMENTS: 
+##  None
+##
+## CALLS:
+##
+## OUTPUT: 
+##  None
+##
+## RETURNS:
+##  None
+## 
+################################################################################
+
+sub Setup_Srmcp_Metric {
+    $o{'srmPortNumber'}  = $o{'portNumber'} if ($o{'portNumber'});
+    $o{'srmServiceType'} = $o{'serviceType'} if ($o{'serviceType'});
+
+    ## First below, file that'll be copied TO remote host
+    $o{'srmcpTestfileUri'} = "file:///".$o{'srmcpTestfile'};
+    ## File that''ll be created ON remote host
+    $o{'srmcpRemoteTestfileUri'} =
+        $o{'srmServiceType'} . "://" . 
+	$o{'hostName'} . ":".
+	$o{'srmPortNumber'} . "/". $o{'srmWebservicePath'} .
+        "?SFN=". $o{'srmcpDestinationDir'}. "/".
+        $o{'timestampUnixSeconds'}.
+        "-storage-probe-test-file-remote.$$";
+    ## File that'll be copied back for comparison
+    $o{'srmcpBackTestfile'}    = $o{'slashTmp'} . "/".
+	$o{'timestampUnixSeconds'}.
+	"-storage-probe-test-file-copy.$$";
+    $o{'srmcpBackTestfileUri'} = "file:///".$o{'srmcpBackTestfile'};
+    &RSVProbeBase::Verbose ("Setup_Srmcp_Metric:\n\tsrmServiceType: $o{'srmServiceType'}\tsrmPortNumber:$o{'srmPortNumber'}\n\tsrmcpTestfileUri: $o{'srmcpTestfileUri'}\n\tsrmcpRemoteTestfileUri: $o{'srmcpRemoteTestfileUri'}\n\tsrmcpBackTestfileUri: $o{'srmcpBackTestfileUri'}\n");
+}
+
+
+
+################################################################################
+##
+## SUB-ROUTINE
+##  Check_Srmcp_Srm_Transfer_Status ()
+##
+## ARGUMENTS: 
+##  First arg: 
+##   $bool value = true or false (if file is being transferred TO remote host);
+##                 neutral if we are testing something else
+##
+## CALLS:
+##  Run_Command ()
+##  Exit_Error()
+##
+## OUTPUT: 
+##  If srmcp file transfer failes, then prints error metric and exits!
+##
+## RETURNS (Also see above note about output):
+##  None
+## 
+################################################################################
+
+sub Check_Srmcp_Srm_Transfer_Status {
+    my $bool_to           = $_[0]; ## Note: not a reference
+
+    ## Assign file names for source and remote files based on if this transfer
+    ##  is to or from remote host
+    my ($source_file,$dest_file) = undef;
+
+    if ($bool_to eq "true") {
+	$source_file = "$o{'srmcpTestfileUri'}";
+	$dest_file   = $o{'srmcpRemoteTestfileUri'};
+
+    } else  {
+	$source_file = $o{'srmcpRemoteTestfileUri'}; 
+	$dest_file   = "$o{'srmcpBackTestfileUri'}";
+    }
+    
+    ## Check if srmcp transfer failed; if it did, print failure metric and exit
+    if ($o{'cmdExitValue'} !=0) {
+	if ($bool_to eq "false") {
+	    &List_Remote_File ();
+	    &Cleanup ();
+	}
+	&RSVProbeBase::Exit_Error (2, "ERROR: Cannot copy file: $source_file to $dest_file using SRM protocol $o{'srmProtocolVersion'} ... Bailing now.\n Actual error message was: $o{'cmdOut'}");
+    }
+}
+
+
+################################################################################
+##
+## SUB-ROUTINE
+##  Diff_Srmcp_Srm_Files ()
+##
+##  Diff's test file, and file copied back from remote resource;
+##  Also cleans up remote test file 
+##
+## ARGUMENTS: 
+##
+## CALLS:
+##  Run_Command ()
+##  Set_Summary_Metric_Results ()
+##
+## OUTPUT: 
+##  None
+##
+## RETURNS:
+##  None
+## 
+################################################################################
+
+sub Diff_Srmcp_Srm_Files {
+    $o{'callingRoutine'} = "Diff_Srmcp_Srm_Files()";
+
+    ## Compare remote file and the one copied back; set metric accordingly
+    my $diff_files_cmd = "$o{'diffCmd'} $o{'srmcpTestfile'} $o{'srmcpBackTestfile'} 2>&1";
+
+    &RSVProbeBase::Run_Command ($diff_files_cmd, "backtick");
+
+    if (($o{'cmdOut'} eq '') && 
+	($o{'cmdExitValue'} == 0 )){
+	&RSVProbeBase::Set_Summary_Metric_Results 
+	    (0,"SRM write/read was succesfully tested using SRM protocol $o{'srmProtocolVersion'};\n Upload to and download from SRM server $o{'hostName'} succeeded; Received file is valid.");
+    }
+    else {
+	&RSVProbeBase::Set_Summary_Metric_Results (2,"ERROR: Either file copied to $o{'hostName'} was different from our testfile or $o{'diffCmd'} could not be found; Absolute error message was: $o{'cmdOut'}");
+    }
+}
+
+sub List_Remote_File {
+    ## Clean up any test files on remote resource
+    my $srmls_cmd = "$o{'srmlsCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestfileUri'} 2>&1";
+    &RSVProbeBase::Run_Command ($srmls_cmd, "backtick");	
+
+    ## Check if removal of test file failed
+    if ($o{'cmdExitValue'} !=0) {
+	$o{'cmdOut'} =~ s/\s+$//s;;
+	&RSVProbeBase::Set_Summary_Metric_Results (1, "") if ($metric{'metricStatus'} != 2);
+	&RSVProbeBase::Set_DetailsData (&RSVProbeBase::Get_DetailsData()."\n WARNING: Cannot list test file $o{'srmcpRemoteTestfileUri'} from remote resource.\n Actual error message was: $o{'cmdOut'}");
+    }
+    else {
+	&RSVProbeBase::Set_DetailsData (&RSVProbeBase::Get_DetailsData()."\n List file file $o{'srmcpRemoteTestfileUri'} successful.\n  Actual output was: $o{'cmdOut'}");
+    }
+}
+
+sub Cleanup {
+    ## Clean up any test files on remote resource
+    my $srmrm_cmd = undef;
+    ## Based on SRM version, different remove commands need to be used;
+    #  # per Neha's email to Arvind dated 2008-03-28
+    if ($o{'srmProtocolVersion'} == 2) {
+	$srmrm_cmd =  "$o{'srmrmCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestfileUri'} 2>&1";
+    }
+    else {
+	$srmrm_cmd =  "$o{'srmadvisorydeleteCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestfileUri'} 2>&1";
+    }
+    &RSVProbeBase::Run_Command ($srmrm_cmd, "backtick");	
+
+    ## Check if removal of test file failed
+    if ($o{'cmdExitValue'} !=0) {
+	$o{'cmdOut'} =~ s/\s+$//g;;
+	&RSVProbeBase::Set_Summary_Metric_Results (1, "") if ($metric{'metricStatus'} != 2);
+	&RSVProbeBase::Set_DetailsData (&RSVProbeBase::Get_DetailsData()."\n WARNING: Cannot remove test file $o{'srmcpRemoteTestfileUri'} from remote resource ... Bailing now.\n Actual error message was: $o{'cmdOut'}");
+    }
+    else {
+	&RSVProbeBase::Set_DetailsData (&RSVProbeBase::Get_DetailsData()."\n Clean up of test file $o{'srmcpRemoteTestfileUri'} successful.");
+    }
+}

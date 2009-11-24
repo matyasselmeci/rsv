@@ -1,0 +1,22 @@
+##
+## Data file that provides RSV Gratia collector information
+##
+## WARNING: This is specific to the Open Science Grid (OSG)
+##
+##          If your resource is not part of the OSG, and you 
+##          want to use Gratia to collect RSV records centrally,
+##          then you will have to setup your own Gratia collector
+##          Contact gratia-ops@opensciencegrid.org for more information  
+##          
+##	    If you have a Gratia collector, then edit the lines below
+##          and specify a nickname for the collector and the collector:port
+##          information. The nick name will have to be passed to 
+##          configure_osg_rsv --gratia-grid-type
+##
+## Lines that begin with # and blank lines are ignored
+##
+
+## nickname	gratia-collector:port
+
+OSG 	rsv.grid.iu.edu:8880
+OSG-ITB	rsv-itb.grid.iu.edu:8880

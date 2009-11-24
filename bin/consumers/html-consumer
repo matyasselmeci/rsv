@@ -1,0 +1,523 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+use POSIX;
+use IO::File;
+use File::Basename;
+use Getopt::Long;
+
+# Declare this early
+my $output_fh;
+
+# Turn autoflush on
+$|=1;
+
+##
+## Make sure we have VDT_LOCATION set in our environment
+##
+my $VDT_LOCATION = $ENV{VDT_LOCATION};
+die("ERROR: The VDT_LOCATION environment variable is not set") unless ($VDT_LOCATION);
+die("ERROR: VDT_LOCATION is set to an non-existing location '$VDT_LOCATION'") unless (-e $VDT_LOCATION);
+
+##
+my $PROBE_LOG_DIRECTORY = "$VDT_LOCATION/osg-rsv/output/probes";
+my $PROBE_END_MARK = "EOT";
+
+my $SUBMISSION_DIR = "$VDT_LOCATION/osg-rsv/submissions/probes";
+my $FAILED_GRATIA_SCRIPTS_DIR = "$VDT_LOCATION/osg-rsv/output/failed-gratia-scripts";
+
+# Get command line options
+my $OUTPUT_DIR = "$VDT_LOCATION/osg-rsv/output/html";
+GetOptions("html-output" => \$OUTPUT_DIR);
+
+my $STATE_FILE = "$OUTPUT_DIR/state.file";
+my $MAIN_HTML  = "$OUTPUT_DIR/index.html";
+
+
+## If this is set to true, we'll exit
+my $CONSUMER_DONE = 0;
+
+#
+# Allow for graceful shutdown
+$SIG{TERM} = \&catch_term;
+
+
+##
+## If we print to STDOUT and STDERR, Condor will overwrite the file everytime the
+## script executes.  So we'll use a file to record all output, and rotate it.
+##
+my $output_file = "$VDT_LOCATION/osg-rsv/logs/consumers/html-consumer.output";
+open($output_fh, ">>", $output_file) or die("Cannot open '$output_file' for output: $!");
+
+
+# Generate alerts
+my $alerts = "";
+$alerts .= alert_about_failed_gratia_scripts();
+$alerts .= alert_about_probes_not_running();
+
+my $state = read_state_file();
+process_records($state);
+write_state_file($state);
+my $active_metrics = read_submission_files();
+write_main_html_page($alerts, $state, $active_metrics);
+
+debug_print("Finished execution\n");
+close(OUT);
+exit 0;
+
+
+## -----------------------------------------------------------
+## debug_print
+## Add a timestamp to messages
+## -----------------------------------------------------------
+sub debug_print {
+   my ($str) = @_;
+   my $msg = strftime("%Y-%m-%d %H:%M:%S - $str\n" , localtime);
+   print $msg;
+
+   # Just in case this hasn't been opened yet
+   if(defined($output_fh)) {
+       print $output_fh $msg;
+   }
+}
+
+
+## -----------------------------------------------------------
+## catch_term
+## SIGTERM handler - used to allow the consumer to exit gently.
+## -----------------------------------------------------------
+sub catch_term {
+    debug_print "Caught signal! Exiting...\n";
+    $CONSUMER_DONE = 1;
+}
+
+
+## -----------------------------------------------------------
+## die_nice
+## Record the message in the output file before die'ing
+## -----------------------------------------------------------
+sub die_nice {
+    my $message = shift;
+    print OUT debug_print($message);
+    close(OUT);
+    die $message;
+}
+
+
+## -----------------------------------------------------------
+## Alerts
+## -----------------------------------------------------------
+sub alert_about_failed_gratia_scripts {
+    my @files = glob("$FAILED_GRATIA_SCRIPTS_DIR/*");
+    my $num = scalar(@files);
+
+    if($num == 0) {
+	return "";
+    }
+    else {
+	return "<p class=\"alert\">WARNING: There are $num Gratia records that could not be sent.  Inspect the log file at \$VDT_LOCATION/osg-rsv/logs/consumers/gratia-script-consumer.output";
+    }
+}
+
+sub alert_about_probes_not_running {
+    my $condor_ret_code = system("$VDT_LOCATION/condor-cron/wrappers/condor_cron_q > /dev/null 2>&1");
+
+    my $num_probes_running = 0;
+    if($condor_ret_code == 0) {
+        $num_probes_running = `$VDT_LOCATION/condor-cron/wrappers/condor_cron_q -constraint 'OSGRSV == "probes"' | grep probe_wrapper | wc -l`;
+    }
+    
+    if($num_probes_running > 0) {
+	return "";
+    }
+    else {
+	return "<p class=\"alert\">WARNING: There are no RSV probes currently running on this machine.";
+    }
+}
+
+
+
+## -----------------------------------------------------------
+## State file
+## -----------------------------------------------------------
+
+sub read_state_file {
+    my @lines = (-e $STATE_FILE) ? @{readfile($STATE_FILE)} : ();
+    
+    my $state_info = {};
+    foreach my $line (@lines) {
+	chomp($line);
+	my @tmp = split(/\s*\|\|\s*/, $line);
+	if(@tmp == 4) {
+	    $state_info->{$tmp[0]}{$tmp[1]}{status} = $tmp[2];
+	    $state_info->{$tmp[0]}{$tmp[1]}{time}   = $tmp[3];
+	}
+    }
+    return $state_info;
+}
+
+sub write_state_file {
+    my ($state) = @_;
+    open(OUT, ">", $STATE_FILE) or die_nice("Cannot write to $STATE_FILE: $!");
+
+    foreach my $host (keys %$state) {
+	foreach my $metric (keys %{$state->{$host}}) {
+	    print OUT join(" || ", $host, $metric, $state->{$host}{$metric}{status}, $state->{$host}{$metric}{time});
+	    print OUT "\n";
+	}
+    }
+    
+    close(OUT);
+}
+
+
+## -----------------------------------------------------------
+## Record processing
+## -----------------------------------------------------------
+
+sub process_records {
+    my ($state) = @_;
+
+    ## Main loop
+    my @files = glob("$PROBE_LOG_DIRECTORY/*");
+    debug_print("Beginning execution, found " . scalar(@files) . " files");
+    foreach my $file (@files) {
+        last if($CONSUMER_DONE);
+        
+        my @lines = @{readfile($file)};
+        my $file_data = join("", @lines);
+        
+        ## Check whether we have a probe end marker
+        if ($#lines != -1 && $lines[$#lines] =~ m/^$PROBE_END_MARK/) {
+            write_data($state, $file, $file_data);
+        }
+        
+        unlink($file);
+    }
+}
+
+
+sub readfile {
+    my ($file) = @_;
+    
+    open(FILE, "<", $file) or die("ERROR: Unable to open '$file' for reading : $!");
+    my @lines = <FILE>;
+    close(FILE);
+
+    return \@lines;
+}
+
+
+sub write_data {
+    my ($state, $file, $data) = @_;
+    
+    my ($host, $metric) = basename($file) =~ /^\d+-(.*)__(.*)\.record$/;
+    
+    if(!$host || !$metric) {
+        print STDERR "ERROR: Failed to get hostname ($host) or metric name ($metric) from file '$file'\n";
+        return;
+    }
+    
+    ## Pull out the probe's attributes
+    my %attrs = ( "metricName"    => undef,
+                  "metricStatus"  => undef,
+                  "timestamp"     => undef,
+                  );
+    foreach my $attr (keys %attrs) {
+        if ($data =~ m/$attr: (.*)\n/) {
+            $attrs{$attr} = lc($1);
+            chomp($attrs{$attr});
+        } 
+        else {
+            print STDERR "ERROR: Unable to get '$attr' field.  Skipping '$file'.\n";
+            print STDERR "Data:\n$data\n";
+            return;
+        }
+    }
+    
+    # Wrap the data here, so that it doesn't create overly wide HTML pages
+    eval {
+        use Text::Wrap;
+        $Text::Wrap::columns = 150;
+        $data = wrap('', '', $data);
+    };
+    
+    my $html_key  = "$attrs{metricName}";
+    my $html_data_header = "<a name=\"$html_key\"></a><h2>$attrs{metricName}</h2>";
+    my $html_data = "<pre>\n$data\n</pre>";
+    my $html_link = "\t<tr id=\"$attrs{metricStatus}\">" .
+        "<td><a href=\"#$html_key\">$attrs{metricName}</a></td>" .
+        "<td>$attrs{timestamp}</td>" .
+        "<td>$attrs{metricStatus}</td>" .
+        "</tr>";
+    $html_key .= " $host";
+    
+    # For main HTML page
+    $state->{$host}{$attrs{metricName}}{status} = $attrs{metricStatus};
+    $state->{$host}{$attrs{metricName}}{time}   = $attrs{timestamp};
+
+    # For host HTML page - still use old way of populating this
+    add_host_html_entry($host, $html_key, $html_data_header, $html_data, $html_link);
+}
+
+
+sub add_host_html_entry {
+   my ($host, $html_key, $html_data_header, $html_data, $html_link) = @_;
+
+   my $HOST_DIR = "$OUTPUT_DIR/$host";
+   system("mkdir -p $HOST_DIR") unless(-d "$HOST_DIR");
+   my $HOST_HTML = "$HOST_DIR/index.html";
+
+   rotate_log($HOST_HTML);
+
+   my $contents;
+   if(-e $HOST_HTML) {
+      my $fh = IO::File->new("<$HOST_HTML") or die_nice("ERROR: Unable to open '$HOST_HTML' for reading : $!");
+      $contents = join("", <$fh>);
+      close($fh);
+   }
+
+   ## If the file is empty, set up the scaffolding for ourselves
+   if(!$contents) {
+       $contents = html_template();
+       
+       my $table_html = html_table_template();
+       $contents =~ s/<!-- FIRST TABLE -->/$table_html/;
+
+       # Update the old.html link, since it needs to point to the parent dir
+       $contents =~ s/(<!-- BEGIN OLD HTML LINK -->.*)href='old.html'(.*<!-- END OLD HTML LINK -->)/${1}href='..\/old.html'$2/;
+   }
+
+   # Fix the hostname, if necessary
+   $contents =~ s/(<!-- HOSTNAME -->)(<!-- END HOSTNAME -->)/$1<h3>$host<\/h3>$2/;
+   
+   # Look to see if we've been in this file before and we just need to replace the data we put in last time
+   if ($contents =~ m/<!-- BEGIN DATA $html_key -->/) {
+      $contents =~ s/(<!-- BEGIN DATA $html_key -->)($html_data_header)(.*)(<!-- END DATA $html_key -->)/$1$2$html_data$3$4/s;
+      $contents =~ s/(<!-- BEGIN LINK $html_key -->).*(<!-- END LINK $html_key -->)/$1$html_link$2/;
+   } 
+   else {
+      # Otherwise we will append it to the bottom. Be sure to add markers for the next addition
+      $contents =~ s/(<!-- NEXT LINK -->)/<!-- BEGIN LINK $html_key -->$html_link<!-- END LINK $html_key -->\n$1/;
+      $contents =~ s/(<!-- NEXT DATA -->)/<!-- BEGIN DATA $html_key -->$html_data_header$html_data<!-- END DATA $html_key -->\n$1/;
+   }
+   
+   ## Write the header information
+   my $title = "OSG RSV Status - $host";
+   my $time  = strftime('%m-%d-%Y %H:%M:%S', localtime);
+   $contents =~ s/(<!-- BEGIN HEADER -->).*(<!-- END HEADER -->)/$1<h1>$title<BR>$time<\/h1>$2/g;
+   $contents =~ s/(<!-- BEGIN TITLE -->).*(<!-- END TITLE -->)/$1<title>$title :: $time<\/title>$2/g;
+
+   ## Write the new file back out
+   my $fh = IO::File->new(">$HOST_HTML") or die_nice("ERROR: Unable to open '$HOST_HTML' for writing : $!");
+   print $fh $contents;
+   close($fh);
+   return;
+}
+
+sub rotate_log {
+    my (@logs) = @_;
+
+    # There is a template file so that we can "reset" the conf file daily.
+    # This is to prevent junk from accumulating forever in the conf file.
+    my $conf_file = "$ENV{VDT_LOCATION}/osg-rsv/logs/logrotate/rotate_html_files.conf";
+    my $template_file = "$conf_file.tmpl";
+    
+    my $new = 0;
+    unless(-e $conf_file) {
+        system("cp $template_file $conf_file");
+        $new = 1;
+    }
+
+    my $rotate_conf = join("", @{readfile($conf_file)});
+
+    # Append on the location of log files, for use with the rotate script
+    if($new) {
+        $rotate_conf .= "\n# HTML_DIRECTORY=$OUTPUT_DIR\n";
+    }
+
+    my $change = 0;
+    foreach my $log (@logs) {
+        next if $rotate_conf =~ /^$log/m;
+        $rotate_conf .= "$log {}\n";
+        $change = 1;
+    }
+
+    if($change || $new) {
+        if(!open(CONF, ">", $conf_file)) {
+            print STDERR "Unable to open log rotate conf file ($conf_file) for writing: $!";
+            return 1;
+        }
+        print CONF $rotate_conf;
+        close(CONF);
+    }
+}
+
+
+sub read_submission_files {
+    my $active_metrics = {};
+    foreach my $file (glob("$SUBMISSION_DIR/*.sub")) {
+	my $base = basename($file);
+	if($base =~ /^(.+)__.+\@(.+)\.sub$/) {
+	    $active_metrics->{lc($1)}{lc($2)} = 1;
+	}
+    }
+    return $active_metrics;
+}
+
+sub write_main_html_page {
+    my ($alerts, $state, $active_metrics) = @_;
+
+    my $main_html = html_template();
+    my $time = strftime('%Y-%m-%d %H:%M:%S', localtime);
+    $main_html =~ s/<!-- BEGIN HEADER -->.*<!-- END HEADER -->/<h1>OSG RSV Status - Main<BR>$time<\/h1>/g;
+    $main_html =~ s/<!-- BEGIN TITLE -->.*<!-- END TITLE -->/<title>OSG RSV Status - Main :: $time<\/title>/g;
+    $main_html =~ s/<!-- BEGIN ALERTS -->.*<!-- END ALERTS -->/$alerts/;
+    
+    foreach my $host (sort keys %$state) {
+	my $host_table_html = html_table_template();
+	$host_table_html =~ s|<!-- HOSTNAME -->.*<!-- END HOSTNAME -->|<h3>$host</h3>|;
+	
+	my $table_rows = "";
+	foreach my $metric (sort keys %{$state->{$host}}) {
+	    my $time   = $state->{$host}{$metric}{time};
+	    my $status = $state->{$host}{$metric}{status};
+	    my $link   = "$host/index.html#$metric";
+
+	    my $id = $status;
+	    # Example timestamp: <td>2009-09-25t21:13:00z</td>
+	    if($time =~ m|(\d\d\d\d-\d\d-\d\d([t ])\d\d:\d\d:\d\d)(.*)$|i) {
+		my ($metric_time, $separator, $suffix) = ($1, $2, $3);
+		my $one_day_ago = strftime('%Y-%m-%dSEP%H:%M:%SSUF', localtime(time-(60*60*24)));
+		$one_day_ago =~ s/SEP/$separator/;
+		$one_day_ago =~ s/SUF/$suffix/;
+		if($metric_time lt $one_day_ago) {
+		    next unless($active_metrics->{$host}{$metric}); # drop inactive metrics
+		    $id = "old";
+		}
+	    }
+
+	    $table_rows .= "<tr id=\"$id\"><td><a href=\"$link\">$metric</a></td><td>$time</td><td>$status</td></tr>";
+	}
+
+	if($active_metrics->{$host}) {
+	    foreach my $metric (sort keys %{$active_metrics->{$host}}) {
+		next if($state->{$host}{$metric});
+		$table_rows .= "<tr id=\"missing\"><td>$metric</td><td>Info missing or metric has not yet run for the first time</td><td>MISSING</td></tr>";
+	    }
+	}
+	
+	$host_table_html =~ s/<!-- NEXT LINK -->/$table_rows/;
+	$main_html =~ s/(<!-- NEXT DATA -->)/$host_table_html$1/;
+    }
+
+    ## Write the new file back out
+    my $fh = IO::File->new(">$MAIN_HTML") or die_nice("ERROR: Unable to open '$MAIN_HTML' for writing : $!");
+    print $fh $main_html;
+    close($fh);
+}
+
+
+
+
+
+## -----------------------------------------------------------
+## Templates
+## -----------------------------------------------------------
+
+
+sub html_table_template {
+    return "<p>
+<!-- BEGIN TABLE -->
+      <table id='links_table'>
+         <tr colspan=4><!-- HOSTNAME --><!-- END HOSTNAME --></tr>
+         <tr>
+            <th>Metric</th>
+            <th>Last Executed</th>
+            <th>Status</th>
+         </tr>
+      <!-- NEXT LINK -->
+      </table>
+      <!-- END TABLE -->
+";
+}
+
+sub html_template {
+    return "<html>
+   <head>
+      <!-- BEGIN TITLE --><!-- END TITLE -->
+      <style type='text/css'>
+      <!--
+      pre {
+         margin-left: 1em;
+         margin-right: 1em;
+         padding: 0.5em;
+         background-color: #f0f0f0;
+         border: 1px solid black;
+      }
+      body { 
+         color: black;
+         background-color: white;
+      }
+      #links_table { border: 1px solid black; width: 100%; }
+      a:link {background: none; color: #000000; text-decoration: underline}
+      a:visited {background: none; color: #000000; text-decoration: underline}
+      a:hover {background: #000000; color: #FFFFFF; text-decoration: underline}
+
+      #ok { background-color: #8ae234; }
+      #warning { background-color: #fce94f; }
+      #critical { background-color: #ef2929; }
+      #old { background-color: #e0ae8b; }
+      #unknown { background-color: #eeeeec; }
+      #missing { background-color: #000000; color: #bbbbbb; }
+
+      .question { cursor:pointer; text-decoration:underline; }
+      .visible { display: block }
+      .invisible { display: none }
+
+      p.alert { background-color: red }
+  }
+
+      -->
+      </style>
+
+      <script language=javascript>
+        function toggle(i) {
+          var e = document.getElementById(i);
+          var t = e.className;
+          if (t.match('invisible')) { t = t.replace(/invisible/gi, 'visible'); }
+          else { t = t.replace(/visible/gi, 'invisible'); }
+          e.className = t;
+        }
+      </script>
+
+   </head>
+   <body>
+     <table>
+       <tr>
+         <td><a href='http://www.opensciencegrid.org' title='Open Science Grid'><img src='http://vdt.cs.wisc.edu/pictures/osg_logo.gif' border='0'></a></td>
+         <td align='center'><!-- BEGIN HEADER --><!-- END HEADER --></td>
+       </tr>
+    </table>
+    <!-- BEGIN ALERTS --><!-- END ALERTS -->
+    <p><a href=\"#legend\">Explanation of colors</a>
+    <!-- BEGIN OLD HTML LINK --><p><a href='old.html'>Archived HTML pages</a><!-- END OLD HTML LINK -->
+    <p>
+    <!-- FIRST TABLE -->
+    <!-- NEXT DATA -->
+
+   <p>&nbsp;<p><a name=\"legend\">Legend:</a>
+   <table>
+     <tr id=\"ok\"><td>The metric ran successfully</td></tr>
+     <tr id=\"warning\"><td>The metric produced some warnings</td></tr>
+     <tr id=\"critical\"><td>The metric failed</td></tr>
+     <tr id=\"unknown\"><td>The metric produced an unknown result</td></tr>
+     <tr id=\"old\"><td>The metric is enabled, but it has not run for 24 hours</td></tr>
+     <tr id=\"missing\"><td>The metric is enabled, but there is no data available yet</td></tr>
+   </table>
+   </body>
+</html>
+";
+
+}

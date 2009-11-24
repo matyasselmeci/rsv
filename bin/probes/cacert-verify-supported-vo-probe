@@ -1,0 +1,125 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Original Author: Anand Padmanabhan
+##
+## This Perl script checks the supported VO list at the site and verifies if all
+## the CAs needed by the VOs in that list are present at the site. The list of CAs
+## needed by a VO is obtained from a central location at the GOC. 
+## Type ./cacert-verify-supported-vo-probe -h for more information
+##
+##
+## REQUIRES
+##  'RSVProbeBase
+##  'RSVProbeCACert
+##
+################################################################################
+
+## Perl modules to use
+use strict;
+use RSVProbeBase;
+use RSVProbeCACert;
+
+######## Global variables go here ################################
+our %o;         *o         = \%RSVProbeBase::o;
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+################## Local Variables for this probe #####################
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+
+
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+###### Local Sub routines begin ###########
+################################################################################
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.certificate.supportedvo.verify");
+
+    ## Pass "status" or "performance" depending on metric type
+            
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-CE");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 1.0.0");
+    &RSVProbeBase::Set_ProbeType ("OSG-CE");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("false"); ## agopu: Disabling till central URL is available ## ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("55 */6 * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("IMPORTANT NOTE: This is a  probe that checks the supported VO list at the site".
+	 "and verifies if all the CAs needed by the VOs in that list are present at the site.".
+	 " The list of CAs needed by a VO is obtained from a central location at the GOC.\n\n");
+	
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+    (
+    " [--cacerts-dir <directory> ]      Location of CA certificate files\n".
+    "                                   (Default: \$VDT_LOCATION'/globus/TRUSTED_CA\n".
+    " [--supported-vo <file> ]          Location of the file that lists the VOs the site intends to support\n".
+    "                                   (Default: \$VDT_LOCATION'/monitoring/osg-supported-vo-list.txt\n".
+    " [ --url-vo-ca <url> ]             Location of the central list which records all the CAs needed by any OSG VO.\n".
+    "                                   (Default: GOC Location)\n".
+    " [--worker-script-file <file>     Worker script file to use.".
+    " [--local-ce]          The verify test is run on localhost and not through globus gatekeeper."
+
+   );
+    
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("cacerts-dir=s","certDir");
+    &RSVProbeBase::Extra_CLI_Option ("url-vo-ca=s","caVoURL");
+    &RSVProbeBase::Extra_CLI_Option ("supported-vo-file=s","supportedVo");
+    &RSVProbeBase::Extra_CLI_Option ("worker-script-file=s","workerScriptFile");
+    &RSVProbeBase::Extra_CLI_Option ("local-ce","localCE");
+                                                                      
+     ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ## Get the remote environment variable
+    if (! $o{'localCE'}){
+        &RSVProbeBase::Get_Remote_Env();
+    }
+
+    ## Initialize local variables
+    &Initialize_Local();
+
+    ## Real tests begin now - check for expired certs now 
+    &RSVProbeCACert::Check_Supported_VO();
+
+    ## Print metric, and we're all done!
+    &RSVProbeBase::Print_Metric ();
+}
+
+## Initialize local variables
+sub Initialize_Local{
+    if (!defined $o{'localCE'}){
+        $o{'certDir'} =  $o{'REMOTE_ENV'}{'OSG_LOCATION'}."/globus/TRUSTED_CA" if (! $o{'certDir'});
+        $o{'supportedVo'} = $o{'REMOTE_ENV'}{'OSG_LOCATION'}."/monitoring/osg-supported-vo-list.txt" if (! $o{'supportedVo'});
+    }else {
+        $o{'certDir'} =  $o{'VDT_LOCATION_LOCAL'}."/globus/TRUSTED_CA" if (! $o{'certDir'});
+        $o{'supportedVo'} =  $o{'VDT_LOCATION_LOCAL'}."/monitoring/osg-supported-vo-list.txt" if (! $o{'supportedVo'});
+    }
+    $o{'caVoURL'} =  "http://everest.cigi.uiuc.edu:8008/tmp/vo_ca_mapping.txt" if (! $o{'caVoURL'}); #TODO: THIS HAS TO CHANGE BEFORE RELEASE
+    $o{'workerScriptFile'} = "$o{'PROBE_DIR_LOCAL'}/worker-scripts/ca-supportedvo-probe-worker" if (!defined ($o{'workerScriptFile'}));
+}
+
+## None for now

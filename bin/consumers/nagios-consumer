@@ -1,0 +1,156 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+use Digest::MD5;
+use POSIX;
+use IO::File;
+use File::Basename;
+
+# Turn autoflush on
+$|=1;
+
+##
+## Make sure we have VDT_LOCATION set in our environment
+##
+my $VDT_LOCATION = $ENV{VDT_LOCATION};
+die("ERROR: The VDT_LOCATION environment variable is not set") unless ($VDT_LOCATION);
+die("ERROR: VDT_LOCATION is set to an non-existing location '$VDT_LOCATION'") unless (-e $VDT_LOCATION);
+
+##
+my $PROBE_LOG_DIRECTORY = "$VDT_LOCATION/osg-rsv/logs/probes";
+my $PROBE_END_MARK = "EOT";
+
+## If this is set to true, we'll exit
+my $CONSUMER_DONE = 0;
+
+## Max time for sleeping during exponentional backoff
+my $MAX_SLEEP = 128;
+my $sleep = 1;
+
+my %FILE_CHECKSUMS   = ();
+my $FILE_CHECKSUMS_LINES = 3;
+
+# Allow for graceful shutdown
+$SIG{TERM} = \&catch_term;
+
+
+## Main loop
+while (!$CONSUMER_DONE) {
+   foreach my $file (glob("$PROBE_LOG_DIRECTORY/*.out")) {
+      my $checksum = file_checksum($file);
+
+      ## This will tell us whether we need to refresh our file handle because the probe was re-ran
+      if (!defined($FILE_CHECKSUMS{$file}) || $checksum ne $FILE_CHECKSUMS{$file}) {
+         ## Reset our sleep counter because we have new data
+         $sleep = 1;
+
+         my @lines = @{file_getlines($file)};
+         my $file_data = join("", @lines);
+
+         ## Check whether we have a probe end marker
+         if ($#lines != -1 && $lines[$#lines] =~ m/^$PROBE_END_MARK/) {
+            write_data($file, $file_data);
+         }
+      }
+      $FILE_CHECKSUMS{$file} = $checksum;
+   }
+
+   # Sleeps to prevent constant spinning
+   $sleep += $sleep unless ($sleep >= $MAX_SLEEP);
+   sleep($sleep);
+}
+
+exit;
+
+## -----------------------------------------------------------
+## catch_term
+## SIGTERM handler - used to allow the consumer to exit gently.
+## -----------------------------------------------------------
+sub catch_term {
+   print "Caught signal! Exiting...\n";
+   $CONSUMER_DONE = 1;
+}
+
+## -----------------------------------------------------------
+## write_data
+## -----------------------------------------------------------
+sub write_data {
+   my ($file, $data) = @_;
+
+   my ($host, $probe) = basename($file) =~ /^(.*)__(.*)\@.*\.out/;
+
+   if(!$host || !$probe) {
+      print STDERR "ERROR: Failed to get hostname ($host) or probe name ($probe) from file '$file'\n";
+      return;
+   }
+   
+   ## Pull out the probe's attributes
+   my %attrs = ( "metricName"    => undef,
+                 "metricStatus"  => undef,
+                 "timestamp"     => undef,
+   );
+   foreach my $attr (keys %attrs) {
+      if ($data =~ m/$attr: (.*)\n/) {
+         $attrs{$attr} = $1;
+         chomp($attrs{$attr});
+      } 
+      else {
+         print STDERR "ERROR: Unable to get '$attr' field.  Skipping '$file'.\n";
+         print STDERR "Data:\n$data\n";
+         return;
+      }
+   }
+
+   ########################
+   # Do nagios calls here #
+   ########################
+   my $rsvnagios_cmd = " python $ENV{VDT_LOCATION}/osg-rsv/bin/misc/rsv2nagios.py $ARGV[0] $attrs{metricName} <$file >>$ENV{VDT_LOCATION}/osg-rsv/logs/consumers/nagios-consumer.log";
+   print STDERR " RSV 2 NAGIOS Cmd: $rsvnagios_cmd\n";
+   system("$rsvnagios_cmd");
+}
+
+## -----------------------------------------------------------
+## file_getlines
+## -----------------------------------------------------------
+sub file_getlines {
+   my ($file) = @_;
+
+   open(FILE, "<", $file) or die("ERROR: Unable to open '$file' for reading : $!");
+   my @lines = <FILE>;
+   close(FILE);
+   
+   return \@lines;
+}
+
+## -----------------------------------------------------------
+## file_checksum
+## -----------------------------------------------------------
+sub file_checksum {
+   my ($file) = @_;
+   return unless (-e $file);
+   my $data = "";
+
+   ##
+   ## Grab the first # lines of the file and create a checksum
+   ##
+   my $fh = IO::File->new("<$file") ||
+      die("ERROR: Unable to open '$file' to calculate checksum: $!");
+   my $ctr = 0;
+   while (<$fh>) {
+      $data .= $_;
+      last unless (++$ctr < $FILE_CHECKSUMS_LINES);
+   }
+   close($fh);
+   ##
+   ## We only return a checksum if we looked at enough lines as defined by
+   ## $FILE_CHECKSUMS_LINES. The reason why we do this is that for the local
+   ## job files we only get the start date right away, and then the rest of the 
+   ## lines after a few seconds. Thus, this makes it look the checksums mismatched
+   ## just because last time we looked at 1 line instead of 2. 
+   ## Note: This doesn't affect our checking to see when the file gets reset
+   ## because in that case the last checksum will not be empty, but the new
+   ## one will be. I hope that makes sense...
+   ##
+   return ($data && $ctr >= $FILE_CHECKSUMS_LINES ? Digest::MD5::md5_hex($data) : "");
+}
