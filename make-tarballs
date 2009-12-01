@@ -1,0 +1,8 @@
+#!/bin/sh
+
+VERSION=3.2.0
+
+# Form the two tarballs
+tar zcf osg-rsv-probes-$VERSION.tar.gz osg-rsv/bin/probes
+tar zcf osg-rsv-core-$VERSION.tar.gz osg-rsv/bin/consumers osg-rsv/bin/misc osg-rsv/config osg-rsv/lib osg-rsv/logs osg-rsv/sbin osg-rsv/setup osg-rsv/specs
+
