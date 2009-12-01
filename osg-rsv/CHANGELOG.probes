@@ -1,0 +1,6 @@
+Version 3.2.0
+-------------
+- New version because VDT is now hosting RSV repository.
+- Probes are now installed by a tarball from the VDT, rather than fetching from
+  a central SVN repository.
+- No probe changes since previous version.
