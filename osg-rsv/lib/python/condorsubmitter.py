@@ -1,4 +1,4 @@
-#!/bin/env python
+#!/usr/bin/env python
 # condorsubmitter.py
 # Marco Mambelli <marco@hep.uchicago.edu>
 
