@@ -1,3 +1,8 @@
+Version 3.2.1
+-------------
+- Fixed ITB ticket 139.  Improved warning and error messages from the gratia
+  probe.
+
 Version 3.2.0
 -------------
 - New version because VDT is now hosting RSV repository.
