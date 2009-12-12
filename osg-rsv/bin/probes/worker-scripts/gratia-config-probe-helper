@@ -16,7 +16,9 @@ our %metric;
 my $run_me_root = 0;
 my ($is_root, $probeconfig_problems, $soaphost, $probename,
     $sitename, $enabled, $datafolder, $workingfolder, $real_datafolder,
-    $probe_in_cron, $current_gratia_probe_type);
+    $probe_in_cron, $current_gratia_probe_type,
+    $record_count, $file_count, $archive_count, $old_file_count
+   );
 
 &Init();
 &Run();
@@ -75,7 +77,6 @@ EOF
 sub Run {
 
   if ($o{'discover'}) {
-    ## discoverProbesToTest() will exit if called.
     &discoverProbesToTest();
   }
 
@@ -86,7 +87,7 @@ sub Run {
   unless ($current_gratia_probe_type) {
     setCritical();
     &appendDetailsData(<<EOF);
-Probe type must be set with -p! Run with --discover (add -X for
+ERROR: Probe type must be set with -p! Run with --discover (add -X for
 human-readable output) to find possible values on this system.
 EOF
     normal_exit()
@@ -96,7 +97,7 @@ EOF
   unless ($ENV{VDT_LOCATION}) {
     setCritical();
     &appendDetailsData(<<EOF);
-VDT_LOCATION must be set in the environment or with the
+ERROR: VDT_LOCATION must be set in the environment or with the
 --vdt-location=<vdt-location> option!
 EOF
     normal_exit()
@@ -147,7 +148,7 @@ EOF
       $probe_in_cron != 1) {
     if ($is_root) {
       setCritical();
-      &appendDetailsData("Probe $probename is not listed in crontab (critical error).\n");
+      &appendDetailsData("ERROR: Probe $probename is not listed in crontab.\n");
     } else {
       #&appendDetailsData("Not root: cannot examine crontab (not a critical error).\n");
     }
@@ -155,14 +156,14 @@ EOF
   # Is probe enabled?
   if ($enabled ne "1") {
     setCritical();
-    &appendDetailsData("Probe $probename has EnableProbe not set to 1 (critical error).\n");
+    &appendDetailsData("ERROR: Probe $probename has EnableProbe not set to 1.\n");
     $run_me_root = 1;
     $probeconfig_problems = 1;
   }
   # Is probename generic or unset?
   if ($probename =~ m&(?:generic|unknown)&i) {
     setCritical();
-    &appendDetailsData("MeterName $probename appears to be generic (critical error).\n");
+    &appendDetailsData("ERROR: MeterName $probename appears to be generic (critical error).\n");
     $probeconfig_problems = 1;
     normal_exit();
   }
@@ -173,7 +174,7 @@ EOF
     if ($rdf_stat[2] != 041777) {
       setCritical();
       &appendDetailsData(sprintf("%s (found %05o, wanted %05o).",
-                                 "Data folder $real_datafolder does not have correct permissions (critical error).\n",
+                                 "WARNING: Data folder $real_datafolder does not have correct permissions (critical error).\n",
                                  $rdf_stat[2],
                                  041777));
     }
@@ -185,7 +186,7 @@ EOF
   my $num_colons = $#colon_split;
   if ($num_colons != 1) {
     setWarning();
-    &appendDetailsData("Not one and only one \`:' in MeterName $probename.\n");
+    &appendDetailsData("WARNING: Not one and only one \`:' in MeterName $probename.\n");
     $probeconfig_problems = 1;
   }
 
@@ -194,7 +195,7 @@ EOF
   if ((!$sitename) or $sitename =~ m&(?:generic|unknown)&i) {
     setWarning();
     &appendDetailsData (<<EOF);
-Configured SiteName "$sitename" is empty or generic.
+WARNING: Configured SiteName "$sitename" is empty or generic.
 EOF
     $probeconfig_problems = 1;
   }
@@ -205,24 +206,30 @@ EOF
 
   ################################
   # Check size of reprocessing queue
-  my $npending = `(cd "$workingfolder/gratiafiles" >/dev/null 2>&1 && ls -1 | wc -l)`;
-  chomp $npending;
-  if ($npending eq "") {
-    $npending = 0;
-  }
-  &appendDetailsData ("$npending files waiting to be re-sent to $soaphost.\n");
-  if ($npending > 1000) {
+  init_find_counts();
+  find( { wanted => \&process_find_leaf, follow => 1, follow_skip => 2 }, "$workingfolder/gratiafiles");
+  my $message="$record_count records waiting to be re-sent to $soaphost in $file_count files (including $archive_count archive files).\n";
+  if ($record_count > 1000) {
     setWarning();
+    $message = "WARNING: $message";
+  }
+  &appendDetailsData ($message);
+  if ($old_file_count > 0) {
+    setWarning();
+    &appendDetailsData (sprintf("WARNING: %d %s > 7 days old: please verify CollectorHost setting in ProbeConfig and collector status.\n",
+                        $old_file_count, ($old_file_count>1?"files are":"file is")));
   }
 
   ################################
   # Check number of files in data area.
   my $ndata = `(cd "$datafolder" >/dev/null 2>&1 && ls -1 | wc -l)`;
   chomp $ndata;
-  &appendDetailsData ("$ndata files in data folder $datafolder.\n");
+  $message="$ndata files in data folder $datafolder.\n";
   if ($ndata > 10000) {
     setWarning();
+    $message="WARNING: $message";
   }
+  &appendDetailsData ($message);
 
   ################################
   # Check last contact time with Gratia server.
@@ -235,10 +242,7 @@ EOF
   if ($probe_contact_check =~ /^last-contact=never/) {
     setCritical();
     $run_me_root = 1;
-    &appendDetailsData (<<EOF);
-Probe $probename has never been seen by Gratia collector $soaphost.
-This is a critical error.
-EOF
+    &appendDetailsData ("ERROR: Probe $probename has never been seen by Gratia collector $soaphost\n");
     normal_exit();
   }
 
@@ -256,16 +260,15 @@ EOF
     setCritical();
     $run_me_root = 1;
     &appendDetailsData (<<EOF);
-Probe $probename has not been seen by Gratia collector $soaphost in >1d.
-Last contact time = $last_contact_string
-This is a critical error
+ERROR: Probe $probename has not been seen by Gratia collector $soaphost in >1d.
+Last contact time = $last_contact_string.
 EOF
     normal_exit();
   } elsif (Date_Cmp($probe_contact_check, $cmpDateHour) < 1) {
     setWarning();
     $run_me_root = 1;
     &appendDetailsData (<<EOF);
-Probe $probename has not been seen by Gratia collector $soaphost in >1h.
+WARNING: Probe $probename has not been seen by Gratia collector $soaphost in >1h.
 Last contact time = $last_contact_string
 EOF
   } else {
@@ -284,7 +287,7 @@ EOF
     if (!$probe_site_check) {
       setWarning();
       &appendDetailsData (<<EOF);
-Probe $probename not found in check of probes reporting to $soaphost from $sitename.
+WARNING: Probe $probename not found in check of probes reporting to $soaphost from $sitename.
 Check Collector SiteName translation on $soaphost
 wget -q --tries=1 --timeout=10 -O - 'http://$soaphost/gratia-administration/monitor-status.html?sitename=$sitename' 2>/dev/null | grep -e '^\(probename=\)\{0,1\}$probename\[|:][ 	]*last-contact='
 EOF
@@ -412,7 +415,7 @@ EOF
   } elsif ($cmd_output =~ m&^Not defined:&i or $status != 0 or not $cmd_output) {
     setWarning();
     &appendDetailsData (<<EOF);
-PER_JOB_HISTORY_DIR apparently not set in condor_config or condor_config_val
+WARNING: PER_JOB_HISTORY_DIR apparently not set in condor_config or condor_config_val
 not operating as expected. Please ensure it is set to "$datafolder" in
 condor_config or the schedd machine's local configuration.
 EOF
@@ -421,7 +424,7 @@ EOF
     if ($status == 0 and $cmd_output ne $datafolder) {
       setWarning();
       &appendDetailsData (<<EOF);
-PER_JOB_HISTORY_DIR is apparently set to "$cmd_output"
+WARNING: PER_JOB_HISTORY_DIR is apparently set to "$cmd_output"
 in condor_config. It should be set to
 "$datafolder" as specified in ProbeConfig.
 Please rectify in condor_config or the schedd machine's local configuration.
@@ -439,9 +442,8 @@ sub probe_check_pbs_lsf {
   if ($@) {                     # FAILED to load configuration module
     setCritical();
     &appendDetailsData (<<EOF);
-Error loading urCollector::Configuration: $@
+ERROR: Could not load urCollector::Configuration: $@
 Major probe installation problem.
-This is a critical error.
 EOF
     normal_exit();
   }
@@ -450,9 +452,8 @@ EOF
   if ($@) {                     # FAILED to parse configuration
     setCritical();
     &appendDetailsData (<<EOF);
-Error reading $URCOLLECTOR_LOC/urCollector.conf: $@
+ERROR: Could not read $URCOLLECTOR_LOC/urCollector.conf: $@
 Please check urCollector.conf file for errors.
-This is a critical error.
 EOF
     normal_exit();
   }
@@ -460,9 +461,8 @@ EOF
   if ($urCollector::Configuration::configValues{lrmsType} !~ m&(?:pbs|lsf)&i) {
     setCritical();
     &appendDetailsData (<<EOF);
-Unrecognized lrmsType $urCollector::Configuration::configValues{lrmsType} in urCollector.conf
+ERROR: Unrecognized lrmsType $urCollector::Configuration::configValues{lrmsType} in urCollector.conf
 Please check urCollector.conf file for errors.
-This is a critical error.
 EOF
     normal_exit();
   }
@@ -471,9 +471,8 @@ EOF
       $urCollector::Configuration::configValues{lrmsType} ne $current_gratia_probe_type) {
     setCritical();
     &appendDetailsData (<<EOF);
-Mismatch between probeType $current_gratia_probe_type and configured lrmsType $urCollector::Configuration::configValues{lrmsType} in urCollector.conf.
+ERROR: Mismatch between probeType $current_gratia_probe_type and configured lrmsType $urCollector::Configuration::configValues{lrmsType} in urCollector.conf.
 Please check urCollector.conf file for errors.
-This is a critical error.
 EOF
     normal_exit();
   }
@@ -494,9 +493,8 @@ EOF
     if (not -d $dir) {
       setCritical();
       &appendDetailsData (<<EOF);
-Configured PBS log directory $dir does not exist.
+ERROR: Configured PBS log directory $dir does not exist.
 Check pbsAcctLogDir in urCollector.conf.
-This is a critical error.
 EOF
       normal_exit();
     }
@@ -505,15 +503,14 @@ EOF
     if (!$nfiles) {
       setCritical();
       &appendDetailsData (<<EOF);
-No files found in configured PBS log directory $dir.
+ERROR: No files found in configured PBS log directory $dir.
 Check pbsAcctLogDir in urCollector.conf.
-This is a critical error.
 EOF
       normal_exit();
     } elsif ((not -e "$dir/$date") and (not -e "$dir/$date.gz")) {
       setWarning();
       &appendDetailsData (<<EOF);
-Configured PBS log directory $dir does not contain entries for today.
+WARNING: Configured PBS log directory $dir does not contain entries for today.
 Check pbsAcctLogDir in urCollector.conf and contents of $dir.
 EOF
     }
@@ -522,15 +519,14 @@ EOF
     if (not -d $dir) {
       setCritical();
       &appendDetailsData (<<EOF);
-Configured LSF log directory $dir does not exist.
+ERROR: Configured LSF log directory $dir does not exist.
 Check lsfAcctLogDir in urCollector.conf.
-This is a critical error.
 EOF
       normal_exit();
     } elsif (not -e "$dir/lsb.events") {
       setWarning();
       &appendDetailsData (<<EOF);
-No log file $dir/lsb.events.
+WARNING: No log file $dir/lsb.events.
 Check lsfAcctLogDir in urCollector.conf and contents of $dir.
 EOF
     }
@@ -691,6 +687,29 @@ EOF
 EOF
   }
   exit $_[0];
+}
+
+use File::Find;
+sub init_find_counts {
+  $record_count = $file_count = $archive_count = $old_file_count = 0;
+}
+
+sub process_find_leaf {
+  -f or next;
+  my $uncompress_arg;
+  if (m&\.tar(?:\.(bz2|gz))?$&) {
+    ++$archive_count;
+    $uncompress_arg = ($1?(($1 eq "bz2")?"j":"z"):"");
+    my $tar_count = `(tar ${uncompress_arg}tvf $File::Find::name | grep -ve '^d' | wc -l) 2>/dev/null`;
+    chomp $tar_count;
+    if ($tar_count and $tar_count > 0) {
+      $record_count += $tar_count;
+    }
+  } else {
+    ++$record_count;
+  }
+  ++$file_count;
+  ++$old_file_count if int(-M _) > 7;
 }
 
 __END__
