@@ -1,8 +1,0 @@
-serviceType: OSG-Central-Monitor
-metricName: org.osg.central.cacert.verify.dn
-metricType: status
-probeType: OSG-Central-CA-Install
-enableByDefault: true
-metricInterval: 55 * * * *
-description: This is a central probe that checks if all the DNs from various OSG VOs are from known CAs.
-EOT

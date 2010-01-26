@@ -1,8 +1,0 @@
-serviceType: OSG-Central-Monitor
-metricName: org.osg.central.cacert.process.vdt-update-certs
-metricType: status
-probeType: OSG-Central-CA-Install
-enableByDefault: true
-metricInterval: 20 * * * *
-description: Tests if vdt-updater is working properly when configured against GOC or VDT CA distribution.
-EOT

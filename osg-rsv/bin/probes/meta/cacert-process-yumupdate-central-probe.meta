@@ -1,8 +1,0 @@
-serviceType: OSG-Central-Monitor
-metricName: org.osg.central.cacert.process.yum-update
-metricType: status
-probeType: OSG-Central-CA-Install
-enableByDefault: true
-metricInterval: 20 * * * *
-description: Tests if YUM updater works when configured against GOC-hosted YUM repository.
-EOT

@@ -1,8 +1,0 @@
-serviceType: OSG-Central-Monitor
-metricName: org.osg.central.cacert.expiry
-metricType: status
-probeType: OSG-Central-CA-Install
-enableByDefault: true
-metricInterval: 30 * * * *
-description: Probe to check for expired CA certs on the local host.
-EOT

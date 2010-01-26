@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.globus.wsgram-staging
-metricType: status
-probeType: OSG-CE-WS
-enableByDefault: true
-metricInterval: 28 * * * *
-description: Probe to check if WS-GRAM staging works on a remote host.
-EOT

@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.globus.wsgram-simple
-metricType: status
-probeType: OSG-CE-WS
-enableByDefault: true
-metricInterval: 18 * * * *
-description: Test if a WS-GRAM service is up and running.
-EOT

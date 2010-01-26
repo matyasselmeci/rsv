@@ -1,8 +1,0 @@
-serviceType: OSG-Central-Monitor
-metricName: org.osg.centralized.cacert.verify.igtf
-metricType: status
-probeType: OSG-Central-CA-Install
-enableByDefault: true
-metricInterval: 5 * * * *
-description: This is a central probe that checks if tarball and RPM releases from VDT and OSG are in sync with the IGTF release.
-EOT

@@ -1,8 +1,0 @@
-serviceType: OSG-Central-Monitor
-metricName: org.osg.central.verify.voms
-metricType: status
-probeType: OSG-Central-CA-Install
-enableByDefault: true
-metricInterval: 50 * * * *
-description: This is a central probe that checks if DNs can be downloaded from the VOMS server.
-EOT

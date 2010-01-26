@@ -1,8 +1,0 @@
-serviceType: OSG-Central-Monitor
-metricName: org.osg.central.crl.freshness
-metricType: status
-probeType: OSG-Central-CA-Install
-enableByDefault: true
-metricInterval: 45 * * * *
-description: This is a central probe that checks if the CRLs have been updated recently.
-EOT

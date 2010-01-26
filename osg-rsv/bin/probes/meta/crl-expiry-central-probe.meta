@@ -1,8 +1,0 @@
-serviceType: OSG-Central-Monitor
-metricName: org.osg.central.crl.expiry
-metricType: status
-probeType: OSG-Central-CA-Install
-enableByDefault: true
-metricInterval: 15 * * * *
-description: This is a central probe that checks is all the CRLs distributed by the CA are valid and not about to expire.
-EOT

@@ -1,8 +1,0 @@
-serviceType: BDII
-metricName: org.osg.bdii.available
-metricType: status
-probeType: OSG-BDII
-enableByDefault: true
-metricInterval: 1,21,41 * * * *
-description: Probe to report if BDII is functional.
-EOT

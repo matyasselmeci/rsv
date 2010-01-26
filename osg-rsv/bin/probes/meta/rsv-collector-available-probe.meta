@@ -1,8 +1,0 @@
-serviceType: RSV
-metricName: org.osg.rsv.collector.available
-metricType: status
-probeType: OSG-RSV
-enableByDefault: true
-metricInterval: 1,21,41 * * * *
-description: Probe to report if RSV collector is functional.
-EOT
