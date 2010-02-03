@@ -30,8 +30,7 @@ def getLocalHostName():
 
 def introspectProbes(fname, rsv=None):
     """
-    Look for the probe file as absolute path, relative path, in the probe 
-    binary directory of RSV.
+    Look at the .meta file for the probe in the osg-rsv/bin/probes/meta dir
     One file may contain multiple probes (LCG would require only one)
     """
     if not os.path.isabs(fname):
@@ -43,50 +42,27 @@ def introspectProbes(fname, rsv=None):
             if not os.path.isfile(fname):
                 log.warning("Unable to find probe file: %s", fname)
                 return None
-    if rsv:
-        bindir = rsv.getBinDir()
-        setupstr = rsv.getSetupCommand()
-    else:
-        bindir = '.'
-        setupstr = ""
-    cmd = "%sPERL5LIB=%s:$PERL5LIB %s -l -m all" % (setupstr, bindir, fname)
-    ec, out = commands.getstatusoutput(cmd)
-    if ec:
-        log.warning("Unable to run the probe to get the description (%s)" % \
-            os.WEXITSTATUS(ec))
-        log.debug("Failed command: %s" % (cmd,))
-        return None
+
+    metafile = os.path.join(os.path.dirname(fname), "meta", os.path.basename(fname) + ".meta")
+
+    lines = open(metafile).readlines()
     retlist=[]
     retv = {}
-    if out:
-        lines = out.splitlines()
-        start_detailsdata=-1
+    if lines:
         for i in range(len(lines)):
-            if lines[i]=='EOT':
-                if start_detailsdata>0:
-                    retv['detailsdata'] = '\n'.join([d,] + lines[\
-                        start_detailsdata:i])
+            if lines[i].strip()=='EOT':
                 retlist.append(retv)
-                start_detailsdata=-1
                 retv={}
-                continue
-            if start_detailsdata>=0:
                 continue
             info = lines[i].split(':', 1)
             if len(info) != 2:
+                print "WARNING: Invalid line in meta file '" + metafile + "'"
+                print lines[i]
                 continue
-            k, d = info
-            k = k.strip()
-            if k == 'detailsdata':
-                #TODO check output: should it be i or i+1?
-                start_detailsdata=i
-                continue
-            retv[k] = d.strip()
+            retv[info[0].strip()] = info[1].strip()
         if retv:
             #output ended and last EOT was missing 
-            if start_detailsdata>0:
-                retv['detailsdata'] = '\n'.join([d,] + lines[\
-                    start_detailsdata:i])
+            print "WARNING: meta file '" + metafile + "' is missing trailing 'EOT'"
             retlist.append(retv)
     return retlist
 
