@@ -93,10 +93,8 @@ def processoptions(arguments=None):
     description = """This script is used to control or verify a probe."""
     parser = OptionParser(usage=usage, description=description, version=version)
     #parser.add_option("-v", "--version", action="store_true", dest="verbose", default=False,
-    parser.add_option("-p", "--vdt-location", "--vdt-install", dest="vdtlocation", default=None,
-                      help="Root directory of the OSG or VDT installation (prefer --vdt-location)", metavar="DIR")
-    #parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=False,
-    #parser.add_option("--verbose-output", action="store_true", dest="verbose", default=False,
+    parser.add_option("-p", "--vdt-install", dest="vdtlocation", default=None,
+                      help="Root directory of the OSG installation", metavar="DIR")
     parser.add_option("--verbose", action="store_true", dest="verbose", default=False,
                       help="Verbose output")
     parser.add_option("-l", "--list", action="store_true", dest="rsvctrl_list", default=False,
@@ -162,11 +160,8 @@ def processoptions(arguments=None):
     if not options.vdtlocation:
         options.vdtlocation = osgrsv.findPathOSG()
     if not options.vdtlocation:
-        ## TODO check also that VDT_LOCATION exist? or set it in the environment?
-        parser.error("ERROR: VDT_LOCATION is not set.\nEither set this environment variable, or pass the --vdt-location command line option.")
-        #print "ERROR: VDT_LOCATION is not set.\n"
-        #print "Either set this environment variable, or pass the --vdt-install command line option.\n"
-        #exit(1)
+        parser.error("VDT_LOCATION is not set.\nEither set this environment variable, or pass the --vdt-location command line option.")
+
     # Ownership problem:
     # - probes should not be submittted to condor as root
     # - enable/disable/test require ownership of the directory tree
@@ -177,7 +172,7 @@ def processoptions(arguments=None):
                                           options.rsvctrl_test, options.rsvctrl_full_test, options.rsvctrl_list,
                                           options.rsvctrl_setup] if i])
     if number_of_commands > 1:
-        parser.error("Commands are mutially exclusive, you can use only one of list, test, enable, disable.")
+        parser.error("Commands are mutually exclusive, you can use only one of list, test, enable, disable.")
     if number_of_commands == 0:
         parser.error("Invalid syntax. You must specify one command.")
     # rsvctrl_test is OK since it is not touching the files in the RSV directory
