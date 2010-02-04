@@ -330,7 +330,7 @@ class Probe(object):
                 tmp = open(spec_file).readlines()
                 if tmp: 
                     # replace the newlines with spaces because these are command line arguments
-                    outstr += ' '.join(tmp.split('\n'))
+                    outstr += ' '.join(tmp)
             else: # should not happen, files created in installation
                 # fails if directory no there
                 try:
@@ -436,7 +436,7 @@ class Probe(object):
         log.info("Changing configuration for RSV probes of type %s\n\t for URI: %s (host: %s)" %
                  (self.name, uri, host))
         if not self.rsv.metricsFileFix(host):
-            log.error("Bad metrics file for host %s, ckeck it manually" % (host,))            
+            log.error("Bad metrics file for host %s, check it manually" % (host,))            
             return
         if not value:
             value = self.getMetricInterval().split()
