@@ -151,7 +151,6 @@ class OSGRSV:
         """Clean HTML output
         - remove HTML subpages
         - remove HTML main page
-        - kill HTML consumer to recreate updated pages
         """
         html_dir = self.getHtmlOutputDir()
         for i in [os.path.join(html_dir, j) for j in os.listdir(html_dir)]:
@@ -170,15 +169,6 @@ class OSGRSV:
         except OSError:
             if os.path.isfile(tmp_fname):
                 log.warning("Unable to remove the file: "+tmp_fname)
-        #Kill HTML consumer to refresh HTML files (Condor will restart it)
-        cmd = "pkill -f html-consumer"
-        if self.user:
-            cmd = 'su -c "%s" %s' % (cmd, self.user)
-        raw_ec = os.system(cmd)
-        #if os.WIFEXITED(raw_ec):
-        exit_code = os.WEXITSTATUS(raw_ec) 
-        log.info("HTML consumer killed: %s (%s). Being restarted."%(exit_code, raw_ec))
-        # Should check for new pid? "pgrep -f html-consumer"
         return
     
     def getSubmitter(self):
