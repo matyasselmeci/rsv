@@ -3,6 +3,7 @@
 # Marco Mambelli <marco@hep.uchicago.edu>
 
 import os 
+import re
 import sys
 import time
 import socket
@@ -81,7 +82,7 @@ def processoptions(arguments=None):
       --help | -h 
       --version
       --setup  NOT IMPLEMENTED ... COMING SOON
-      --list [ --wide | -w | --full-width] [ --format <format> ] [ all | <probeID>]
+      --list [ --wide | -w | --full-width] [ --format <format> ] [ <pattern>]
       --enable    [--user <user>] --metric  <metric-name>  --host <host-name>
       --enable    [--user <user>] --service <service-name> --host <host-name>
       --disable   [--user <user>] --metric  <metric-name>  --host <host-name>
@@ -98,7 +99,7 @@ def processoptions(arguments=None):
     parser.add_option("--verbose", action="store_true", dest="verbose", default=False,
                       help="Verbose output")
     parser.add_option("-l", "--list", action="store_true", dest="rsvctrl_list", default=False,
-                      help="List probe information")
+                      help="List probe information.  If <pattern> is supplied, only probes matching the regular expression pattern will be displayed")
     parser.add_option("-w", "--wide", action="store_true", dest="list_wide", default=False,
                       help="Wide list display")
     parser.add_option("--full-width", action="store_true", dest="list_fullwidth", default=False,
@@ -193,49 +194,79 @@ def processoptions(arguments=None):
             parser.error("Run with --user <user>") # parser.exit(2) - available in Python 2.5
     return args, options
 
-def main_list():
-    #TODO: may be obsolete!!
-    # list command
-    
-    args, options = processoptions()
-        
-    # init configuration
 
-    # take care of RSV cert?
-    rsv = osgrsv.OSGRSV(options.vdtlocation)
+def list_all_probes(rsv, options, pattern):
+    log.info("Listing all probes")
+    retlines = []
+    num_metrics_displayed = 0
 
-    rets = ""
-    if not args or args[0]=='all':
-        # list all probe status
-        retlines = []
-        probelist = rsv.getConfiguredProbes(options=options)
-        for p in probelist:
-            for u in p.urilist:
-                if options.list_format=='local':
-                    rets = p.status(u)
-                elif options.list_format in SUBMISSION_LIST_FORMATS:
-                    rets = p.submission_status(u, format=options.list_format)
-                else:
-                    rets = p.status(u)
-                retlines.append(" %-90s : %s" % (p.getLocalUniqueName(u), rets))
-        print '\n'.join(retlines)
-        return
-    else:
-        # list probe
-        if not rsv.isValidProbeID(args[0]):
-            log.error("Invalid probe ID (should be hostName__fileName@metricName): %s" % (args[0],))
-            return
-        probe = rsv.getProbeByID(args[0])
-        probe.describe()
-        if options.list_format=='local':
-            rets += probe.status(probe.urilist[0])
-        elif options.list_format in SUBMISSION_LIST_FORMATS:
-            rets += str(probe.submission_status(probe.urilist[0], format=options.list_format))
+    probelist = rsv.getConfiguredProbes(options=options)
+    if options.list_format=='local':
+        table_ = table.Table((42, 15, 20))
+        if options.list_fullwidth:
+            table_.truncate = False
+        elif options.list_wide:
+            table_.setColumns(80, 20, 40)
+            table_.truncate_leftright = True
         else:
-            rets += probe.status(probe.urilist[0])
-    # printing output
-    print rets
-    
+            table_.truncate_leftright = True
+        table_.makeFormat()
+        table_.makeHeader('Metric', 'Service', 'Hostname')
+        retlines.append(table_.getHeader())
+        for probe in probelist:
+            pmetric = probe.metricName
+
+            if pattern and not re.search(pattern, pmetric):
+                continue
+
+            ptype = probe.getType()
+            ret_list_uri = []
+            ret_list_status = []
+            for uri in probe.urilist:
+                # If the user supplied --host, only show that host's metrics
+                if options.uri and options.uri != uri:
+                    continue
+
+                rets = probe.status(uri)
+                log.debug("Metric %s (%s): %s on %s" % (pmetric, ptype, rets, uri))
+                if rets=="ENABLED":
+                    ret_list_uri.append(uri)
+                else:
+                    if not rets in ret_list_status:
+                        ret_list_status.append(rets)
+            if not ret_list_uri:
+                # should I just add DISABLED?
+                # if multiple status are appearing probably there is an error
+                for i in ret_list_status:
+                    table_.addToBuffer(pmetric, ptype, i)
+                continue
+            for i in ret_list_uri:                        
+                table_.addToBuffer(pmetric, ptype, i)
+
+            num_metrics_displayed += 1
+        #after looping on all probes
+        retlines += table_.formatBuffer()
+    else:
+        # !!RIP!! - This code takes a long time, what's it doing?
+        #list all probes, format != 'local'
+        for probe in probelist:
+            pkey = probe.getKey()
+            retlines.append("%s" % (probe.getKey(),))
+            for u in probe.urilist:
+                if options.list_format in SUBMISSION_LIST_FORMATS:
+                    rets = probe.submission_status(u, format=options.list_format)
+                else:
+                    rets = probe.status(u)
+                retlines.append("               %-30s : %s" % (u, rets))
+
+    if not probelist:
+        log.error("No configured probes!")
+    else:
+        print '\n' + '\n'.join(retlines) + '\n'
+        if num_metrics_displayed == 0:
+            print "No metrics matched your query.\n"
+    return
+
 
 def main_rsv_control():
     # list command
@@ -255,95 +286,16 @@ def main_rsv_control():
         rsv = osgrsv.OSGRSV(options.vdtlocation)
 
     rets = ""
+
+    # listing probes
     if options.rsvctrl_list:
-        if not args or args[0]=='all':
-            # list all probe status
-            log.info("Listing all probes... may take few seconds.")
-            retlines = []
-            probelist = rsv.getConfiguredProbes(options=options)
-            if options.list_format=='local':
-                table_ = table.Table((42, 15, 20))
-                if options.list_fullwidth:
-                    table_.truncate = False
-                elif options.list_wide:
-                    table_.setColumns(80, 20, 40)
-                    table_.truncate_leftright = True
-                else:
-                    table_.truncate_leftright = True
-                table_.makeFormat()
-                table_.makeHeader('Metric', 'Service', 'Hostname')
-                retlines.append(table_.getHeader())
-                for p in probelist:
-                    pmetric = p.metricName
-                    ptype = p.getType()
-                    ret_list_uri = []
-                    ret_list_status = []
-                    for u in p.urilist:
-                        rets = p.status(u)
-                        log.debug("Metric %s (%s): %s on %s" % (pmetric, ptype, rets, u))
-                        if rets=="ENABLED":
-                            ret_list_uri.append(u)
-                        else:
-                            if not rets in ret_list_status:
-                                ret_list_status.append(rets)
-                    if not ret_list_uri:
-                        # should I just add DISABLED?
-                        # if multiple status are appearing probably there is an error
-                        for i in ret_list_status:
-                            table_.addToBuffer(pmetric, ptype, i)
-                        continue
-                    for i in ret_list_uri:                        
-                        table_.addToBuffer(pmetric, ptype, i)
-                #after looping on all probes
-                retlines += table_.formatBuffer()
-            else:
-                #list all probes, format != 'local'
-                for p in probelist:
-                    pkey = p.getKey()
-                    retlines.append("%s" % (p.getKey(),))
-                    for u in p.urilist:
-                        if options.list_format in SUBMISSION_LIST_FORMATS:
-                            rets = p.submission_status(u, format=options.list_format)
-                        else:
-                            rets = p.status(u)
-                        retlines.append("               %-30s : %s" % (u, rets))
-            if not probelist:
-                log.error("No configured probes!")
-            else:
-                print '\n'.join(retlines)
-            return
+        if not args:
+            list_all_probes(rsv, options, "")
         else:
-            # list probe 
-            probe = None
-            if rsv.isValidProbeID(args[0]):
-                # Return correct metric and URI
-                probe = rsv.getProbeByID(args[0])
-            else:
-                # Try to lookup the probe using the metrics name
-                # There may be multiple URI, choodig the first one?
-                log.info("Invalid probe ID (should be hostName__fileName@metricName): %s\nTrying metric name lookup...may teke few seconds." 
-                         % (args[0],))
-                probelist = rsv.getConfiguredProbes(options=options)
-                for p in probelist:
-                    if p.metricName == args[0]:
-                        probe = p
-                        log.info("Metric %s, URI %s" % (args[0], p.urilist[0]))
-                        break
-            if not probe:
-                log.info("Unable to lookup probe by ID or metric name: %s." % (args[0],)) 
-            #probe.describe()
-            if options.list_format=='local':
-                rets += probe.status(probe.urilist[0])
-            elif options.list_format in SUBMISSION_LIST_FORMATS:
-                if options.rsvctrl_test:
-                    rets += str(probe.submission_status(probe.urilist[0], format=options.list_format, probe_test=True))
-                else:
-                    rets += str(probe.submission_status(probe.urilist[0], format=options.list_format))
-            else:
-                rets += probe.status(probe.urilist[0])
-            # printing output
-            print rets
-            return
+            list_all_probes(rsv, options, args[0])
+        return
+
+    # Non-list options
     elif options.rsvctrl_enable or options.rsvctrl_disable or options.rsvctrl_test or options.rsvctrl_full_test:
         if not options.service and not options.metric:
             log.error("Service or metric must be provided.")
@@ -423,11 +375,7 @@ def main():
     
 if __name__ == "__main__":
     progname = os.path.basename(sys.argv[0])
-    if progname=='probe-list':
-        main_list()
-    elif progname=='rsv-control' or progname=='rsvcontrol.py':
+    if progname=='rsv-control' or progname=='rsvcontrol.py':
         main_rsv_control()
-    elif progname=='probe':
-        main2()
     else:
         main()
