@@ -493,7 +493,7 @@ class Probe(object):
             open(spec_file,'w').close()  # make a blank file for people to add to if they want
 
     def install(self):
-        """"Install the probe
+        """Install the probe
         - copy the file in the RSV bin directory
         - invoke configure
         """

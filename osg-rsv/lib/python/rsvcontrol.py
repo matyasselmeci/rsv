@@ -77,7 +77,6 @@ def getLocalHostName():
     return _cacheHostName
 
 def processoptions(arguments=None):
-    # usage = """usage: \%prog [ --verbose ] 
     usage = """usage: rsv-control [ --verbose ] 
       --help | -h 
       --version
@@ -93,7 +92,6 @@ def processoptions(arguments=None):
     version = "rsv-control 0.13"
     description = """This script is used to control or verify a probe."""
     parser = OptionParser(usage=usage, description=description, version=version)
-    #parser.add_option("-v", "--version", action="store_true", dest="verbose", default=False,
     parser.add_option("-p", "--vdt-install", dest="vdtlocation", default=None,
                       help="Root directory of the OSG installation", metavar="DIR")
     parser.add_option("--verbose", action="store_true", dest="verbose", default=False,
@@ -195,7 +193,7 @@ def processoptions(arguments=None):
     return args, options
 
 
-def list_all_probes(rsv, options, pattern):
+def list_probes(rsv, options, pattern):
     log.info("Listing all probes")
     retlines = []
     num_metrics_displayed = 0
@@ -290,9 +288,9 @@ def main_rsv_control():
     # listing probes
     if options.rsvctrl_list:
         if not args:
-            list_all_probes(rsv, options, "")
+            list_probes(rsv, options, "")
         else:
-            list_all_probes(rsv, options, args[0])
+            list_probes(rsv, options, args[0])
         return
 
     # Non-list options
