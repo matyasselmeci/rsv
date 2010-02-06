@@ -32,6 +32,7 @@ my $OUTPUT_DIR = "$VDT_LOCATION/osg-rsv/output/html";
 GetOptions("html-output" => \$OUTPUT_DIR);
 
 my $STATE_FILE = "$OUTPUT_DIR/state.file";
+my $STATE_LOCK = "$STATE_FILE.lock";
 my $MAIN_HTML  = "$OUTPUT_DIR/index.html";
 
 
@@ -143,6 +144,8 @@ sub alert_about_probes_not_running {
 ## -----------------------------------------------------------
 
 sub read_state_file {
+    lock_state_file();
+
     my @lines = (-e $STATE_FILE) ? @{readfile($STATE_FILE)} : ();
     
     my $state_info = {};
@@ -167,8 +170,31 @@ sub write_state_file {
 	    print OUT "\n";
 	}
     }
-    
     close(OUT);
+    unlock_state_file();
+}
+
+sub lock_state_file {
+    my $tries = 0;
+    my $max_tries = 10;
+    while(-e $STATE_LOCK) {
+	if($tries++ >= $max_tries) {
+	    # We don't want this script to hang, but we also don't want to lose info.  So if this
+	    # is locked for too long, just take ownership.  rsv-control is the other script that
+	    # locks this, and it should only have the lock for <1 second.  So if this is locked for
+	    # 10 seconds, something probably went wrong.
+	    debug_print("Could not get lock for $max_tries seconds.  Removing lock and proceeding");
+	    unlink($STATE_LOCK);
+	    last;
+	}
+	sleep 1;
+    }
+    open(OUT, '>', $STATE_LOCK) or debug_print("Unable to create lock file $STATE_LOCK: $!");
+    close(OUT);
+}
+
+sub unlock_state_file {
+    unlink($STATE_LOCK);
 }
 
 
