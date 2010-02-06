@@ -424,7 +424,7 @@ class Probe(object):
         - value: specifies the values of the configuration including enable/disable:
                 [ enabled(boolean), 5 cron values (minute, hour, domonth, month, doweek)]
                 (overrides enable and disable)
-        - change the test tun parameters (metrics)
+        - change the test run parameters (metrics)
         - installTest = add submit file or 
         - removeRest = delete submit file depending on configuration
         """
@@ -624,9 +624,55 @@ class Probe(object):
 
     def disable(self, uri):
         self.stopTest(uri)
+
         # remove line from configuration file
         self.configureTest(uri, disable=True)
+
+        # Remove the metric line from the HTML consumer page
+        self.remove_metric_from_html_consumer(uri)
+        
         log.info("Metric %s disabled" % self.getLocalUniqueName(uri))
+
+
+    def remove_metric_from_html_consumer(self, uri):
+        """When disabling a metric, this method will remove the line from the
+        html consumer output
+        We need to make a state file lock to remove the race condition for the
+        state file being updated by the html-consumer.  If we can't get the lock
+        here, we'll give up after 5 seconds, because it's not critical that we
+        remove the data
+        """
+        html_consumer_state_file = self.rsvlocation + "/output/html/state.file"
+        state_file_lock = html_consumer_state_file + ".lock"
+
+        count = 0
+        while os.path.exists(state_file_lock):
+            count += 1
+            # Give up after 5 seconds because it's not critical that we update this
+            # file, and we don't want this script to hang
+            if count > 5:
+                log.info("Unable to remove metric info from html page because lock is unavailable")
+                return 1
+            time.sleep(1)
+
+        open(state_file_lock, 'w').close()
+
+        state = open(html_consumer_state_file).readlines()
+
+        # Open up the state file and remove the one line associated with this metric
+        # on this specific host.  Note that it might not exist, so we'll only re-write
+        # the file if it has changed.
+        new_state = []
+        regex = re.compile(uri + " \|\| " + self.metricName + " \|\|")
+        for line in state:
+            if not regex.match(line):
+                new_state.append(line)
+
+        if state != new_state:
+            open(html_consumer_state_file, 'w').write(''.join(new_state))
+
+        os.unlink(state_file_lock)
+
 
     def test(self, uri):
         "Probe is executed and output returned"
