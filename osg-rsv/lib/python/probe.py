@@ -316,37 +316,43 @@ class Probe(object):
     def getLocation(self):
         # either RSV or RSVLOCATION
         return self.rsvlocation
+
+    def make_spec_file(self, spec_file):
+        dir = os.path.dirname(spec_file)
+        if not os.path.exists(dir):
+            log.info("Creating directory '%s' for spec files" % dir)
+            os.makedirs(dir)
+
+        # make a blank file for people to add to if they want
+        try:
+            log.info("Creating blank spec file '%s'" % spec_file)
+            open(spec_file, 'w').close()
+        except:
+            log.warn("Unable to create %s" % spec_file)
+        
     
     def _aux_getCLParameters(self, uri):
         "auxiliary function to return CL parameters as string"
         outstr = ""
-        #extra options files
-        global_spec = os.path.join(self.rsv.getSpecDir(), 'global-specs',
-            "%s.spec" % self.getKey())
-        probe_spec = os.path.join(self.rsv.getSpecDir(), "%s" % \
-            self._getonlyhost(uri), "%s.spec" % self.getKey())
+
+        # extra command line options can be declared in the spec files
+        global_spec = os.path.join(self.rsv.getSpecDir(), 'global-specs', "%s.spec" % self.getKey())
+        probe_spec = os.path.join(self.rsv.getSpecDir(), "%s" % self._getonlyhost(uri), "%s.spec" % self.getKey())
         for spec_file in [global_spec, probe_spec]:
             if os.path.isfile(spec_file):
                 tmp = open(spec_file).readlines()
                 if tmp: 
                     # replace the newlines with spaces because these are command line arguments
-                    outstr += ' '.join(tmp)
-            else: # should not happen, files created in installation
-                # fails if directory no there
-                try:
-                    open(spec_file,'w').close()  # make a blank file for people to add to if they want
-                except IOError:
-                    dirname = os.path.dirname(spec_file)
-                    if not os.path.exists(dirname):
-                        os.makedirs(dirname)
-                        open(spec_file,'w').close()
-                    else:
-                        raise IOError("Unable to create %s" % spec_file)                            
+                    outstr += re.sub('\n', ' ', ' '.join(tmp))
+            else:
+                self.make_spec_file(spec_file)
+                
         #retrieve params from file
         metric = self.metricName
         if metric:
             if outstr.find("-m %s" % (metric,)) < 0:
                 outstr += " -m %s" % (metric,)
+
         outstr += self.clparams
 
         # parameters from options:
@@ -698,7 +704,7 @@ class Probe(object):
         cmd = "%sPERL5LIB=%s:$PERL5LIB%s %s %s" % (setupstr, bindir, vdtdir, fname,
             self.getCLParameters(uri))
         ec, out = commands.getstatusoutput(cmd)
-        log.info("Test command: %s" % (cmd,))
+        log.info("Test command: '%s'" % (cmd,))
         if ec:
             log.error("Unable to run the probe (%s)" % os.WEXITSTATUS(ec))
             log.debug("Failed command output: %s" % out)
@@ -842,7 +848,7 @@ class ProbeLocal(Probe):
         """Add uri to local probe. If URI is not local, it will not be added.
         Program will continue and a warning will be logged.
         """
-        # TODO: how are URI handled in local probes? Confirm that is te desired way
+        # TODO: how are URI handled in local probes? Confirm that is the desired way
         log.debug("Local Probe addURI")
         hostname = Probe._getonlyhost(uri)
         #TODO: Adding also IP of local host? How for dual homed hosts?
