@@ -177,8 +177,7 @@ def processoptions(arguments=None):
     # rsvctrl_test is OK since it is not touching the files in the RSV directory
     if options.rsvctrl_enable or options.rsvctrl_disable or options.rsvctrl_full_test:       
         if not file_uid==user_id:
-            parser.error("Operation not possible. You ar not the owner of the installtion in: %s\nUse --setup to change ownership and fix that." % (tmp_fname))            #print "Operation not possible. You ar not the owner of the installtion in: %s" % (tmp_fname)
-            #log.error("Use --setup to change ownership and fix that.")
+            parser.error("Operation not possible. You ar not the owner of the installation in: %s\nUse --setup to change ownership and fix that." % (tmp_fname))
             #exit(2)
         # root cannot submit jobs
         # root can disable jobs of other users
@@ -189,7 +188,7 @@ def processoptions(arguments=None):
             if os.path.isfile(tmp_fname):
                 tmp_user = osgrsv.getConfigOSG(tmp_fname).get("RSV", "rsv_user")
                 log.error("The user in osg/etc/config.ini is %s." % (tmp_user,))
-            parser.error("Run with --user <user>") # parser.exit(2) - available in Python 2.5
+            parser.error("Run with --user <user>")
     return args, options
 
 

@@ -664,92 +664,25 @@ class OSGRSV:
 
     def start(self):
         """
-        start() {
-   echo -n "Starting OSG-RSV: "
+        """
+        #TODO: implement start
 
-   # Make sure the jobs are not already in the queue
-   if [ `$CONDOR_EXE_QUEUE -constraint 'OSGRSV == "probes"' | grep probe_wrapper | wc -l` -gt 0 ]; then
-      echo "OSG-RSV jobs are already in the condor queue"
-      return 0
-   fi
-
-   # Set the permissions on appropriate directories
-   if [ `id -u` == 0 ]; then
-      chown -R $RUN_AS_USER !!OSG_RSV_LOCATION!!/logs/ > /dev/null 2>&1
-      chown -R $RUN_AS_USER !!OSG_RSV_LOCATION!!/output/ > /dev/null 2>&1
-   fi
- 
-   # Print an error message if there are no probes to submit
-   if [ `ls $OSG_RSV_PROBES/*.sub 2>/dev/null | wc -l` -eq 0 ]; then
-      echo "ERROR: No probes configured!"
-      exit 1
-   fi
-
-   # Submit probes
-   cd $VDT_LOCATION
-   for file in `find $OSG_RSV_PROBES -name "*.sub"`; do
-      if [ `id -u` == 0 ]; then
-         su -c "$CONDOR_EXE_SUBMIT $file" $RUN_AS_USER > /dev/null 2>&1
-      else
-         $CONDOR_EXE_SUBMIT $file > /dev/null 2>&1
-      fi
-      if [ $? != 0 ]; then
-         echo
-         echo "ERROR: Failed to submit '$file' into Condor"
-         exit 1
-      fi
-   done
-
-   # Submit consumers
-   for file in `find $OSG_RSV_CONSUMERS -name "*.sub"`; do
-      if [ `id -u` == 0 ]; then
-         su -c "$CONDOR_EXE_SUBMIT $file" $RUN_AS_USER > /dev/null 2>&1
-      else
-         $CONDOR_EXE_SUBMIT $file > /dev/null 2>&1
-      fi
-      if [ $? != 0 ]; then
-         echo
-         echo "ERROR: Failed to submit '$file' into Condor"
-         exit 1
-      fi
-   done
-   echo "Done"
-   return 0
-}
-"""
         # Make sure the jobs are not already in the queue
         if self.submitter.areProbesRunning():
             log.error("OSG-RSV jobs are already in the condor queue. Stop OSG-RSV first. Start aborted.")
             return
-        #TODO: implement start
         return
 
     def stop(self):
         """stop() {
-   echo -n "Stopping OSG-RSV: "
-   ##
-   ## The jobs that we submitted all have a special attribute that makes it
-   ## easier for us to track and remove
-   ##
-   $CONDOR_EXE_REMOVE -constraint 'OSGRSV == "probes"' > /dev/null 2>&1
-   if [ $? != 0 ]; then
-      RETVAL=$?
-      echo
-      echo "ERROR: Failed to remove probe jobs from Condor"
-   fi
-   $CONDOR_EXE_REMOVE -constraint 'OSGRSV == "consumers"' > /dev/null 2>&1
-   if [ $? != 0 ]; then
-      RETVAL=$?
-      echo
-      echo "ERROR: Failed to remove consumer jobs from Condor"
-   fi
-   if [ $RETVAL == 0 ]; then
-      echo "Done"
-   fi
-   return $RETVAL
-}
-"""
+        """
+
         #TODO: implement stop
+
+        if self.submitter.areProbesRunning():
+            log.error("")
+            return
+
         return
     
 #for debugging
