@@ -324,6 +324,7 @@ class Probe(object):
             os.makedirs(dir)
 
         # make a blank file for people to add to if they want
+        # TODO: do we need to change permissions on the file and/or directories?
         try:
             log.info("Creating blank spec file '%s'" % spec_file)
             open(spec_file, 'w').close()
@@ -706,8 +707,8 @@ class Probe(object):
         ec, out = commands.getstatusoutput(cmd)
         log.info("Test command: '%s'" % (cmd,))
         if ec:
-            log.error("Unable to run the probe (%s)" % os.WEXITSTATUS(ec))
-            log.debug("Failed command output: %s" % out)
+            log.error("Unable to run the probe (%s)\n" % os.WEXITSTATUS(ec))
+            log.error("Probe output:\n%s" % out)
             return ""
         if not out:
             log.warning("No output returned.")
