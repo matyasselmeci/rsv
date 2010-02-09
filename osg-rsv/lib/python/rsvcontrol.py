@@ -123,9 +123,10 @@ def processoptions(arguments=None):
                       help="Specify the metric to enable/disable (e.g. org.osg.general.ping-host)")
     parser.add_option("--service", dest="service", default=None,
                       help="Specify the service to enable/disable (e.g. OSG-CE)")
-    #parser.add_option("-u", "--uri", dest="uri", default=None,
     parser.add_option("--host", dest="uri", default=None,
                       help="Specify the host FQDN and optionally the port to be used by the probe (e.g. host or host:port)")
+    parser.add_option("--host-file", dest="uri_file", default=None,
+                      help="Supply a path to a file containing the hosts to test against, one host per line")
     #group = OptionGroup(parser, "Gratia Options",
     #                    "Enable and configure the upload to the RSV collector in Gratia")
     #group.add_option("--gratia", action="store_true", dest="gratia", default=False, 
@@ -231,6 +232,7 @@ def list_probes(rsv, options, pattern):
                 else:
                     if not rets in ret_list_status:
                         ret_list_status.append(rets)
+
             if not ret_list_uri:
                 # should I just add DISABLED?
                 # if multiple status are appearing probably there is an error
@@ -244,7 +246,7 @@ def list_probes(rsv, options, pattern):
         #after looping on all probes
         retlines += table_.formatBuffer()
     else:
-        # !!RIP!! - This code takes a long time, what's it doing?
+        # TODO - This code takes a long time, what's it doing?
         #list all probes, format != 'local'
         for probe in probelist:
             pkey = probe.getKey()
@@ -315,6 +317,19 @@ def main_rsv_control():
         if not selprobes:            
             log.error("No probe matching your selection (%s/%s). No action taken." % (options.metric, options.service))
             return
+
+        # Parse the --host-file if they supply one
+        uri_list = []
+        if options.uri_file:
+            if not options.rsvctrl_full_test and not options.rsvctrl_test:
+                print "WARNING: --host-file argument should only be used with --test and --full-test"
+            else:
+                if not os.path.exists(options.uri_file):
+                    log.error("host-file passed '%s' does not exist" % options.uri_file)
+                    return
+                for line in open(options.uri_file).readlines():
+                    uri_list.append(line.strip())
+            
         if options.uri:
             uri = options.uri
         else:
@@ -347,8 +362,11 @@ def main_rsv_control():
                     print "Metric test failed"
         elif options.rsvctrl_test:
             for p in selprobes:
-                out = p.test(uri)
-                print out
+                if uri_list:
+                    for uri in uri_list:
+                        print p.test(uri)
+                else:
+                    print p.test(uri)
         else: # elif options.rsvctrl_enable:
             for p in selprobes:
                 # Operation is idempotent. If probe is already enabled, no action is taken.
