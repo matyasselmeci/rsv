@@ -193,6 +193,20 @@ def processoptions(arguments=None):
     return args, options
 
 
+def new_table(uri, options):
+    table_ = table.Table((60, 17))
+    if options.list_fullwidth:
+        table_.truncate = False
+    elif options.list_wide:
+        table_.setColumns(80, 20)
+        table_.truncate_leftright = True
+    else:
+        table_.truncate_leftright = True
+    table_.makeFormat()
+    table_.makeHeader('Host: ' + uri, 'Service')
+    return table_
+
+
 def list_probes(rsv, options, pattern):
     log.info("Listing all probes")
     retlines = []
@@ -200,17 +214,9 @@ def list_probes(rsv, options, pattern):
 
     probelist = rsv.getConfiguredProbes(options=options)
     if options.list_format=='local':
-        table_ = table.Table((42, 15, 20))
-        if options.list_fullwidth:
-            table_.truncate = False
-        elif options.list_wide:
-            table_.setColumns(80, 20, 40)
-            table_.truncate_leftright = True
-        else:
-            table_.truncate_leftright = True
-        table_.makeFormat()
-        table_.makeHeader('Metric', 'Service', 'Hostname')
-        retlines.append(table_.getHeader())
+        tables = {} # to hold one table per host
+        tables['DISABLED'] = new_table('DISABLED', options)
+
         for probe in probelist:
             pmetric = probe.metricName
 
@@ -221,6 +227,9 @@ def list_probes(rsv, options, pattern):
             ret_list_uri = []
             ret_list_status = []
             for uri in probe.urilist:
+                if not uri in tables:
+                    tables[uri] = new_table(uri, options)
+
                 # If the user supplied --host, only show that host's metrics
                 if options.uri and options.uri != uri:
                     continue
@@ -237,14 +246,24 @@ def list_probes(rsv, options, pattern):
                 # should I just add DISABLED?
                 # if multiple status are appearing probably there is an error
                 for i in ret_list_status:
-                    table_.addToBuffer(pmetric, ptype, i)
+                    tables['DISABLED'].addToBuffer(pmetric, ptype)
                 continue
             for i in ret_list_uri:                        
-                table_.addToBuffer(pmetric, ptype, i)
+                tables[i].addToBuffer(pmetric, ptype)
 
             num_metrics_displayed += 1
-        #after looping on all probes
-        retlines += table_.formatBuffer()
+
+        # After looping on all the probes, create the output
+        for host in tables.keys():
+            if host != "DISABLED":
+                retlines.append(tables[host].getHeader())
+                retlines += tables[host].formatBuffer()
+                retlines += "\n"
+
+        retlines.append("The following metrics are not enabled on any host:")
+        retlines.append(tables["DISABLED"].getHeader())
+        retlines += tables["DISABLED"].formatBuffer()
+            
     else:
         # TODO - This code takes a long time, what's it doing?
         #list all probes, format != 'local'

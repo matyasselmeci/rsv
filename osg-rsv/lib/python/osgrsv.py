@@ -275,8 +275,8 @@ class OSGRSV:
         """
         probes = []
         for probefile in os.listdir(self.getBinDir()):
+            # directory may contain other files, probe files must end in "-probe"
             if not probefile.endswith("-probe"):
-                # directory may contain other files, probe files end in "-probe"
                 continue
             tmp_probes = loadAllProbesFromFile(probefile, self, uridict=uridict, options=options)
             probes += tmp_probes 
@@ -287,84 +287,71 @@ class OSGRSV:
         Scan for all the installed metric files (configuration files, one per host, only the required host)
         Return one probe for each line in a metric file (lines referring the same executable are condensed in a single one)
         """
-        fnamelist = []
+        metrics_files = []
         metricsarchive = {}
         onehost = False
-        strend = -len("_metrics.conf")
+        suffix_pos = -len("_metrics.conf")
+
+        # Find all the metrics files that we care about
         if hostid:
-            fnamelist = [os.path.join(self.metrics_loc, "%s_metrics.conf" % hostid)]
+            metrics_files = [os.path.join(self.metrics_loc, "%s_metrics.conf" % hostid)]
             onehost = True
         else:
             names = os.listdir(self.metrics_loc)
             # this may require python 2.4:
-            fnamelist = [os.path.join(self.metrics_loc, name) for name in names if \
+            metrics_files = [os.path.join(self.metrics_loc, name) for name in names if \
                 name.endswith("_metrics.conf") and not name=="sample_metrics.conf"]
-        for fname in fnamelist:
-            if not os.path.isfile(fname):
-                log.warning("Expected file missing: " + fname)
+
+        # Get the set of metrics listed in each metrics file
+        for metrics_file in metrics_files:
+            if not os.path.isfile(metrics_file):
+                log.warning("Expected file missing: " + metrics_file)
                 continue
             if not onehost:
-                hostid = os.path.basename(fname)[:strend]
-            metricsarchive[hostid] = self._read_metrics_file(fname)
+                hostid = os.path.basename(metrics_file)[:suffix_pos]
+            metricsarchive[hostid] = self._read_metrics_file(metrics_file)
+
+        # Form a hash of metrics with with info about each host they are enabled for
         probelist = []
         probearchive = {}
-        # not used: probemetrics = {}
         log.debug("URIs found: %s" % (metricsarchive.keys(),))
-        for h in metricsarchive.keys():
-            for k in metricsarchive[h].keys():
-                fname, mname = k.split('@', 1)
-                #TODO: improve in the future, now suppose that URI and host are the same
-                uri = h
-                selprobe = None
-                try:
-                    probelist = probearchive[fname]
-                except KeyError:
-                    probelist = loadAllProbesFromFile(fname, self, options=options)
+        for host in metricsarchive.keys():
+            for k in metricsarchive[host].keys():
+                probe, metric = k.split('@', 1)
+
+                if probe in probearchive:
+                    probelist = probearchive[probe]
+                else:
+                    probelist = loadAllProbesFromFile(probe, self, options=options)
                     if not probelist:
-                        log.warning("Error in loading probes (%s, %s) from file %s" % (h, k, fname))
+                        log.warning("Error in loading probes (%s, %s) from file %s" % (h, k, probe))
                         continue
-                    log.debug("New file %s: %s" % (fname, [i.metricName for i in probelist]))
-                    if len(probelist)> 1:
-                        log.warning("LCG standard violation. Probe producing multiple metrics: %s" % (fname,))
-                    probearchive[fname] = probelist
-                #          
-                #                  selprobe = probelist[0]
-                #              else:                            
-                #                  log.warning("LCG standard violation. Probe producing multiple metrics: %s" % (fname,))
-                #                  for probe in probelist:
+                    log.debug("New file %s: %s" % (probe, [i.metricName for i in probelist]))
+                    #if len(probelist)> 1:
+                    #    log.warning("LCG standard violation. Probe producing multiple metrics: %s" % (probe,))
+                    probearchive[probe] = probelist
+
+                selprobe = None
                 for probe in probelist:
-                    if mname==probe.metricName:
+                    if metric==probe.metricName:
                         selprobe = probe
-#                except KeyError:
-#                    probelist = loadAllProbesFromFile(fname, self, options_=options_)
-#                    if not probelist:
-#                        log.warning("Error in loading probes %s, %s" % (h, k))
-#                        continue
-#                    if len(probelist) == 1:
-#                        selprobe = probelist[0]
-#                    else:                            
-#                        log.warning("LCG standard violation. Probe producing multiple metrics: %s" % (fname,))
-#                        for probe in probelist:
-#                            if mname==probe.metricName:
-#                                selprobe = probe
-#                                break
-#                    probearchive[fname] = probelist
-#                    # not used: probemetrics[fname] = []
+
                 # add values to selprobe    
                 if not selprobe:
-                    #log.warning("No probe with URI %s and key %s" % (uri,k))
-                    log.warning("No probe with metric %s in probe file %s" % (mname, fname))
+                    #log.warning("No probe with URI %s and key %s" % (host,k))
+                    log.warning("No probe with metric %s in probe file %s" % (metric, probe))
                     continue
-                # not used: probemetrics[fname].append(mname)
+
                 # Adding the URI and the values from the metrics configuration file
-                selprobe.addURI(uri)
-                log.debug("Adding URI to probe %s: %s" % (selprobe.getKey(), uri))
+                selprobe.addURI(host)
+                log.debug("Adding URI to probe %s: %s" % (selprobe.getKey(), host))
                 # h,k are keys of the current iteration
-                val = metricsarchive[h][k]
+                val = metricsarchive[host][k]
                 selprobe.setCronValues([val['CronMinute'], val['CronHour'], val['CronDayOfMonth'], 
                                         val['CronMonth'], val['CronDayOfWeek']])
                 # probe enabled = val['enable'] on/off
-                selprobe.enabledict[uri] = val['enable'] == "on"
+                selprobe.enabledict[host] = val['enable'] == "on"
+
         # preparing probes to return
         retlist = [i for i_list in probearchive.values() for i in i_list]
         return retlist
@@ -614,7 +601,7 @@ class OSGRSV:
         log.debug("Re-using metrics config file for "+fname+"\n"+
                  " Existing settings like on/off and metric intervals will be used.\n"+
                  " Any new metrics found in probe set will be used with their default settings.")
-        #if os.path.isfile("$METRICS_DIR/${host}_metrics.conf") ;
+
         if os.path.isfile(fname):
             lines = open(fname).readlines()
             for line in lines:
@@ -631,7 +618,7 @@ class OSGRSV:
                     metrics[info[1]]['CronDayOfMonth'] = info[4]
                     metrics[info[1]]['CronMonth'] = info[5]
                     metrics[info[1]]['CronDayOfWeek'] = info[6]
-                    #metrics[info[1]][''] = info[]
+
         return metrics
     _read_metrics_file = staticmethod(_read_metrics_file)
 
