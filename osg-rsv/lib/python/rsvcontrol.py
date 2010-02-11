@@ -193,8 +193,8 @@ def processoptions(arguments=None):
     return args, options
 
 
-def new_table(uri, options):
-    table_ = table.Table((60, 17))
+def new_table(header, options):
+    table_ = table.Table((58, 20))
     if options.list_fullwidth:
         table_.truncate = False
     elif options.list_wide:
@@ -203,7 +203,7 @@ def new_table(uri, options):
     else:
         table_.truncate_leftright = True
     table_.makeFormat()
-    table_.makeHeader('Host: ' + uri, 'Service')
+    table_.makeHeader(header, 'Service')
     return table_
 
 
@@ -215,7 +215,7 @@ def list_probes(rsv, options, pattern):
     probelist = rsv.getConfiguredProbes(options=options)
     if options.list_format=='local':
         tables = {} # to hold one table per host
-        tables['DISABLED'] = new_table('DISABLED', options)
+        tables['DISABLED'] = new_table('DISABLED METRICS', options)
 
         for probe in probelist:
             pmetric = probe.metricName
@@ -228,7 +228,7 @@ def list_probes(rsv, options, pattern):
             ret_list_status = []
             for uri in probe.urilist:
                 if not uri in tables:
-                    tables[uri] = new_table(uri, options)
+                    tables[uri] = new_table("Metrics running on host: " + uri, options)
 
                 # If the user supplied --host, only show that host's metrics
                 if options.uri and options.uri != uri:
