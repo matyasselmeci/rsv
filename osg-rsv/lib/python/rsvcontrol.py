@@ -81,7 +81,7 @@ def processoptions(arguments=None):
       --help | -h 
       --version
       --setup  NOT IMPLEMENTED ... COMING SOON
-      --list [ --wide | -w | --full-width] [ --format <format> ] [ <pattern>]
+      --list [ --wide | -w ] [ --all ] [ --format <format> ] [ <pattern>]
       --enable    [--user <user>] --metric  <metric-name>  --host <host-name>
       --enable    [--user <user>] --service <service-name> --host <host-name>
       --disable   [--user <user>] --metric  <metric-name>  --host <host-name>
@@ -89,7 +89,7 @@ def processoptions(arguments=None):
       --full-test [--user <user>] --metric <metric-name>   --host <host-name>
       --test      [--user <user>] --metric <metric-name>   --host <host-name>
     """
-    version = "rsv-control 0.13"
+    version = "rsv-control 0.14"
     description = """This script is used to control or verify a probe."""
     parser = OptionParser(usage=usage, description=description, version=version)
     parser.add_option("-p", "--vdt-install", dest="vdtlocation", default=None,
@@ -99,9 +99,9 @@ def processoptions(arguments=None):
     parser.add_option("-l", "--list", action="store_true", dest="rsvctrl_list", default=False,
                       help="List probe information.  If <pattern> is supplied, only probes matching the regular expression pattern will be displayed")
     parser.add_option("-w", "--wide", action="store_true", dest="list_wide", default=False,
-                      help="Wide list display")
-    parser.add_option("--full-width", action="store_true", dest="list_fullwidth", default=False,
-                      help="To avoid truncation in probe listing")
+                      help="Wide list display to avoid truncation in probe listing")
+    parser.add_option("--all", action="store_true", dest="list_all", default=False,
+                      help="Display all probes, including those not enabled on any host")
     parser.add_option("-f", "--format", dest="list_format", choices=tuple(LIST_FORMATS), default='local',
                       help="Specify the list format (%s; default: %%default)" % (LIST_FORMATS,))
     parser.add_option("--test", action="store_true", dest="rsvctrl_test", default=False,
@@ -195,11 +195,8 @@ def processoptions(arguments=None):
 
 def new_table(header, options):
     table_ = table.Table((58, 20))
-    if options.list_fullwidth:
+    if options.list_wide:
         table_.truncate = False
-    elif options.list_wide:
-        table_.setColumns(80, 20)
-        table_.truncate_leftright = True
     else:
         table_.truncate_leftright = True
     table_.makeFormat()
@@ -211,6 +208,7 @@ def list_probes(rsv, options, pattern):
     log.info("Listing all probes")
     retlines = []
     num_metrics_displayed = 0
+    num_disabled_probes = 0
 
     probelist = rsv.getConfiguredProbes(options=options)
     if options.list_format=='local':
@@ -247,7 +245,9 @@ def list_probes(rsv, options, pattern):
                 # if multiple status are appearing probably there is an error
                 for i in ret_list_status:
                     tables['DISABLED'].addToBuffer(pmetric, ptype)
+                    num_disabled_probes += 1
                 continue
+            
             for i in ret_list_uri:                        
                 tables[i].addToBuffer(pmetric, ptype)
 
@@ -255,27 +255,42 @@ def list_probes(rsv, options, pattern):
 
         # After looping on all the probes, create the output
         for host in tables.keys():
-            if host != "DISABLED":
+            if host != "DISABLED" and not tables[host].isBufferEmpty():
                 retlines.append(tables[host].getHeader())
                 retlines += tables[host].formatBuffer()
                 retlines += "\n"
 
-        retlines.append("The following metrics are not enabled on any host:")
-        retlines.append(tables["DISABLED"].getHeader())
-        retlines += tables["DISABLED"].formatBuffer()
+        if options.list_all:
+            if num_disabled_probes > 0:
+                retlines.append("The following metrics are not enabled on any host:")
+                retlines.append(tables["DISABLED"].getHeader())
+                retlines += tables["DISABLED"].formatBuffer()
+        elif num_disabled_probes > 0:
+            tmp = ""
+            if pattern:
+                tmp = " that match the supplied pattern"
+            retlines.append("The are %i disabled probes%s.  Use --all to display them." % \
+                            (num_disabled_probes, tmp))
             
     else:
-        # TODO - This code takes a long time, what's it doing?
-        #list all probes, format != 'local'
+        # Format != 'local'
         for probe in probelist:
+            if pattern and not re.search(pattern, probe.metricName):
+                continue
+                            
             pkey = probe.getKey()
             retlines.append("%s" % (probe.getKey(),))
-            for u in probe.urilist:
+            for uri in probe.urilist:
+                if options.uri and options.uri != uri:
+                    continue
+                                    
                 if options.list_format in SUBMISSION_LIST_FORMATS:
-                    rets = probe.submission_status(u, format=options.list_format)
+                    rets = probe.submission_status(uri, format=options.list_format)
                 else:
-                    rets = probe.status(u)
-                retlines.append("               %-30s : %s" % (u, rets))
+                    rets = probe.status(uri)
+
+                retlines.append("               %-30s : %s" % (uri, rets))
+                num_metrics_displayed += 1
 
     if not probelist:
         log.error("No configured probes!")

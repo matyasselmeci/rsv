@@ -72,6 +72,12 @@ class Table(object):
         """Add line to internal buffer"""
         self._buffer.append(strval_par)
         return
+
+    def isBufferEmpty(self):
+        if len(self._buffer) == 0:
+            return True
+        else:
+            return False
     
     def formatBuffer(self, order_index=0, sort_=True):
         """Format and consume internal buffer.
