@@ -28,22 +28,22 @@ def getLocalHostName():
             _cachedHostName = "localhost"
     return _cachedHostName
 
-def introspectProbes(fname, rsv=None):
+def introspect_probe(probe, rsv=None):
     """
     Look at the .meta file for the probe in the osg-rsv/bin/probes/meta dir
     One file may contain multiple probes (LCG would require only one)
     """
-    if not os.path.isabs(fname):
-        if os.path.isfile(fname):
-            fname = os.path.abspath(fname)
+    if not os.path.isabs(probe):
+        if os.path.isfile(probe):
+            probe = os.path.abspath(probe)
         else:
             if rsv:
-                fname = os.path.join(rsv.getBinDir(), fname)
-            if not os.path.isfile(fname):
-                log.warning("Unable to find probe file: %s", fname)
+                probe = os.path.join(rsv.getBinDir(), probe)
+            if not os.path.isfile(probe):
+                log.warning("Unable to find probe file: %s", probe)
                 return None
 
-    metafile = os.path.join(os.path.dirname(fname), "meta", os.path.basename(fname) + ".meta")
+    metafile = os.path.join(os.path.dirname(probe), "meta", os.path.basename(probe) + ".meta")
 
     lines = open(metafile).readlines()
     retlist=[]
@@ -67,44 +67,48 @@ def introspectProbes(fname, rsv=None):
     return retlist
 
 
-def loadAllProbesFromFile(fname, rsv, uri=None, uridict=None, options=None):
+def get_metrics_from_probe(fname, rsv, uri=None, uridict=None, options=None):
     """
-    Returns all probes form the given probe file
-    NB in LCG there should be only one probe per file
+    Returns all metrics from the given probe file
+    NB in LCG there should be only one metric per probe
     """
-    vallist = introspectProbes(fname, rsv)
+    vallist = introspect_probe(fname, rsv)
     if not vallist:
         log.error("Unable to load probe: introspection failed")
         return None
+
     retlist = []
     for val in vallist:
         ptype = val.get('probeType', None)
         if not ptype: 
             ptype = val.get('serviceType', ptype)
         if not ptype:
-            log.error("Unable to load probe: probeType and serviceType not " \
-                "defined")
+            log.error("Unable to load probe: probeType and serviceType not defined")
             continue
         if not uri and uridict:
             uri = uridict.get(ptype, uri)
         probe = getProbe(ptype, fname, uri, ptype, rsv=rsv,
-            metricName=val['metricName'], metricType=val['metricType'],
-            serviceType=val['serviceType'], options=options)
+                         metricName=val['metricName'], metricType=val['metricType'],
+                         serviceType=val['serviceType'], options=options)
+
         # add remaining values:
         if 'metricInterval' in val:
-            values = val['metricInterval'].split()
-            probe.setCronValues(values)
-        probe.enableByDefault = val.get('enableByDefault',
-            probe.enableByDefault)
-        # metricValuesExtra Excluding: metricName, metricType, probeType, serviceType, metricInterval, enableByDefault
+            probe.setCronValues(val['metricInterval'].split())
+
+        probe.enableByDefault = val.get('enableByDefault', probe.enableByDefault)
+
         probe.metricValuesExtra = {}
         for k, v in val.items():
+            # Skip the fields we already have explicit variables for
             if k in ['metricName', 'metricType', 'probeType', 'serviceType',
                     'metricInterval', 'enableByDefault']:
                 continue
             probe.metricValuesExtra[k] = v
+
         retlist.append(probe)
+
     return retlist
+
 
 class Probe(object):
     """
@@ -815,7 +819,7 @@ EOT
         fname = ProbeTest.makeProbeFile(name)
         if fname:
             try:
-                retp = loadAllProbesFromFile(fname, rsv, uri)[probe_index]
+                retp = get_metrics_from_probe(fname, rsv, uri)[probe_index]
                 return retp
             except IndexError:
                 pass

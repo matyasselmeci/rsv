@@ -8,7 +8,7 @@ import commands  # used to get OSG RSV version
 import ConfigParser
 
 import condorsubmitter
-from probe import loadAllProbesFromFile, ProbeLocal
+from probe import get_metrics_from_probe, ProbeLocal
 
 import altlogging
 log = altlogging.getLogger("osgrsv.rsvcontrol.osgrsv")
@@ -278,7 +278,7 @@ class OSGRSV:
             # directory may contain other files, probe files must end in "-probe"
             if not probefile.endswith("-probe"):
                 continue
-            tmp_probes = loadAllProbesFromFile(probefile, self, uridict=uridict, options=options)
+            tmp_probes = load_probes_from_file(probefile, self, uridict=uridict, options=options)
             probes += tmp_probes 
         return probes
 
@@ -322,7 +322,7 @@ class OSGRSV:
                 if probe in probearchive:
                     probelist = probearchive[probe]
                 else:
-                    probelist = loadAllProbesFromFile(probe, self, options=options)
+                    probelist = get_metrics_from_probe(probe, self, options=options)
                     if not probelist:
                         log.warning("Error in loading probes (%s, %s) from file %s" % (h, k, probe))
                         continue
@@ -384,7 +384,7 @@ class OSGRSV:
         hostid, pkey = id.split('__', 1)
         pfname, ptype = pkey.split('@', 1)
         # load probes (metrics) from probe file
-        probelist = loadAllProbesFromFile(pfname, self, hostid)
+        probelist = get_metrics_from_probe(pfname, self, hostid)
         if not probelist:
             log.error("Error in loading probe %s, %s" % (hostid, pkey))
             return None
