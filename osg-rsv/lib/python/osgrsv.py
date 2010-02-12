@@ -501,12 +501,12 @@ class OSGRSV:
 
     def metricsFileMakeEntry(enabled, minute, hour, domonth, month, doweek):
         "enabled(boolean), 5 cron values" 
-        retv = {'enable': enabled,
-                'CronMinute': minute,
-                'CronHour': hour,
+        retv = {'enable':         enabled,
+                'CronMinute':     minute,
+                'CronHour':       hour,
                 'CronDayOfMonth': domonth,
-                'CronMonth': month,
-                'CronDayOfWeek': doweek,
+                'CronMonth':      month,
+                'CronDayOfWeek':  doweek,
             }
         return retv
     metricsFileMakeEntry = staticmethod(metricsFileMakeEntry)
@@ -522,10 +522,12 @@ class OSGRSV:
             entry = entry_par
         else:
             entry = OSGRSV.metricsFileMakeEntry(*entry_par)
-        fname = os.path.join(self.metrics_loc, "%s_metrics.conf" % hostid)
-        if not os.path.isfile(fname):
+
+        conf_file = os.path.join(self.metrics_loc, "%s_metrics.conf" % hostid)
+        if not os.path.isfile(conf_file):
             return False
-        lines = open(fname).readlines()
+        lines = open(conf_file).readlines()
+
         if not default:
             default = self.DEFAULT_CONFIG_ENTRY
         changed = False
@@ -536,8 +538,9 @@ class OSGRSV:
                 if lines[i].find(metricid) >= 0:
                     info = lines[i].split()
                     if not len(info)==7:
-                        log.warning("Invalid matching line in metrics file %s:\n<%s>. Skipping." % (fname, lines[i]))                        
+                        log.warning("Invalid matching line in metrics file %s:\n<%s>. Skipping." % (conf_file, lines[i]))                        
                         continue
+
                     # line matches and has 7 elements
                     oldentry = { 'enable': True }
                     if info[0] == 'off':
@@ -549,10 +552,11 @@ class OSGRSV:
                     oldentry['CronDayOfWeek'] = info[6]
                     matching_index = i
                     break
-        # end for
+
         # update entry dictionary
         if not oldentry:
             oldentry = default
+
         # to allow both missing values and none values 
         for j in entry.keys():
             if entry[j]:  # this will skip None but also a boolean set to False
@@ -565,6 +569,7 @@ class OSGRSV:
                 changed = True
         except KeyError:
             pass
+
         if oldentry['enable']:
             templ = "on   %-70s %-4s %-4s %-4s %-4s %-4s\n" 
         else:
@@ -576,18 +581,19 @@ class OSGRSV:
                          oldentry['CronMonth'], 
                          oldentry['CronDayOfWeek'],
                      )
-        if matching_index:
-            # only if changed=True?
+
+        # TODO: Doesn't this code mean the file always gets "changed"? -sk
+        if changed:
             lines[matching_index] = retv
         else:
             lines.append(retv)
             changed = True
+
         # write output file
-        if changed:                        
-            open(fname, 'w').write(''.join(lines))
-            # Safe write is in Submitter
-            # _safe_write(fname, ''.join(lines))
-            log.info("Metrics file updated: %s" % (fname,))
+        if changed:
+            open(conf_file, 'w').write(''.join(lines))
+            log.info("Metrics file updated: %s" % (conf_file,))
+
         return changed
     
     def _metricsFileRead(self, hostid):
@@ -653,10 +659,11 @@ class OSGRSV:
         """
         """
         #TODO: implement start
+        # Start should start any jobs not running, even if other ones are
 
         # Make sure the jobs are not already in the queue
         if self.submitter.areProbesRunning():
-            log.error("OSG-RSV jobs are already in the condor queue. Stop OSG-RSV first. Start aborted.")
+            log.error("OSG-RSV jobs are already in the condor queue.")
             return
         return
 
