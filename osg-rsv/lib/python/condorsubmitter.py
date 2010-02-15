@@ -447,8 +447,8 @@ Queue
         - retrieve ID from log file
         - condor_cron_rm -reason "Removed by RSV control" cluster.proc
         """
-        #TODO: once probe migrate support only LUN
-        #FInd the job
+        # TODO: once probe migrate support only LUN
+        # Find the job
         for constraint in ('OsgRsvLocalUniqueName == "%s"' % (lun,), 
                            'UserLog == "%s/%s.log"' % (rsv.getLogDir(), lun)):
             cmd = "condor_cron_q -l -constraint '%s'" % (constraint,)
@@ -476,7 +476,7 @@ Queue
                                 return
                             log.error("Condor removal failed (%s): %s" % (cmd, out))
         # job not found
-        log.error("Unable to identify job to remove: %s" % (lun))
+        log.info("No job is running with ID '%s'" % (lun))
         return
 
     def areProbesRunning(self, filter=None):
