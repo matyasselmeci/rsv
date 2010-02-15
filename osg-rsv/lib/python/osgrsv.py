@@ -582,10 +582,9 @@ class OSGRSV:
                          oldentry['CronDayOfWeek'],
                      )
 
-        # TODO: Doesn't this code mean the file always gets "changed"? -sk
         if changed:
             lines[matching_index] = retv
-        else:
+        elif matching_index == -1:
             lines.append(retv)
             changed = True
 
