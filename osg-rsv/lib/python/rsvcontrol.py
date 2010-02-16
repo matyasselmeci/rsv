@@ -80,7 +80,6 @@ def processoptions(arguments=None):
     usage = """usage: rsv-control [ --verbose ] 
       --help | -h 
       --version
-      --setup  NOT IMPLEMENTED ... COMING SOON
       --list [ --wide | -w ] [ --all ] [ --format <format> ] [ <pattern>]
       --enable    [--user <user>] --metric  <metric-name>  --host <host-name>
       --enable    [--user <user>] --service <service-name> --host <host-name>
@@ -112,8 +111,8 @@ def processoptions(arguments=None):
                       help="Enable probe")
     parser.add_option("-d", "--disable", action="store_true", dest="rsvctrl_disable", default=False,
                       help="Disable probe")
-    parser.add_option("--setup", action="store_true", dest="rsvctrl_setup", default=False,
-                      help="NOT READY... COMING SOON: Setup the RSV installation (change file permissions, start Condor, ...)")
+    #parser.add_option("--setup", action="store_true", dest="rsvctrl_setup", default=False,
+    #                  help="NOT READY... COMING SOON: Setup the RSV installation (change file permissions, start Condor, ...)")
     # Preferred: prog --enable [metric] <metric>
     #   prog --enable service <service>
     # In theory I should be able to distinguish between services and metrics
@@ -168,9 +167,8 @@ def processoptions(arguments=None):
     tmp_fname = os.path.join(options.vdtlocation, osgrsv.OSGRSV_NAME)
     file_uid = os.stat(tmp_fname)[4]   # stat.ST_UID=4
     user_id = os.getuid()
-    number_of_commands = len([i for i in [options.rsvctrl_enable, options.rsvctrl_disable, 
-                                          options.rsvctrl_test, options.rsvctrl_full_test, options.rsvctrl_list,
-                                          options.rsvctrl_setup] if i])
+    number_of_commands = len([i for i in [options.rsvctrl_enable, options.rsvctrl_disable, options.rsvctrl_test,
+                                          options.rsvctrl_full_test, options.rsvctrl_list] if i])
     if number_of_commands > 1:
         parser.error("Commands are mutually exclusive, you can use only one of list, test, enable, disable.")
     if number_of_commands == 0:
@@ -178,7 +176,7 @@ def processoptions(arguments=None):
     # rsvctrl_test is OK since it is not touching the files in the RSV directory
     if options.rsvctrl_enable or options.rsvctrl_disable or options.rsvctrl_full_test:       
         if not file_uid==user_id:
-            parser.error("Operation not possible. You ar not the owner of the installation in: %s\nUse --setup to change ownership and fix that." % (tmp_fname))
+            parser.error("Operation not possible. You are not the owner of the installation in: %s." % (tmp_fname))
             #exit(2)
         # root cannot submit jobs
         # root can disable jobs of other users
@@ -412,9 +410,9 @@ def main_rsv_control():
                 p.enable(uri)
                 print "Metric enabled"
         return
-    elif options.rsvctrl_setup:
-        log.error("Not yet implemented")
-        return
+    #elif options.rsvctrl_setup:
+    #    log.error("Not yet implemented")
+    #    return
     else:
         log.error("Unknown request")
     return
