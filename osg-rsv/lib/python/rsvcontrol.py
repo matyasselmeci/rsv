@@ -107,9 +107,9 @@ def processoptions(arguments=None):
                       metavar="METRIC", help="Disable metric. May be specified multiple times.")
     #parser.add_option("--setup", action="store_true", dest="rsvctrl_setup", default=False,
     #                  help="NOT READY... COMING SOON: Setup the RSV installation (change file permissions, start Condor, ...)")
-    parser.add_option("--test", dest="rsvctrl_test", default=False, metavar="METRIC",
+    parser.add_option("--test", action="append", dest="rsvctrl_test", default=[], metavar="METRIC",
                       help="Run a probe and return its output.")
-    parser.add_option("--full-test", dest="rsvctrl_full_test", default=False, metavar="METRIC",
+    parser.add_option("--full-test", action="append", dest="rsvctrl_full_test", default=[], metavar="METRIC",
                       help="Test a probe within OSG-RSV. Probe is executed only once, immediately.")
     parser.add_option("--user", dest="user", default=None,
                       help="Specify the user to run OSG-RSV probes")
@@ -337,7 +337,7 @@ def main_rsv_control():
                 log.warning("No matching metric for input '%s'" % i)
 
         if not sel_metrics:            
-            log.error("No metric matching your selection (%s). No action taken." % metric)
+            log.error("No metrics matching your input. No action taken.")
             return
 
         # Parse the --host-file if they supply one
@@ -364,7 +364,6 @@ def main_rsv_control():
         if uri:
             tmp_sel = []
             for m in sel_metrics:
-                print m.urilist
                 for u in m.urilist:
                     if u==uri:
                         tmp_sel.append(m)
