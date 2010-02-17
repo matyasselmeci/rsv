@@ -437,18 +437,21 @@ class Probe(object):
                 (overrides enable and disable)
         - change the test run parameters (metrics)
         - installTest = add submit file or 
-        - removeRest = delete submit file depending on configuration
+        - removeTest = delete submit file depending on configuration
         """
         #TODO: check value of value if provided
         #TODO: role of force not clear, not used
         if not self.rsv:
             log.error("No OSG RSV defined. Probe cannot be installed or configured.")
+            
         host = self._getonlyhost(uri)
         log.info("Changing configuration for RSV probes of type %s\n\t for URI: %s (host: %s)" %
                  (self.name, uri, host))
+
         if not self.rsv.metricsFileFix(host):
-            log.error("Bad metrics file for host %s, check it manually" % (host,))            
+            log.error("Bad metrics file for host %s, check it manually" % (host,))
             return
+        
         if not value:
             value = self.getMetricInterval().split()
             to_be_enabled = (self.enableByDefault or enable) and not disable
@@ -461,6 +464,7 @@ class Probe(object):
                 self.removeTest(uri)
                 #self.stopTest(uri)
                 #TODO: remove sub file?
+
         self.rsv.metricsFileUpdate(host, self.getKey(), value)
     
     def configureTestAll(self, uri_list):
