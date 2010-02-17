@@ -491,11 +491,11 @@ class OSGRSV:
                     retval = { 'enable': True }
                     if info[0] == 'off':
                         retval = { 'enable': False }
-                    retval['CronMinute'] = info[2]
-                    retval['CronHour'] = info[3]
+                    retval['CronMinute']     = info[2]
+                    retval['CronHour']       = info[3]
                     retval['CronDayOfMonth'] = info[4]
-                    retval['CronMonth'] = info[5]
-                    retval['CronDayOfWeek'] = info[6]
+                    retval['CronMonth']      = info[5]
+                    retval['CronDayOfWeek']  = info[6]
                     return retval
         return default
 
@@ -533,7 +533,7 @@ class OSGRSV:
         changed = False
         matching_index = -1
         oldentry = {}
-        for i in range(len(lines)): #line in lines:
+        for i in range(len(lines)):
             if lines[i] and lines[i][0] == 'o':                    
                 if lines[i].find(metricid) >= 0:
                     info = lines[i].split()
@@ -545,11 +545,11 @@ class OSGRSV:
                     oldentry = { 'enable': True }
                     if info[0] == 'off':
                         oldentry = { 'enable': False }
-                    oldentry['CronMinute'] = info[2]
-                    oldentry['CronHour'] = info[3]
+                    oldentry['CronMinute']     = info[2]
+                    oldentry['CronHour']       = info[3]
                     oldentry['CronDayOfMonth'] = info[4]
-                    oldentry['CronMonth'] = info[5]
-                    oldentry['CronDayOfWeek'] = info[6]
+                    oldentry['CronMonth']      = info[5]
+                    oldentry['CronDayOfWeek']  = info[6]
                     matching_index = i
                     break
 
@@ -582,7 +582,7 @@ class OSGRSV:
                          oldentry['CronDayOfWeek'],
                      )
 
-        if changed:
+        if changed and matching_index != -1:
             lines[matching_index] = retv
         elif matching_index == -1:
             lines.append(retv)
