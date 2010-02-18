@@ -89,7 +89,7 @@ def processoptions(arguments=None):
     version = "rsv-control 0.14"
     description = """This script is used to control or verify a probe."""
     parser = OptionParser(usage=usage, description=description, version=version)
-    parser.add_option("-p", "--vdt-install", dest="vdtlocation", default=None,
+    parser.add_option("--vdt-install", dest="vdtlocation", default=None,
                       help="Root directory of the OSG installation", metavar="DIR")
     parser.add_option("--verbose", action="store_true", dest="verbose", default=False,
                       help="Verbose output")
@@ -131,11 +131,6 @@ def processoptions(arguments=None):
     #                  help="Pass supplied argument with --virtual-organization flag to the probes")
     #parser.add_option("--print-local-time", dest="probe_localtime", default=None,
     #                  help="Pass the --print-local-time flag to all probes")
-    #group = OptionGroup(parser, "Condor Options",
-    #                    "Options to alter Condor submission parameters")
-    #group.add_option("--condor-universe", dest="jobuniverse", default='local', 
-    #                 help="Condor universe for the condor_cron jobs (default: %default)")
-    #parser.add_option_group(group)
 
 
     #parser.disable_interspersed_args()
@@ -243,7 +238,7 @@ def list_probes(rsv, options, pattern):
             num_metrics_displayed += 1
 
         # After looping on all the probes, create the output
-        for host in tables.keys():
+        for host in sorted(tables.keys()):
             if host != "DISABLED" and not tables[host].isBufferEmpty():
                 retlines.append(tables[host].getHeader())
                 retlines += tables[host].formatBuffer()
@@ -359,17 +354,6 @@ def main_rsv_control():
             log.debug("No URI provided, assuming local probe (localost)")
             uri = getLocalHostName()
 
-        # If disable, make sure that the probe with the right URI is selected
-        # TODO:check implications, the uri is passed anyway
-        if uri:
-            tmp_sel = []
-            for m in sel_metrics:
-                for u in m.urilist:
-                    if u==uri:
-                        tmp_sel.append(m)
-            if tmp_sel or options.rsvctrl_disable:
-                sel_metrics = tmp_sel
-                
         log.debug("%s probes selected. (e/d/t/ft: %s/%s/%s/%s)" % (len(sel_metrics), options.rsvctrl_enable, 
                                                                    options.rsvctrl_disable, options.rsvctrl_test,
                                                                    options.rsvctrl_full_test))
@@ -392,7 +376,7 @@ def main_rsv_control():
                         print p.test(uri)
                 else:
                     print p.test(uri)
-        else: # elif options.rsvctrl_enable:
+        elif options.rsvctrl_enable:
             for metric in sel_metrics:
                 print "Enabling " + metric.getName() + ":" 
                 if metric.isEnabled(uri):

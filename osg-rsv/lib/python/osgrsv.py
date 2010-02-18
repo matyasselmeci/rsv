@@ -22,30 +22,24 @@ def findPathOSG():
 def getConfigOSG(fname, static_config=[None]):
     if static_config[0]:
         return static_config[0]
-    # read and parse configureosg.ini
+
+    # read and parse config.ini
     try:
         fp = open(fname)
     except:
-        #Error, fatal
         log.error("Unable to open OSG configuration file " + fname)
-        #sys.exit(1)
         return None
-    # cp = ConfigParser.SafeConfigParser(defaults_dic) 
+
     cp = ConfigParser.SafeConfigParser()
     try:
         cp.readfp(fp)
     except:
         log.error("Error parsing the OSG configuration file " + fname)
-        #sys.exit(-1)
         return None
+
     static_config[0] = cp
     return cp
-"""
-osgconfig = {} # ordr not importsnt
-    for i in cp.sections():
-        itemlist.append((i, cp.items(i)))
-    return cp.sections, itemlist
-"""
+
 
 # The name is used as name of the server and for the 
 # root directory (VDT_LOCATION+OSGRSV_NAME)
@@ -100,9 +94,8 @@ class OSGRSV:
         self.gratia_probeconf = os.path.realpath(os.path.join(self.vdtlocation,
             "gratia/probe/metric/ProbeConfig"))
 
-        # RSV no longer allow for Condor-Devel pre-installs, so just look for condor-cron and that's it
-        # why not search in the environment?
-        self.condorcron = os.path.join(self.vdtlocation, "condor-cron")  # default condor-cron installation "$VDT_LOCATION/condor-cron";
+        # Condor-Cron will be at VDT_LOCATION/condor-cron
+        self.condorcron = os.path.join(self.vdtlocation, "condor-cron")
         if not os.path.exists(self.condorcron):
             log.error("Cannot find Condor-Cron at $VDT_LOCATION/condor-cron")
             # raise some error/exception
@@ -267,8 +260,9 @@ class OSGRSV:
                 pass
         #outstr += "" % ()
         return outstr
-        
-    def getInstalledProbes(self, uridict=None, options=None):
+
+
+    def load_installed_metrics(self, uridict=None, options=None):
         """Lists all the probes installed in the bin directory
         Unless uridict is passed, no attention to URI is given 
         Perturn value contains one probe per installed probe binary
@@ -278,9 +272,10 @@ class OSGRSV:
             # directory may contain other files, probe files must end in "-probe"
             if not probefile.endswith("-probe"):
                 continue
-            tmp_probes = load_probes_from_file(probefile, self, uridict=uridict, options=options)
+            tmp_probes = get_metrics_from_probe(probefile, self, uridict=uridict, options=options)
             probes += tmp_probes 
         return probes
+
 
     def getConfiguredProbes(self, hostid=None, options=None):
         """Gets all the configured probes
@@ -413,64 +408,66 @@ class OSGRSV:
             except KeyError:
                 log.warning("No configuration for the metric "+id)
         return probe
+
     
     def metricsFileFix(self, hostid):
-        fname = os.path.join(self.metrics_loc, "%s_metrics.conf" % hostid)
-        if not os.path.isfile(fname):
-            try:
-                fp = open(fname, 'w')
-                fp.write("# Test configuration file for host %s" % hostid)
-                fp.close()
-                log.info("Created metrics file: " + fname)
-            except IOError:
-                log.error("Unable to create metrics file: " + fname)
-        file_ok = self.metricsFileCheck(hostid)
-        if not file_ok:
-            #TODO fix the file
-            pass
-        return file_ok
+        metrics_file = os.path.join(self.metrics_loc, "%s_metrics.conf" % hostid)
 
-                
-    def metricsFileCheck(self, hostid=None):
-        """Check metrics file consistency:
-        - lines starting with 'o' are non comment lines
-        - all non comment lines should have 7 elements: "%-4s %-70s %-4s %-4s %-4s %-4s %-4s\n"
-        - metricIDs (second entry) should be unique
-        hostid: to check a specific metrics file, if not provided all metrics files are checked
-        retuns False if any of the inspected files are inconsistent. Anyway it inspects all requested files. 
-        Check the log file for results
-        """
-        fnamelist = []
         file_ok = True
-        if hostid:
-            fnamelist = [os.path.join(self.metrics_loc, "%s_metrics.conf" % hostid)]
+        linedict = {}
+
+        # Create the file if it does not exist. and prepend a header
+        if not os.path.isfile(metrics_file):
+            try:
+                fp = open(metrics_file, 'w')
+                fp.write("# Configuration for host: %s\n" % hostid)
+                fp.write("# -- DO NOT MODIFY THIS FILE BY HAND --\n")
+                fp.write("# Manual changes may be overwritten by rsv-control\n\n")
+                fp.close()
+                log.info("Created metrics file: " + metrics_file)
+            except IOError:
+                log.error("Unable to create metrics file: " + metrics_file)
         else:
-            names = os.listdir(self.metrics_loc)
-            # this may require python 2.4:
-            fnamelist = [os.path.join(self.metrics_loc, name) for name in names if name.endswith("_metrics.conf")]
-        for fname in fnamelist:
-            if not os.path.isfile(fname):
-                file_ok = False
-                log.warning("Expected file missing: " + fname)
-                continue
-            lines = open(fname).readlines()
-            linedict = {}
+            # Load the metrics file and check its consistency
+            lines = open(metrics_file).readlines()
             for line in lines:
                 if line and line[0] == 'o':
                     info = line.split()
                     if not len(info)==7:
                         file_ok = False
-                        log.warning("Invalid non comment line in metrics file %s:\n<%s>" % (fname, lines[i]))
+                        log.warning("Invalid non comment line in metrics file %s:\n<%s>" % (file, lines[i]))
                         continue
                     key = info[1].strip()
                     if key in linedict.keys(): 
                         linedict[key].append(line)
                         file_ok = False
-                        log.warning("Duplicate metric %s in metrics file %s:\n%s" % (key, fname, linedict[key]))
+                        log.warning("Duplicate metric %s in metrics file %s:\n%s" % (key, file, linedict[key]))
                     else:
                         linedict[key] = [line]
+            
+        # TODO: Add any metrics to the file that are not yet present?
+        #all_metrics = self.load_installed_metrics()
+        #new_lines = ""
+        #for metric in all_metrics:
+        #    if not metric.getKey() in linedict:
+        #        templ = "off  %-70s %s\n" % ( metric.getKey(),
+        #                                      metric.getMetricInterval()
+        #                                      )
+        #        new_lines += templ
+        #
+        #if new_lines != "":
+        #    try:
+        #        fp = open(metrics_file, 'a')
+        #        fp.write(new_lines)
+        #        fp.close()
+        #        log.info("Added metrics to file: " + metrics_file)
+        #    except IOError:
+        #        log.error("Unable to add to metrics file: " + metrics_file)
+            
+        
         return file_ok
 
+                
     def metricsFileRetrieve(self, hostid, metricid, default=None):
         """retrieve a metric from file. Optional default if metric is not found
         hostid (host from the URI)
@@ -618,11 +615,11 @@ class OSGRSV:
                     metrics[info[1]] = { 'enable': 'on' }
                     if info[0] == 'off':
                         metrics[info[1]] = { 'enable': 'off' }
-                    metrics[info[1]]['CronMinute'] = info[2]
-                    metrics[info[1]]['CronHour'] = info[3]
+                    metrics[info[1]]['CronMinute'] =     info[2]
+                    metrics[info[1]]['CronHour'] =       info[3]
                     metrics[info[1]]['CronDayOfMonth'] = info[4]
-                    metrics[info[1]]['CronMonth'] = info[5]
-                    metrics[info[1]]['CronDayOfWeek'] = info[6]
+                    metrics[info[1]]['CronMonth'] =      info[5]
+                    metrics[info[1]]['CronDayOfWeek'] =  info[6]
 
         return metrics
     _read_metrics_file = staticmethod(_read_metrics_file)

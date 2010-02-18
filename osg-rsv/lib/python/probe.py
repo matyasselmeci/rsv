@@ -56,13 +56,13 @@ def introspect_probe(probe, rsv=None):
                 continue
             info = lines[i].split(':', 1)
             if len(info) != 2:
-                print "WARNING: Invalid line in meta file '" + metafile + "'"
+                log.warning("Invalid line in meta file '" + metafile + "'")
                 print lines[i]
                 continue
             retv[info[0].strip()] = info[1].strip()
         if retv:
-            #output ended and last EOT was missing 
-            print "WARNING: meta file '" + metafile + "' is missing trailing 'EOT'"
+            # output ended and last EOT was missing 
+            log.warning("meta file '" + metafile + "' is missing trailing 'EOT'")
             retlist.append(retv)
     return retlist
 
