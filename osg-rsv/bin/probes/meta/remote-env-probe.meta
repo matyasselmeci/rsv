@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.general.remote-env
-metricType: status
-probeType: OSG-Central-Monitoring
-enableByDefault: true
-metricInterval: 1 21 * * *
-description: Probe to report the remote environment on a remote OSG service.
-EOT
