@@ -80,11 +80,13 @@ def processoptions(arguments=None):
     usage = """usage: rsv-control [ --verbose ] 
       --help | -h 
       --version
-      --list [ --wide | -w ] [ --all ] [ --format <format> ] [ <pattern>]
-      --enable    <metric-name> [--user <user>] --host <host-name>
-      --disable   <metric-name> [--user <user>] --host <host-name>
-      --full-test <metric-name> [--user <user>] --host <host-name>
-      --test      <metric-name> [--user <user>] --host <host-name> --host-file <path/to/file>
+      --list [ --wide | -w ] [ --all ] [ --format <format> ] [ <pattern> ]
+      --on        [<metric-name> [<metric-name> ...]]
+      --off       [<metric-name> [<metric-name> ...]]
+      --enable    [--user <user>] --host <host-name> <metric-name> [<metric-name> ...]
+      --disable   --host <host-name> <metric-name> [<metric-name> ...]
+      --full-test [--user <user>] --host <host-name> <metric-name> [<metric-name> ...]
+      --test      [--user <user>] --host <host-name> --host-file <path/to/file> <metric-name> [<metric-name> ...]
     """
     version = "rsv-control 0.14"
     description = """This script is used to control or verify a probe."""
@@ -96,20 +98,24 @@ def processoptions(arguments=None):
     parser.add_option("-l", "--list", action="store_true", dest="rsvctrl_list", default=False,
                       help="List probe information.  If <pattern> is supplied, only probes matching the regular expression pattern will be displayed")
     parser.add_option("-w", "--wide", action="store_true", dest="list_wide", default=False,
-                      help="Wide list display to avoid truncation in probe listing")
+                      help="Wide list display to avoid truncation in metric listing")
     parser.add_option("--all", action="store_true", dest="list_all", default=False,
-                      help="Display all probes, including those not enabled on any host")
-    parser.add_option("-f", "--format", dest="list_format", choices=tuple(LIST_FORMATS), default='local',
+                      help="Display all metrics, including metrics not enabled on any host.")
+    parser.add_option("--format", dest="list_format", choices=tuple(LIST_FORMATS), default='local',
                       help="Specify the list format (%s; default: %%default)" % (LIST_FORMATS,))
-    parser.add_option("-e", "--enable", action="append", dest="rsvctrl_enable", default=[],
-                      metavar="METRIC", help="Enable metric. May be specified multiple times.")
-    parser.add_option("-d", "--disable", action="append", dest="rsvctrl_disable", default=[],
-                      metavar="METRIC", help="Disable metric. May be specified multiple times.")
+    parser.add_option("--on", action="store_true", dest="rsvctrl_on", default=False,
+                      help="Turn on all enabled metrics.  If a metric is specified, turn on only that metric.")
+    parser.add_option("--off", action="store_true", dest="rsvctrl_off", default=False,
+                      help="Turn off all running metrics.  If a metric is specified, turn off only that metric.")
+    parser.add_option("--enable", action="store_true", dest="rsvctrl_enable", default=False,
+                      help="Enable metric. May be specified multiple times.")
+    parser.add_option("--disable", action="store_true", dest="rsvctrl_disable", default=False,
+                      help="Disable metric. May be specified multiple times.")
     #parser.add_option("--setup", action="store_true", dest="rsvctrl_setup", default=False,
     #                  help="NOT READY... COMING SOON: Setup the RSV installation (change file permissions, start Condor, ...)")
-    parser.add_option("--test", action="append", dest="rsvctrl_test", default=[], metavar="METRIC",
+    parser.add_option("--test", action="store_true", dest="rsvctrl_test", default=False,
                       help="Run a probe and return its output.")
-    parser.add_option("--full-test", action="append", dest="rsvctrl_full_test", default=[], metavar="METRIC",
+    parser.add_option("--full-test", action="store_true", dest="rsvctrl_full_test", default=False,
                       help="Test a probe within OSG-RSV. Probe is executed only once, immediately.")
     parser.add_option("--user", dest="user", default=None,
                       help="Specify the user to run OSG-RSV probes")
@@ -153,12 +159,13 @@ def processoptions(arguments=None):
     tmp_fname = os.path.join(options.vdtlocation, osgrsv.OSGRSV_NAME)
     file_uid = os.stat(tmp_fname)[4]   # stat.ST_UID=4
     user_id = os.getuid()
-    number_of_commands = len([i for i in [options.rsvctrl_enable, options.rsvctrl_disable, options.rsvctrl_test,
-                                          options.rsvctrl_full_test, options.rsvctrl_list] if i])
+    number_of_commands = len([i for i in [options.rsvctrl_enable, options.rsvctrl_disable, options.rsvctrl_test, options.rsvctrl_on,
+                                          options.rsvctrl_off, options.rsvctrl_full_test, options.rsvctrl_list] if i])
     if number_of_commands > 1:
         parser.error("Commands are mutually exclusive, you can use only one of list, test, enable, disable.")
     if number_of_commands == 0:
         parser.error("Invalid syntax. You must specify one command.")
+
     # rsvctrl_test is OK since it is not touching the files in the RSV directory
     if options.rsvctrl_enable or options.rsvctrl_disable or options.rsvctrl_full_test:       
         if not file_uid==user_id:
@@ -311,10 +318,8 @@ def main_rsv_control():
         return
 
     # Non-list options
-    elif options.rsvctrl_enable or options.rsvctrl_disable or options.rsvctrl_test or options.rsvctrl_full_test:
-        # Get the list of metrics to act on
-        opt_metrics = options.rsvctrl_enable or options.rsvctrl_disable or options.rsvctrl_test or options.rsvctrl_full_test
-
+    elif (options.rsvctrl_on      or options.rsvctrl_off  or options.rsvctrl_enable or
+          options.rsvctrl_disable or options.rsvctrl_test or options.rsvctrl_full_test):
         # retrieve all probes and restrict to the selected ones
         #TODO: getConfiguredProbes or getInstalledProbes?
         # how about installation of new probes?
@@ -325,13 +330,14 @@ def main_rsv_control():
             all_metrics[p.metricName] = p
 
         sel_metrics = []
-        for i in opt_metrics:
+        for i in args:
             if i in all_metrics:
                 sel_metrics.append(all_metrics[i])
             else:
                 log.warning("No matching metric for input '%s'" % i)
 
-        if not sel_metrics:            
+        # --on and --off can accept no probes, then they just enable everything
+        if not sel_metrics and not (options.rsvctrl_on or options.rsvctrl_off):
             log.error("No metrics matching your input. No action taken.")
             return
 
@@ -350,14 +356,17 @@ def main_rsv_control():
         if options.uri:
             uri = options.uri
         else:
-            # get local host
-            log.debug("No URI provided, assuming local probe (localost)")
             uri = getLocalHostName()
+            log.info("No URI provided, assuming localhost: '%s'" % uri)
 
         log.debug("%s probes selected. (e/d/t/ft: %s/%s/%s/%s)" % (len(sel_metrics), options.rsvctrl_enable, 
                                                                    options.rsvctrl_disable, options.rsvctrl_test,
                                                                    options.rsvctrl_full_test))
-        if options.rsvctrl_disable:
+        if options.rsvctrl_on:
+            pass
+        elif options.rsvctrl_off:
+            pass
+        elif options.rsvctrl_disable:
             for metric in sel_metrics:
                 print "Disabling " + metric.getName() + ":" 
                 metric.disable(uri)
@@ -380,7 +389,7 @@ def main_rsv_control():
             for metric in sel_metrics:
                 print "Enabling " + metric.getName() + ":" 
                 if metric.isEnabled(uri):
-                    print "    Metric " + metric.getName() + " is already running against " + uri + ".  No action taken at this time."
+                    print "    Metric " + metric.metricName + " is already running against " + uri + ".  No action taken at this time."
                     print "    If you changed some information and would like to restart the probe, please disable the probe first and then enable it."
                     continue
                 metric.enable(uri)
