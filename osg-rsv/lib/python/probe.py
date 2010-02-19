@@ -50,9 +50,9 @@ def introspect_probe(probe, rsv=None):
     retv = {}
     if lines:
         for i in range(len(lines)):
-            if lines[i].strip()=='EOT':
+            if lines[i].strip() == 'EOT':
                 retlist.append(retv)
-                retv={}
+                retv = {}
                 continue
             info = lines[i].split(':', 1)
             if len(info) != 2:
@@ -210,7 +210,7 @@ class Probe(object):
                 self.clparams += " --print-local-time"
         if extra_args:
             self.clparams += extra_args
-        self.enabledict={}
+        self.enabledict = {}
             
     def _loadProbeMetrics(self):
         pass
@@ -277,7 +277,7 @@ class Probe(object):
         if not instr.endswith('-probe'):
             instr += "-probe"
         return instr
-    _fixProbeSuffix=staticmethod(_fixProbeSuffix)
+    _fixProbeSuffix = staticmethod(_fixProbeSuffix)
 
     def getProbe(self):
         "Return the absolute path of the probe"
@@ -285,7 +285,7 @@ class Probe(object):
         if not pname:
             log.warning("Probe file name not defined")
             return None
-        if pname[0]==['/']:
+        if pname[0] == ['/']:
             return pname
         pname = self._fixProbeSuffix(pname)
         return os.path.join(self.rsvperllibdir, pname)
@@ -293,13 +293,13 @@ class Probe(object):
     def getExecutable(self):
         """
         Return the wrapper script used to run the probes. Its absolute path.
-        Default is $VDT_LOCATION/osg-rsv/%s
-        """ % Probe.SUBMIT_PARAM_EXECUTABLE
+        Default is $VDT_LOCATION/osg-rsv/bin/probes/probe_wrapper.pl
+        """
         executable = self.executable
         if not executable:
             log.warning("Probe's executable (wrapper) file name not defined")
             return None
-        if executable[0]==['/']:
+        if executable[0] == ['/']:
             return executable
         return os.path.join(self.rsvperllibdir, executable)
 
@@ -322,10 +322,10 @@ class Probe(object):
         return self.rsvlocation
 
     def make_spec_file(self, spec_file):
-        dir = os.path.dirname(spec_file)
-        if not os.path.exists(dir):
-            log.info("Creating directory '%s' for spec files" % dir)
-            os.makedirs(dir)
+        directory = os.path.dirname(spec_file)
+        if not os.path.exists(directory):
+            log.info("Creating directory '%s' for spec files" % directory)
+            os.makedirs(directory)
 
         # make a blank file for people to add to if they want
         # TODO: do we need to change permissions on the file and/or directories?
@@ -361,34 +361,31 @@ class Probe(object):
         outstr += self.clparams
 
         # parameters from options:
-        #TODO: replace options
+        # TODO: replace options
         #global options
         options = self.options
         if options:
             if hasattr(options, 'probe_voname') and options.probe_voname:
-                ourstr += " --virtual-organization "+options.probe_voname
+                outstr += " --virtual-organization "+options.probe_voname
             if hasattr(options, 'probe_verbose') and options.probe_verbose:
-                ourstr += " --verbose"
+                outstr += " --verbose"
             if hasattr(options, 'probe_localtime') and options.probe_localtime:
-                ourstr += " --print-local-time"
+                outstr += " --print-local-time"
 
-        """
-      ## If extra specs are passed, then append them
-      $local_submit_params{Arguments} .= " $extra_spec_contents" if (defined($extra_spec_contents));
-"""
+        # TODO: Add extra specs
+        
         # Add in additional flags if it is not a local probe
         # Handle this redefining the function in the subclass ProbeLocal or ProbeNotLocal?
         if not self.local:
             if hasattr(options, 'gratia') and options.gratia and outstr.find("--ggs")<0:
-                    # Find python, so that the probes can put it in shebang line
-                    # If we can't find python, we probably don't want these scripts to accumulate
-                    if sys.executable:
-                        #TODO: ? add gratia grid type? grid_type, rsvgratiafile
-                        outstr += " --ggs --gsl %s/output/gratia --python-loc %s" % (self.rsvlocation, sys.executable)
-                    else:
-                        warning = "Gratia output cannot be enabled for OSG-RSV because python cannot be found.\n"
-                        post_install_log(warning)
-                        log.warning(warning)
+                # Find python, so that the probes can put it in shebang line
+                # If we can't find python, we probably don't want these scripts to accumulate
+                if sys.executable:
+                    #TODO: ? add gratia grid type? grid_type, rsvgratiafile
+                    outstr += " --ggs --gsl %s/output/gratia --python-loc %s" % (self.rsvlocation, sys.executable)
+                else:
+                    warning = "Gratia output cannot be enabled for OSG-RSV because python cannot be found.\n"
+                    log.warning(warning)
             ## Check whether we need to add the "--uri" flag
             if outstr.find('--uri') < 0:
                 #          unless ($local_submit_params{Arguments} =~ /\-\-uri /) {
@@ -545,8 +542,8 @@ class Probe(object):
         """Start probe (add it to condor-cron)
         """
         subm = self.rsv.getSubmitter()
-        #TODO: imlement
-        log.error("Not implemented. Start all the probes")
+        #TODO: implement
+        log.error("Not implemented")
         raise Exception("Incomplete method")
         #subm.submit(self, self.rsv)
 
@@ -561,7 +558,7 @@ class Probe(object):
         """
         subm = self.rsv.getSubmitter()
         #TODO: imlement
-        log.error("Not implemented. Stop all the probes")
+        log.error("Not implemented.")
         raise Exception("Incomplete method")
         #subm.stop(self, self.rsv, uri)
 
@@ -741,7 +738,7 @@ class Probe(object):
         """List probe status
         Dismbiguation unction using status or submission_status depending on the format
         """
-        if format=='local':
+        if format == 'local':
             return self.status(uri)
         else:
             return self.submission_status(uri, format)
@@ -753,7 +750,7 @@ class Probe(object):
         p_exe_date = "-na-"
         if os.path.isfile(p_exe):
             p_exe_date = time.ctime(os.path.getmtime(p_exe))
-        outstr = "%sName %s, Verision %s, File name (mtime): %s(%s)\n" % (prefix, self.name,
+        outstr = "%sName %s, Version %s, File name (mtime): %s(%s)\n" % (prefix, self.name,
             self.getVersion(), p_exe, p_exe_date)
         outstr += "URI: %s" % (uri,) #All URIs ('\n'.join(self.urilist),)
         outstr += "Local Status: %s" % (self.status(uri),)
@@ -851,7 +848,7 @@ class ProbeLocal(Probe):
                 executable += "-local"
             executable += "-probe"
         return executable
-    _fixProbeSuffix=staticmethod(_fixProbeSuffix)
+    _fixProbeSuffix = staticmethod(_fixProbeSuffix)
 
     def addURI(self, uri):
         """Add uri to local probe. If URI is not local, it will not be added.
@@ -887,7 +884,6 @@ class ProbeNonLocal(Probe):
                         outstr += " --ggs --gsl %s/output/gratia --python-loc %s" % (self.rsvlocation, sys.executable)
                     else:
                         warning = "Gratia output cannot be enabled for OSG-RSV because python cannot be found.\n"
-                        post_install_log(warning)
                         log.warning(warning)
             except AttributeError:
                 log.debug("No gratia attribute in options")
@@ -909,21 +905,21 @@ class ProbeNonLocal(Probe):
 
 class ProbeCE(ProbeNonLocal):
     def __init__(self, name, uri, type='OSG-CE', *args, **kwrds):
-        if not type=='OSG-CE':
+        if not type == 'OSG-CE':
             log.warning('Wrong Probe invoked: %s instead of OSG-CE' % (type,))
         Probe.__init__(self, name, uri, type, *args, **kwrds)
 probe_dict['OSG-CE'] = ProbeCE
 
 class ProbeGUMS(ProbeNonLocal):
     def __init__(self, name, uri, type='OSG-GUMS', *args, **kwrds):
-        if not type=='OSG-GUMS':
+        if not type == 'OSG-GUMS':
             log.warning('Wrong Probe invoked: %s instead of GUMS' % (type,))
         Probe.__init__(self, name, uri, type, *args, **kwrds)
 probe_dict['OSG-GUMS'] = ProbeGUMS
 
 class ProbeGridFTP(ProbeNonLocal):
     def __init__(self, name, uri, type='OSG-GridFTP', *args, **kwrds):
-        if not (type=='OSG-GridFTP' or type=='GridFTP'):
+        if not (type == 'OSG-GridFTP' or type=='GridFTP'):
             log.warning('Wrong Probe invoked: %s instead of GridFTP' % (type,))
         Probe.__init__(self, name, uri, type, *args, **kwrds)
 probe_dict['OSG-GridFTP'] = ProbeGridFTP
@@ -931,14 +927,14 @@ probe_dict['GridFTP'] = ProbeGridFTP
 
 class ProbeSRM(ProbeNonLocal):
     def __init__(self, name, uri, type='OSG-SRM', *args, **kwrds):
-        if not type=='OSG-SRM':
+        if not type == 'OSG-SRM':
             log.warning('Wrong Probe invoked: %s instead of SRM' % (type,))
         Probe.__init__(self, name, uri, type, *args, **kwrds)
 probe_dict['OSG-SRM'] = ProbeSRM
 
 class ProbeSE(ProbeNonLocal):
     def __init__(self, name, uri, type='OSG-SE', *args, **kwrds):
-        if not type=='OSG-SE':
+        if not type == 'OSG-SE':
             log.warning('Wrong Probe invoked: %s instead of OSG-CE' % (type,))
         #super(ProbeLocal, self).__init__(name, uri)
         Probe.__init__(self, name, uri, type, *args, **kwrds)

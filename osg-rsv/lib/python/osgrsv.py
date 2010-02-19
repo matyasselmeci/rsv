@@ -319,7 +319,7 @@ class OSGRSV:
                 else:
                     probelist = get_metrics_from_probe(probe, self, options=options)
                     if not probelist:
-                        log.warning("Error in loading probes (%s, %s) from file %s" % (h, k, probe))
+                        log.warning("Error in loading probes (%s, %s) from file %s" % (host, k, probe))
                         continue
                     log.debug("New file %s: %s" % (probe, [i.metricName for i in probelist]))
                     #if len(probelist)> 1:
@@ -435,7 +435,7 @@ class OSGRSV:
                     info = line.split()
                     if not len(info)==7:
                         file_ok = False
-                        log.warning("Invalid non comment line in metrics file %s:\n<%s>" % (file, lines[i]))
+                        log.warning("Invalid non comment line in metrics file %s:\n<%s>" % (file, line))
                         continue
                     key = info[1].strip()
                     if key in linedict.keys(): 
@@ -483,7 +483,7 @@ class OSGRSV:
                 if line.find(metricid) >= 0:
                     info = line.split()
                     if not len(info)==7:
-                        log.warning("Invalid matching line in metrics file %s:\n<%s>. Skipping." % (fname, lines[i]))                        
+                        log.warning("Invalid matching line in metrics file %s:\n<%s>. Skipping." % (fname, line))
                         continue
                     retval = { 'enable': True }
                     if info[0] == 'off':
@@ -561,7 +561,7 @@ class OSGRSV:
                     changed = True
                     oldentry[j] = entry[j]
         try:
-            if entry['enable']==False and oldentry['enable']==True:
+            if entry['enable'] == False and oldentry['enable'] == True:
                 oldentry['enable'] = False
                 changed = True
         except KeyError:
@@ -594,7 +594,7 @@ class OSGRSV:
     
     def _metricsFileRead(self, hostid):
         fname = os.path.join(self.metrics_loc, "%s_metrics.conf" % hostid)
-        return _read_metrics_file(fname)
+        return self._read_metrics_file(fname)
     
     def _read_metrics_file(fname):
         # Parse metrics file
@@ -626,7 +626,7 @@ class OSGRSV:
 
     def _metricsFileWrite(self, hostid, metrics):
         fname = os.path.join(self.metrics_loc, "%s_metrics.conf" % hostid)
-        return _write_metrics_file(fname, metrics)
+        return self._write_metrics_file(fname, metrics)
     
     def _write_metrics_file(fname, metrics):
         # Header for metrics configuration file
@@ -683,7 +683,7 @@ class OSGRSV:
 
 def getStatus(probe, rsv, verbose=False):
     rsv = OSGRSV()
-    mprobe.get
+    #mprobe.get
     rsv.metricsFileRetrieve()
 
 def main():

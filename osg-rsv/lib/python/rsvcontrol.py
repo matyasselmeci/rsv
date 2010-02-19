@@ -7,7 +7,7 @@ import re
 import sys
 import time
 import socket
-from optparse import OptionParser, OptionGroup
+from optparse import OptionParser
 
 import osgrsv
 import table
@@ -70,9 +70,9 @@ _cacheHostName = None
 def getLocalHostName():
     global _cacheHostName
     if not _cacheHostName:
-       try:
+        try:
             _cacheHostName = os.environ.get('HOSTNAME', socket.gethostname())
-       except:
+        except:
             _cacheHostName = 'localhost'
     return _cacheHostName
 
@@ -81,12 +81,12 @@ def processoptions(arguments=None):
       --help | -h 
       --version
       --list [ --wide | -w ] [ --all ] [ --format <format> ] [ <pattern> ]
-      --on        [<metric-name> [<metric-name> ...]]
-      --off       [<metric-name> [<metric-name> ...]]
-      --enable    [--user <user>] --host <host-name> <metric-name> [<metric-name> ...]
-      --disable   --host <host-name> <metric-name> [<metric-name> ...]
-      --full-test [--user <user>] --host <host-name> <metric-name> [<metric-name> ...]
-      --test      [--user <user>] --host <host-name> --host-file <path/to/file> <metric-name> [<metric-name> ...]
+      --on        [METRICS]
+      --off       [METRICS]
+      --enable    [--user <user>] --host <host-name> METRIC [METRICS]
+      --disable   --host <host-name> METRIC [METRICS]
+      --full-test [--user <user>] --host <host-name> METRIC [METRICS]
+      --test      [--user <user>] --host <host-name> METRIC [METRICS]
     """
     version = "rsv-control 0.14"
     description = """This script is used to control or verify a probe."""
@@ -141,7 +141,7 @@ def processoptions(arguments=None):
 
     #parser.disable_interspersed_args()
     #default: (options, args) = parser.parse_args(sys.argv[1:]) - alt args possible
-    if arguments==None:
+    if arguments == None:
         (options, args) = parser.parse_args()
     else:
         (options, args) = parser.parse_args(arguments)
@@ -168,12 +168,12 @@ def processoptions(arguments=None):
 
     # rsvctrl_test is OK since it is not touching the files in the RSV directory
     if options.rsvctrl_enable or options.rsvctrl_disable or options.rsvctrl_full_test:       
-        if not file_uid==user_id:
+        if not file_uid == user_id:
             parser.error("Operation not possible. You are not the owner of the installation in: %s." % (tmp_fname))
             #exit(2)
         # root cannot submit jobs
         # root can disable jobs of other users
-        if user_id==0 and not options.user and not options.rsvctrl_disable: 
+        if user_id == 0 and not options.user and not options.rsvctrl_disable: 
             #running as root
             log.error('You cannot run the jobs as root, use "--user <username>" to submit the jobs as a different user.')
             tmp_fname = os.path.join(options.vdtlocation, "osg/etc/config.ini")
@@ -202,7 +202,7 @@ def list_probes(rsv, options, pattern):
     num_disabled_probes = 0
 
     probelist = rsv.getConfiguredProbes(options=options)
-    if options.list_format=='local':
+    if options.list_format == 'local':
         tables = {} # to hold one table per host
         tables['DISABLED'] = new_table('DISABLED METRICS', options)
 
@@ -225,7 +225,7 @@ def list_probes(rsv, options, pattern):
 
                 rets = probe.status(uri)
                 log.debug("Metric %s (%s): %s on %s" % (pmetric, ptype, rets, uri))
-                if rets=="ENABLED":
+                if rets == "ENABLED":
                     ret_list_uri.append(uri)
                 else:
                     if not rets in ret_list_status:
@@ -269,7 +269,6 @@ def list_probes(rsv, options, pattern):
             if pattern and not re.search(pattern, probe.metricName):
                 continue
                             
-            pkey = probe.getKey()
             retlines.append("%s" % (probe.getKey(),))
             for uri in probe.urilist:
                 if options.uri and options.uri != uri:
@@ -306,8 +305,6 @@ def main_rsv_control():
         rsv = osgrsv.OSGRSV(options.vdtlocation, user=options.user)
     else:        
         rsv = osgrsv.OSGRSV(options.vdtlocation)
-
-    rets = ""
 
     # listing probes
     if options.rsvctrl_list:
@@ -374,7 +371,7 @@ def main_rsv_control():
         elif options.rsvctrl_full_test:
             for p in sel_metrics:
                 ec = p.full_test(uri)
-                if ec==0:
+                if ec == 0:
                     print "Metric tested"
                 else:
                     print "Metric test failed"
@@ -407,7 +404,7 @@ def main():
     
 if __name__ == "__main__":
     progname = os.path.basename(sys.argv[0])
-    if progname=='rsv-control' or progname=='rsvcontrol.py':
+    if progname == 'rsv-control' or progname == 'rsvcontrol.py':
         main_rsv_control()
     else:
         main()
