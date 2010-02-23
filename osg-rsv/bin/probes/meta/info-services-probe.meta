@@ -1,0 +1,24 @@
+serviceType: OSG-CE
+metricName: org.osg.gip.consistency
+metricType: status
+probeType: OSG-CE
+enableByDefault: true
+metricInterval: 48 * * * *
+description: Probe to check whether the config.ini name entries match the MyOSG entries.
+EOT
+serviceType: OSG-CE
+metricName: org.osg.gip.lastrun
+metricType: status
+probeType: OSG-CE
+enableByDefault: true
+metricInterval: 14 * * * *
+description: Probe to check whether the GIP providers all successfully ran during the last GIP execution.
+EOT
+serviceType: OSG-CE
+metricName: org.osg.gip.freshness
+metricType: status
+probeType: OSG-CE
+enableByDefault: true
+metricInterval: 47 * * * *
+description: Probe to check whether the OSG BDII has up-to-date information from this CE.
+EOT
