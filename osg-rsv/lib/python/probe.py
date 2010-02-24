@@ -269,7 +269,6 @@ class Probe(object):
         """
         return self.name
     
-    #def _fixProbeSuffix(self, instr):
     def _fixProbeSuffix(instr):
         """
         Adjust the probe suffix. Probe file name should end in -probe.
@@ -303,14 +302,12 @@ class Probe(object):
             return executable
         return os.path.join(self.rsvperllibdir, executable)
 
-    def getLocalUniqueName(self, uri=None):
+    def get_unique_name(self, uri=None):
         """
-        Name as '%(host)s__%(key)s', where key = "%s@%s" % (basename, metricName)
-        file basename (from getProbe)
-        TODO: Concern about host from URI: are host unique or should the full URI be used?
+        Create a unique name for each host/metric combination that we will add
+        to the Condor classad so that we can easily identify it later.
         """
-        name = "%s__%s@%s" % (self._getonlyhost(uri), os.path.basename(self.getProbe()),
-            self.metricName)
+        name = "%s__%s" % (uri, self.metricName)
         return name
 
     def getKey(self):
@@ -478,7 +475,7 @@ class Probe(object):
         if not self.rsv:
             log.error("No RSV defined. Probe cannot be installed or configured.")
             return
-        lun = self.getLocalUniqueName(uri)
+        lun = self.get_unique_name(uri)
         log.info("Removing .sub files for RSV probe of type %s\n\t for URI: %s (LUN: %s)" %
                  (self.name, uri, lun))
         subm = self.rsv.getSubmitter()
@@ -551,7 +548,7 @@ class Probe(object):
         """Stop probe (remove it from condor-cron)
         """
         subm = self.rsv.getSubmitter()
-        subm.stopByID(self.getLocalUniqueName(uri), self.rsv)
+        subm.stopByID(self.get_unique_name(uri), self.rsv)
 
     def stop(self):
         """Stop probe (remove it from condor-cron)
@@ -586,7 +583,7 @@ class Probe(object):
                 #passed = True
                 break
         if not met:
-            log.warning("Probe %s is installed but probably misconfigured" % self.getLocalUniqueName(uri)) 
+            log.warning("Probe %s is installed but probably misconfigured" % self.get_unique_name(uri)) 
             return status #"UNDEFINED"
         try:
             if met['enable']:
@@ -622,7 +619,7 @@ class Probe(object):
         Check the Submitter for possible status formats.
         """
         subm = self.rsv.getSubmitter()
-        retv = subm.listByID(self.getLocalUniqueName(uri), self.rsv, format,
+        retv = subm.listByID(self.get_unique_name(uri), self.rsv, format,
             probe_test=probe_test)
         return retv
     
@@ -632,7 +629,7 @@ class Probe(object):
         self.install()
         self.configureTest(uri, enable=True)
         self.startTest(uri)
-        log.info("Metric %s enabled" % self.getLocalUniqueName(uri))
+        log.info("Metric %s enabled" % self.get_unique_name(uri))
 
     def disable(self, uri):
         self.stopTest(uri)
@@ -643,7 +640,7 @@ class Probe(object):
         # Remove the metric line from the HTML consumer page
         self.remove_metric_from_html_consumer(uri)
         
-        log.info("Metric %s disabled" % self.getLocalUniqueName(uri))
+        log.info("Metric %s disabled" % self.get_unique_name(uri))
 
 
     def remove_metric_from_html_consumer(self, uri):
@@ -729,7 +726,7 @@ class Probe(object):
         #skip self.configureTest(uri, enable=True), invoking installTest directly to prepare submit file
         self.installTest(uri, True)
         subm = self.rsv.getSubmitter()
-        log.info("Testing metric %s" % self.getLocalUniqueName(uri))
+        log.info("Testing metric %s" % self.get_unique_name(uri))
         ec = subm.submit_immediate(self, self.rsv, uri)
         #skip self.configureTest(uri, disable=True)
         return ec

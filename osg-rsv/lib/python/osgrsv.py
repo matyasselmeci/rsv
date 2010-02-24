@@ -8,6 +8,7 @@ import commands  # used to get OSG RSV version
 import ConfigParser
 
 import condorsubmitter
+import condor
 from probe import get_metrics_from_probe, ProbeLocal
 
 import altlogging
@@ -111,13 +112,13 @@ class OSGRSV:
     def getSetupCommand(self):
         """
         Return the source command to setup the environment. 
-        Empty string is returned if no VDT_LOCTION is defined.
+        Empty string is returned if no VDT_LOCATION is defined.
         """
         #TODO: handle multiple shells. Is commands using always sh or the default user shell?
         rets = self.getVdtLocation()
         if not rets:
             return ""
-        rets = "source %s; " % (os.path.join(self.getVdtLocation(), "setup.sh"),)
+        rets = ". %s; " % (os.path.join(self.getVdtLocation(), "setup.sh"),)
         return rets
     
     # Functions to save and recover configuration
@@ -663,17 +664,29 @@ class OSGRSV:
             return
         return
 
-    def stop(self):
-        """stop() {
+    def stop(self, metrics):
+        """
+        Stop all probes and consumers, or a subset of them
+        Return True is successful, False otherwise
         """
 
-        #TODO: implement stop
-
-        if self.submitter.areProbesRunning():
-            log.error("")
-            return
-
-        return
+        if len(metrics) == 0:
+            print "Stopping all metrics and consumers"
+            if not condor.stop_condor_jobs('OSGRSV=="probes"'):
+                log.error("Error stopping metrics.  Exiting now.")
+                return False
+            if not condor.stop_condor_jobs('OSGRSV=="consumers"'):
+                log.error("Error stopping consumers.  Exiting now.")
+                return False
+        else:
+            for metric in metrics:
+                print "Stopping metric '%s' on host '%s'" % (metric.metricName, "foo")
+                constraint = 'OsgRsvUniqueName=="%s"' % metric.get_unique_name()
+                if not condor.stop_condor_jobs(constraint=constraint):
+                    log.error("error stopping metric '%s'.  Will not continue" % metric.metricName)
+                    return False
+        
+        return True
     
 #for debugging
 #commands to allow autocompletion

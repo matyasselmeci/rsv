@@ -151,12 +151,13 @@ Queue
         if not values or len(values)<>5:
             log.error("Unable to set the time parameter, invalid setting: "+cronstr)
             return None
+        
         retv = {}
-        retv["CronMinute"] = values[0]
-        retv["CronHour"] = values[1]
+        retv["CronMinute"]     = values[0]
+        retv["CronHour"]       = values[1]
         retv["CronDayOfMonth"] = values[2]
-        retv["CronMonth"] = values[3]
-        retv["CronDayOfWeek"] = values[4]
+        retv["CronMonth"]      = values[3]
+        retv["CronDayOfWeek"]  = values[4]
         return retv
     _makeCronDict=staticmethod(_makeCronDict)
 
@@ -175,7 +176,7 @@ Queue
         executable_fname = probe.getExecutable()
         #self.setCLParams(job.getCLParameters(), job=job, rsv=rsv)
         cline_params = probe.getCLParameters(uri=uri)
-        local_unique_name = probe.getLocalUniqueName(uri)
+        local_unique_name = probe.get_unique_name(uri)
         if not idstr:
             idstr = local_unique_name
 
@@ -223,15 +224,15 @@ Queue
             user = self.user
 
         if cron_submision and not force_prepare:        
-            sub_fname = os.path.join(rsv.getSubmitDir(), "%s.sub" % (probe.getLocalUniqueName(uri),))
+            sub_fname = os.path.join(rsv.getSubmitDir(), "%s.sub" % (probe.get_unique_name(uri),))
         else:
             sub_fname = self.prepare(probe, rsv, uri, idstr, cron_submission=cron_submision)
             
         if cron_submision:
-            log.debug("submitting condor job %s: %s" % (probe.getLocalUniqueName(uri), sub_fname))
+            log.debug("submitting condor job %s: %s" % (probe.get_unique_name(uri), sub_fname))
         else:
             log.debug("submitting condor job for immediate execution %s: %s" % 
-                      (probe.getLocalUniqueName(uri), sub_fname))
+                      (probe.get_unique_name(uri), sub_fname))
         cmd = "condor_cron_submit %s" % (sub_fname,)
         raw_ec, out = self.commands_getstatusoutput(cmd, user)
         #if os.WIFEXITED(raw_ec):
@@ -394,7 +395,7 @@ Queue
         The opposite of prepare:
         - removes the submit file
         """
-        # probe+uri->lun: lun = probe.getLocalUniqueName(uri)
+        # probe+uri->lun: lun = probe.get_unique_name(uri)
         if not rsv:
             rsv = self.rsv
         sub_fname = os.path.join(rsv.getSubmitDir(), "%s.sub" % (lun,))
@@ -437,7 +438,7 @@ Queue
         - condor_cron_rm -reason "Removed by RSV control" cluster.proc
         """
         #TODO: retrieve job also using idstr (if no probe, uri)
-        self.stopByID(probe.getLocalUniqueName(uri), rsv)
+        self.stopByID(probe.get_unique_name(uri), rsv)
         return
     
     def stopByID(self, lun, rsv=None):

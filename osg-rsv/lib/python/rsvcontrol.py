@@ -81,12 +81,12 @@ def processoptions(arguments=None):
       --help | -h 
       --version
       --list [ --wide | -w ] [ --all ] [ --format <format> ] [ <pattern> ]
-      --on        [METRICS]
-      --off       [METRICS]
-      --enable    [--user <user>] --host <host-name> METRIC [METRICS]
-      --disable   --host <host-name> METRIC [METRICS]
-      --full-test [--user <user>] --host <host-name> METRIC [METRICS]
-      --test      [--user <user>] --host <host-name> METRIC [METRICS]
+      --on        [METRIC ...]
+      --off       [METRIC ...]
+      --enable    [--user <user>] --host <host-name> METRIC [METRIC ...]
+      --disable   --host <host-name> METRIC [METRIC ...]
+      --full-test [--user <user>] --host <host-name> METRIC [METRIC ...]
+      --test      [--user <user>] --host <host-name> METRIC [METRIC ...]
     """
     version = "rsv-control 0.14"
     description = """This script is used to control or verify a probe."""
@@ -362,7 +362,7 @@ def main_rsv_control():
         if options.rsvctrl_on:
             pass
         elif options.rsvctrl_off:
-            pass
+            rsv.stop(sel_metrics)
         elif options.rsvctrl_disable:
             for metric in sel_metrics:
                 print "Disabling " + metric.getName() + ":" 

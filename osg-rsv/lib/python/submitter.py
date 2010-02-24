@@ -191,7 +191,7 @@ class Submitter(object):
         - condor_cron_rm -reason "Removed by RSV control" cluster.proc
         """
         #TODO: retrieve job also using idstr (if no probe, uri)
-        self.stopByID(probe.getLocalUniqueName(uri), rsv)
+        self.stopByID(probe.get_unique_name(uri), rsv)
         return
     
     def stopByID(self, lun, rsv=None):
