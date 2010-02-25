@@ -37,7 +37,7 @@ def get_classads(constraint=None):
     Run a condor_cron_q command and return a hash of the classad.
     If there is an error, return None
     """
-    log.debug("Getting Condor classads with constraint '%s'" % (constraint || ""))
+    log.debug("Getting Condor classads with constraint '%s'" % (constraint or ""))
 
     if not is_condor_running():
         log.error("Cannot fetch classads because Condor-Cron is not running")
@@ -97,7 +97,7 @@ def stop_condor_jobs(constraint):
     jobs = get_classads(constraint=constraint)
     if len(jobs) == 0:
         log.info("No jobs to be removed with constraint '%s'" % constraint)
-        return
+        return True
     
     # Build the command
     cmd = "condor_cron_rm"

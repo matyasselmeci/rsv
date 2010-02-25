@@ -89,14 +89,14 @@ def processoptions(arguments=None):
       --test      [--user <user>] --host <host-name> METRIC [METRIC ...]
     """
     version = "rsv-control 0.14"
-    description = """This script is used to control or verify a probe."""
+    description = """This script is used to manage and test the RSV monitoring software."""
     parser = OptionParser(usage=usage, description=description, version=version)
     parser.add_option("--vdt-install", dest="vdtlocation", default=None,
                       help="Root directory of the OSG installation", metavar="DIR")
     parser.add_option("--verbose", action="store_true", dest="verbose", default=False,
                       help="Verbose output")
     parser.add_option("-l", "--list", action="store_true", dest="rsvctrl_list", default=False,
-                      help="List probe information.  If <pattern> is supplied, only probes matching the regular expression pattern will be displayed")
+                      help="List metric information.  If <pattern> is supplied, only metrics matching the regular expression pattern will be displayed")
     parser.add_option("-w", "--wide", action="store_true", dest="list_wide", default=False,
                       help="Wide list display to avoid truncation in metric listing")
     parser.add_option("--all", action="store_true", dest="list_all", default=False,
@@ -114,13 +114,13 @@ def processoptions(arguments=None):
     #parser.add_option("--setup", action="store_true", dest="rsvctrl_setup", default=False,
     #                  help="NOT READY... COMING SOON: Setup the RSV installation (change file permissions, start Condor, ...)")
     parser.add_option("--test", action="store_true", dest="rsvctrl_test", default=False,
-                      help="Run a probe and return its output.")
+                      help="Run a metric and return its output.")
     parser.add_option("--full-test", action="store_true", dest="rsvctrl_full_test", default=False,
-                      help="Test a probe within OSG-RSV. Probe is executed only once, immediately.")
+                      help="Test a metric within OSG-RSV. Metric is executed only once, immediately.")
     parser.add_option("--user", dest="user", default=None,
-                      help="Specify the user to run OSG-RSV probes")
+                      help="Specify the user to run OSG-RSV metrics")
     parser.add_option("--host", dest="uri", default=None,
-                      help="Specify the host FQDN and optionally the port to be used by the probe (e.g. host or host:port)")
+                      help="Specify the host FQDN and optionally the port to be used by the metric (e.g. host or host:port)")
     parser.add_option("--host-file", dest="uri_file", default=None,
                       help="Supply a path to a file containing the hosts to test against, one host per line (overrides --host)")
     #group = OptionGroup(parser, "Gratia Options",
@@ -154,7 +154,7 @@ def processoptions(arguments=None):
         parser.error("VDT_LOCATION is not set.\nEither set this environment variable, or pass the --vdt-location command line option.")
 
     # Ownership problem:
-    # - probes should not be submittted to condor as root
+    # - metrics should not be submittted to condor as root
     # - enable/disable/test require ownership of the directory tree
     tmp_fname = os.path.join(options.vdtlocation, osgrsv.OSGRSV_NAME)
     file_uid = os.stat(tmp_fname)[4]   # stat.ST_UID=4
@@ -195,11 +195,11 @@ def new_table(header, options):
     return table_
 
 
-def list_probes(rsv, options, pattern):
-    log.info("Listing all probes")
+def list_metrics(rsv, options, pattern):
+    log.info("Listing all metrics")
     retlines = []
     num_metrics_displayed = 0
-    num_disabled_probes = 0
+    num_disabled_metrics = 0
 
     probelist = rsv.getConfiguredProbes(options=options)
     if options.list_format == 'local':
@@ -236,7 +236,7 @@ def list_probes(rsv, options, pattern):
                 # if multiple status are appearing probably there is an error
                 for i in ret_list_status:
                     tables['DISABLED'].addToBuffer(pmetric, ptype)
-                    num_disabled_probes += 1
+                    num_disabled_metrics += 1
                 continue
             
             for i in ret_list_uri:                        
@@ -252,16 +252,16 @@ def list_probes(rsv, options, pattern):
                 retlines += "\n"
 
         if options.list_all:
-            if num_disabled_probes > 0:
+            if num_disabled_metrics > 0:
                 retlines.append("The following metrics are not enabled on any host:")
                 retlines.append(tables["DISABLED"].getHeader())
                 retlines += tables["DISABLED"].formatBuffer()
-        elif num_disabled_probes > 0:
+        elif num_disabled_metrics > 0:
             tmp = ""
             if pattern:
                 tmp = " that match the supplied pattern"
             retlines.append("The are %i disabled metrics%s.  Use --all to display them." % \
-                            (num_disabled_probes, tmp))
+                            (num_disabled_metrics, tmp))
             
     else:
         # Format != 'local'
@@ -288,7 +288,8 @@ def list_probes(rsv, options, pattern):
         print '\n' + '\n'.join(retlines) + '\n'
         if num_metrics_displayed == 0:
             print "No metrics matched your query.\n"
-    return
+
+    return True
 
 
 def main_rsv_control():
@@ -309,10 +310,9 @@ def main_rsv_control():
     # listing probes
     if options.rsvctrl_list:
         if not args:
-            list_probes(rsv, options, "")
+            return list_metrics(rsv, options, "")
         else:
-            list_probes(rsv, options, args[0])
-        return
+            return list_metrics(rsv, options, args[0])
 
     # Non-list options
     elif (options.rsvctrl_on      or options.rsvctrl_off  or options.rsvctrl_enable or
@@ -361,20 +361,30 @@ def main_rsv_control():
                                                                    options.rsvctrl_full_test))
         if options.rsvctrl_on:
             pass
+
         elif options.rsvctrl_off:
-            rsv.stop(sel_metrics)
+            return rsv.stop(sel_metrics)
+
         elif options.rsvctrl_disable:
             for metric in sel_metrics:
                 print "Disabling " + metric.getName() + ":" 
                 metric.disable(uri)
                 print "Metric disabled\n"
+
         elif options.rsvctrl_full_test:
+            errors = 0
             for p in sel_metrics:
-                ec = p.full_test(uri)
-                if ec == 0:
+                ret = p.full_test(uri)
+                errors += ret
+                if ret == 0:
                     print "Metric tested"
                 else:
                     print "Metric test failed"
+
+            if errors == 0:
+                return True
+            return False
+            
         elif options.rsvctrl_test:
             for p in sel_metrics:
                 if uri_list:
@@ -382,6 +392,7 @@ def main_rsv_control():
                         print p.test(uri)
                 else:
                     print p.test(uri)
+
         elif options.rsvctrl_enable:
             for metric in sel_metrics:
                 print "Enabling " + metric.getName() + ":" 
@@ -397,14 +408,16 @@ def main_rsv_control():
     #    return
     else:
         log.error("Unknown request")
+        return False
     return
-    
-def main():
-    print "Wrong invocation!"
     
 if __name__ == "__main__":
     progname = os.path.basename(sys.argv[0])
     if progname == 'rsv-control' or progname == 'rsvcontrol.py':
-        main_rsv_control()
+        if not main_rsv_control():
+            sys.exit(1)
+        else:
+            sys.exit(0)
     else:
-        main()
+        print "Wrong invocation!"
+        sys.exit(1)
