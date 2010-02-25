@@ -19,8 +19,7 @@ fi
 cd $VDT_LOCATION
 
 filedirname=rsv-profile.files
-rsvfiledir=$dir/$filedirname
-export $rsvfiledir
+export rsvfiledir="$dir/$filedirname"
 if [ -e $rsvfiledir ]; then
   rm -fr $rsvfiledir
 fi
@@ -163,8 +162,9 @@ echo "" >> $rsvlog
 # Get some information from the RSV and consumer logs
 echo "Getting RSV probe and consumer logs:" >> $rsvlog
 mkdir $rsvfiledir/logs
-perl -e 'foreach $file (`ls -1 osg-rsv/logs/probes`) { chomp($file); system("echo $file >> $ENV{rsvlog}"); system("tail -1000 osg-rsv/logs/probes/$file > $ENV{rsvfiledir}/rsv-profile.files/logs/$file") }'
-perl -e 'foreach $file (`ls -1 osg-rsv/logs/consumers`) { chomp($file); system("echo $file >> $ENV{rsvlog}"); system("tail -1000 osg-rsv/logs/consumers/$file > $ENV{rsvfiledir}/rsv-profile.files/logs/$file") }'
+mkdir $rsvfiledir/logs/consumers $rsvfiledir/logs/probes
+perl -e 'foreach $file (`ls -1 osg-rsv/logs/probes/`) { chomp($file); system("echo $file >> $ENV{rsvlog}"); system("tail -1000 osg-rsv/logs/probes/$file > $ENV{rsvfiledir}/logs/$file") }'
+perl -e 'foreach $file (`ls -1 osg-rsv/logs/consumers/`) { chomp($file); system("echo $file >> $ENV{rsvlog}"); system("tail -1000 osg-rsv/logs/consumers/$file > $ENV{rsvfiledir}/logs/$file") }'
 echo "" >> $rsvlog
 
 echo "Done, making tarball" >> $rsvlog
@@ -177,4 +177,4 @@ if [ -e rsv-profile.tar.gz ]; then
 fi
 
 tar czf rsv-profile.tar.gz $filedirname
-rm -fr $filedirname
+#rm -fr $filedirname
