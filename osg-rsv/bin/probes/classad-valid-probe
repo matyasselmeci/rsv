@@ -38,7 +38,7 @@ our %metric;    *metric    = \%RSVProbeBase::metric;
 
 sub Init {
 
-    &RSVProbeBase::Set_MetricName ("org.osg.general.classad-valid");
+    &RSVProbeBase::Set_MetricName ("org.osg.ress.classad-valid");
 
     ## Pass "status" or "performance" depending on metric type
     &RSVProbeBase::Set_MetricType ("status");

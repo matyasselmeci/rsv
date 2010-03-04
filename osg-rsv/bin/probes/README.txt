@@ -476,7 +476,30 @@ NOTE: This probe does a weak test to look for expired/expiring CA certs
                          --ress-collector=osg-ress-4.fnal.gov
 
 
+12) ReSS Classad Exists Probe:
 
+* Test if the classad for a resource exists in the ReSS collector
+   The probe takes the given service URI and checks with the appropriate
+   ReSS collector. 
+   If no classad for the resource is found in the collector, the test fails 
+   and returns a CRITICAL status.
+
+  RESS COLLECTOR:
+   OSG Production: osg-ress-1.fnal.gov
+   OSG ITB: osg-ress-4.fnal.gov
+
+ $ ./ress-classad-exists-probe -u cms-xen1.fnal.gov \
+                         --ress-collector=osg-ress-4.fnal.gov
+
+
+13) CeMon Container Key file permissions Probe:
+
+* Test the permissions of the sskeyfile used by cemon on the remote site.
+   The probe takes the given service URI
+   If the permissions are not 400 or 600 probe fails and returns a 
+   CRITICAL status.
+
+ $ ./cemon-containerkeyfile-ce-permissions-probe -u cms-xen1.fnal.gov 
 
 
 NOTE ABOUT PROBE TIME OUT 
