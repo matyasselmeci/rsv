@@ -8,7 +8,7 @@ import commands  # used to get OSG RSV version
 import ConfigParser
 
 import condorsubmitter
-import condor
+from condor import Condor
 from probe import get_metrics_from_probe, ProbeLocal
 
 import altlogging
@@ -652,36 +652,55 @@ class OSGRSV:
         #  _safe_write(fname, outstr);
     _write_metrics_file = staticmethod(_write_metrics_file)
 
-    def start(self):
+    def start(self, metrics, uri):
         """
         """
         #TODO: implement start
         # Start should start any jobs not running, even if other ones are
+        # Should it restart running jobs?
 
-        # Make sure the jobs are not already in the queue
-        if self.submitter.areProbesRunning():
-            log.error("OSG-RSV jobs are already in the condor queue.")
-            return
-        return
+        condor = Condor(rsv=self, user=self.user)
 
-    def stop(self, metrics):
+        if len(metrics) == 0:
+            print "Starting metrics for all hosts"
+            print "Not yet implemented"
+
+        else:
+            if not uri:
+                log.error("Host unknown when trying to start metrics.  Try passing --host")
+                return False
+
+            for metric in metrics:
+                print "Starting metric '%s' on host '%s'" % (metric.metricName, uri)
+                condor.start_condor_job(metric, uri)
+
+        return True
+
+    def stop(self, metrics, uri):
         """
         Stop all probes and consumers, or a subset of them
         Return True is successful, False otherwise
         """
 
+        condor = Condor(rsv=self, user=self.user)
+
         if len(metrics) == 0:
-            print "Stopping all metrics and consumers"
+            print "Stopping all metrics on all hosts"
             if not condor.stop_condor_jobs('OSGRSV=="probes"'):
                 log.error("Error stopping metrics.  Exiting now.")
                 return False
+            print "Stopping consumers"
             if not condor.stop_condor_jobs('OSGRSV=="consumers"'):
                 log.error("Error stopping consumers.  Exiting now.")
                 return False
         else:
+            if not uri:
+                log.error("Host unknown when trying to stop metrics.  Try passing --host")
+                return False
+            
             for metric in metrics:
-                print "Stopping metric '%s' on host '%s'" % (metric.metricName, "foo")
-                constraint = 'OsgRsvUniqueName=="%s"' % metric.get_unique_name()
+                print "Stopping metric '%s' on host '%s'" % (metric.metricName, uri)
+                constraint = 'OsgRsvUniqueName=="%s"' % metric.get_unique_name(uri)
                 if not condor.stop_condor_jobs(constraint=constraint):
                     log.error("error stopping metric '%s'.  Will not continue" % metric.metricName)
                     return False

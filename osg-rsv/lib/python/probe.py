@@ -306,7 +306,7 @@ class Probe(object):
             return executable
         return os.path.join(self.rsvperllibdir, executable)
 
-    def get_unique_name(self, uri=None):
+    def get_unique_name(self, uri):
         """
         Create a unique name for each host/metric combination that we will add
         to the Condor classad so that we can easily identify it later.
@@ -785,6 +785,7 @@ class Probe(object):
             else:
                 outstr += "%s RSV description:\n" % (prefix,) + self.rsv.describe(prefix=prefix+"  ")
         return outstr
+
     
 class ProbeTest(Probe):
     """Simple probe

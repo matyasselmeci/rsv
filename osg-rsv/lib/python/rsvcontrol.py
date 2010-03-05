@@ -304,7 +304,7 @@ def main_rsv_control():
     # take care of RSV cert?
     if options.user:
         rsv = osgrsv.OSGRSV(options.vdtlocation, user=options.user)
-    else:        
+    else:
         rsv = osgrsv.OSGRSV(options.vdtlocation)
 
     # listing probes
@@ -360,10 +360,10 @@ def main_rsv_control():
                                                                    options.rsvctrl_disable, options.rsvctrl_test,
                                                                    options.rsvctrl_full_test))
         if options.rsvctrl_on:
-            pass
+            return rsv.start(sel_metrics, uri)
 
         elif options.rsvctrl_off:
-            return rsv.stop(sel_metrics)
+            return rsv.stop(sel_metrics, uri)
 
         elif options.rsvctrl_disable:
             for metric in sel_metrics:
