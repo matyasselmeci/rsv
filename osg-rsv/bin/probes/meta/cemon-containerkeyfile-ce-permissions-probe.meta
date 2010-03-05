@@ -1,0 +1,8 @@
+serviceType: OSG-CE
+metricName: org.osg.ress.cemon-containerkeyfile-CE-permissions
+metricType: status
+probeType: OSG-CE
+enableByDefault: true
+metricInterval: 37 * * * *
+description: Checks the permissions of sslkeyfile used by CEMon
+EOT
