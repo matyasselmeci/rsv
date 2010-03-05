@@ -45,6 +45,10 @@ def introspect_probe(probe, rsv=None):
 
     metafile = os.path.join(os.path.dirname(probe), "meta", os.path.basename(probe) + ".meta")
 
+    if not os.path.exists(metafile):
+        log.error("Meta file for probe '%s' does not exist - skipping metrics contained in this probe" % probe)
+        return None
+
     lines = open(metafile).readlines()
     retlist=[]
     retv = {}
