@@ -16,17 +16,18 @@ class Condor:
         self.user = user
 
 
-    def is_metric_running(self, id):
+    def is_metric_running(self, condor_id):
         """
         Return true if a metric is running in Condor-Cron
         Return false if it is not
         """
-        classads = self.get_classads(constraint = "OsgRsvUniqueName=='%s'" % id)
+        classads = self.get_classads(constraint = "OsgRsvUniqueName==\"%s\"" % condor_id)
         if classads == None:
             log.error("Could not determine if job is running")
 
         for classad in classads:
-            if classad[OsgRsvUniqueName] == id:
+            # We put the attribute into the classad in quotes, so search for it accordingly
+            if classad["OsgRsvUniqueName"] == '"' + condor_id + '"':
                 return True
 
         return False
@@ -45,7 +46,7 @@ class Condor:
         # Build the command
         cmd = "condor_cron_q -l"
         if constraint != None:
-            cmd += " -constraint \'%s\'" % constraint
+            cmd += " -constraint '%s'" % constraint
 
         (ret, out) = commands_getstatusoutput(cmd);
 
@@ -85,7 +86,10 @@ class Condor:
         """
         log.info("Submitting job to condor: metric '%s' - host '%s'" % (metric.metricName, uri))
 
-        # TODO: Make sure that the metric is enabled
+        # Make sure that the metric is enabled
+        if not uri in metric.urilist:
+            log.error("The metric '%s' is not enabled on host '%s'.  It must be enabled before turning it on." % (metric.metricName, uri))
+            return False
 
         # Check if the metric is already running in condor_cron
         condor_id = metric.get_unique_name(uri)
@@ -141,7 +145,7 @@ class Condor:
         # Build the command
         cmd = "condor_cron_rm"
         if constraint != None:
-            cmd += " -constraint \'%s\'" % constraint
+            cmd += " -constraint \"%s\"" % constraint
 
         (ret, out) = commands_getstatusoutput(cmd);
 
@@ -207,7 +211,7 @@ class Condor:
 def commands_getstatusoutput(command, user=None):
     """Run a command in a subshell using commands module and setting up the environment"""
     log.debug("commands_getstatusoutput: command='%s' user='%s'" % (command, user))
-    
+
     if user:
         command = 'su -c "%s" %s' % (command, user)
     ec, out = commands.getstatusoutput(command)
