@@ -1065,39 +1065,38 @@ sub Generate_Gratia_Sending_Script {
 	$o{'timestampUnixSeconds'} . "-" . $o{'hostName'} . "-".
 	$metric{'metricName'}.".$$.py";
 
-    ## Escape certain characters that'll be written into Python script
-    ##  For eg.: new line chars and double quotes
-    my $escaped_details_data = &Escape_String_For_Gratia ();
-
     ## Content for temporary send-gratia-record Python script?
     ## First, common for all probes including local ones
+    ##
+    ## Escape certain characters that'll be written into Python script
+    ##  For eg.: new line chars and double quotes
     my $gratia_script_content = "#! $o{'pythonToUse'}\n".
 	"\nimport Gratia\n".
 	"import Metric\n\n".
 	"if __name__ == '__main__':\n".
-	"        Gratia.Initialize(\"$o{'gratiaMetricProbeConfigFile'}\")".
+	"        Gratia.Initialize(\"". &Escape_String_For_Gratia($o{'gratiaMetricProbeConfigFile'}) . "\")".
 	"\n        r = Metric.MetricRecord()\n".
-	"        r.MetricName(\"$metric{'metricName'}\")\n".
-        "        r.MetricType(\"$metric{'metricType'}\")\n".
-	"        r.MetricStatus(\"$metric{'metricStatus'}\")\n".
-	"        r.Timestamp(\"$metric{'timestamp'}\") # Or could enter it as seconds since epoch\n".
-	"        r.ServiceType(\"$metric{'serviceType'}\")\n";
+	"        r.MetricName(\"". &Escape_String_For_Gratia($metric{'metricName'}) . "\")\n".
+        "        r.MetricType(\"". &Escape_String_For_Gratia($metric{'metricType'}) . "\")\n".
+	"        r.MetricStatus(\"". &Escape_String_For_Gratia($metric{'metricStatus'}) . "\")\n".
+	"        r.Timestamp(\"". &Escape_String_For_Gratia($metric{'timestamp'}) . "\") # Or could enter it as seconds since epoch\n".
+	"        r.ServiceType(\"". &Escape_String_For_Gratia($metric{'serviceType'}) . "\")\n";
 
     ## Local probe or not -- send different fields accordingly
     if ($o{'localprobe'} == 0) {
 	$gratia_script_content .= 
-	    "        r.ServiceUri(\"$metric{'serviceUri'}\")\n".
-	    "        r.GatheredAt(\"$metric{'gatheredAt'}\")\n";
+	    "        r.ServiceUri(\"". &Escape_String_For_Gratia($metric{'serviceUri'}) . "\")\n".
+	    "        r.GatheredAt(\"". &Escape_String_For_Gratia($metric{'gatheredAt'}) . "\")\n";
     }
     else { ## Yes, local probe
 	$gratia_script_content .= 
-	    "        r.HostName(\"$metric{'hostName'}\")\n";
+	    "        r.HostName(\"". &Escape_String_For_Gratia($metric{'hostName'}) . "\")\n";
     }
 
     ## Rest of the fields
     $gratia_script_content .= 
-	"        r.SummaryData(\"$metric{'summaryData'}\")\n".
-	"        r.DetailsData(\"$escaped_details_data\")\n\n".
+	"        r.SummaryData(\"". &Escape_String_For_Gratia($metric{'summaryData'}) . "\")\n".
+	"        r.DetailsData(\"". &Escape_String_For_Gratia($metric{'detailsData'}) . "\")\n\n".
 	"        print Gratia.Send(r)\n";
 
     &Verbose ( "Going to write python script $o{'gratiaSendMetricScriptFile'} to upload ".
@@ -1123,45 +1122,42 @@ sub Generate_Gratia_Sending_Script {
 
 
 
-
-
-
 ################################################################################
 ##
 ## SUB-ROUTINE
 ##  Escape_String_For_Gratia ()
 ##
-## FUNCTION (Internal)
-##
-## Escape certain characters that'll be written into Python script
-##  For eg.: new line chars and double quotes
-##
 ## ARGUMENTS: 
-##  First arg: String to be processed
+##  First arg: String 
 ##
 ## OUTPUT: 
 ##  None
 ##
 ## RETURNS:
-##  String with quotes escaped
+##  string after it is escaped for python 
+##
+## NOTE: It is necessary to escape $ for the Gratia uploader -ag 2010-03-02
+## NOTE2: This function was updated per recommendation by James Kupsch of 
+##         U.Wisconsin; it still escapes double quotes and $
+##        Also, it does not return 'string' - I do not know how that will affect
+##         Gratia --agopu 2010-03-02
 ## 
 ################################################################################
 
-sub Escape_String_For_Gratia {
-    my $string = $metric{'detailsData'};
-    $string =~ s/\"/\\\"/g;
-    $string =~ s/\$/\\\$/g;
-    $string =~ s/\'/\\\'/g;
-    $string =~ s/\n/\\n/g;
+sub Escape_String_For_Gratia
+{
+    my $string = shift;
+
+    $string =~ s/\\/\\\\/g;   # escape \'s first, MUST be done first
+    $string =~ s/\'/\\\'/g;   # single quotes
+    $string =~ s/\"/\\\"/g;   # double quotes
+    $string =~ s/\n/\\n/g;    # new-lines, and everything next
     $string =~ s/\s+/ /g;
-    return $string;
-}
+    $string =~ s/([^[:print:]])/sprintf("\\x%02x", ord $1)/eg;
+    $string =~ s/\$/\\\$/g;   # Gratia requires $ to be escaped
 
-
-
-
-
-
+    return "$string";
+} 
 
 
 ################################################################################
