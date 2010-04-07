@@ -1,10 +1,14 @@
-Version ?
----------
-- Added info-services probe contributed by Brian Bockelman.  For more
-  information, see this page: 
-https://twiki.grid.iu.edu/bin/view/MonitoringInformation/GratiaInfoServicesProbe
+Version 3.2.3
+-------------
+Renamed probes to mark their beta status:
+info-services-probe                         -> info-services-probe.beta
+ress-classad-exists-probe                   -> ress-classad-exists-probe.beta
+cemon-containerkeyfile-ce-permissions-probe -> cemon-containerkeyfile-ce-permissions-probe.beta
 
-- rsv-control ...
+Version 3.2.2
+-------------
+Updated "Escape_For_Gratia" subroutine in RSVProbeBase.pm to fix a security
+flaw in generating the Gratia scripts.
 
 Version 3.2.1
 -------------
