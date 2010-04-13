@@ -71,7 +71,7 @@ def introspect_probe(probe, rsv=None):
     return retlist
 
 
-def get_metrics_from_probe(fname, rsv, uri=None, uridict=None, options=None):
+def get_metrics_from_probe(fname, rsv, uri=None, options=None):
     """
     Returns all metrics from the given probe file
     NB in LCG there should be only one metric per probe
@@ -89,8 +89,6 @@ def get_metrics_from_probe(fname, rsv, uri=None, uridict=None, options=None):
         if not ptype:
             log.error("Unable to load probe: probeType and serviceType not defined")
             continue
-        if not uri and uridict:
-            uri = uridict.get(ptype, uri)
         probe = getProbe(ptype, fname, uri, ptype, rsv=rsv,
                          metricName=val['metricName'], metricType=val['metricType'],
                          serviceType=val['serviceType'], options=options)
@@ -227,8 +225,7 @@ class Probe(object):
         """
         if not values or len(values) != 5:
             # Should control better for valid values (e.g. inspect each value)?
-            log.warning("Invalid cron period setting (%s), ignored" % \
-                str(values))
+            log.warning("Invalid cron period setting (%s), ignored" % str(values))
             return
         for cron_key, value in zip(self._cron_input_format, values):
             self.submit_params[cron_key] = value

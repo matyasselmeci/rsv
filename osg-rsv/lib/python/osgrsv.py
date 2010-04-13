@@ -263,19 +263,17 @@ class OSGRSV:
         return outstr
 
 
-    def load_installed_metrics(self, uridict=None, options=None):
-        """Lists all the probes installed in the bin directory
-        Unless uridict is passed, no attention to URI is given 
-        Perturn value contains one probe per installed probe binary
+    def load_installed_metrics(self, options=None):
+        """Find all metrics installed in probes ending in -probe in the bin directory.
         """
-        probes = []
+        metrics = []
         for probefile in os.listdir(self.getBinDir()):
             # directory may contain other files, probe files must end in "-probe"
             if not probefile.endswith("-probe"):
                 continue
-            tmp_probes = get_metrics_from_probe(probefile, self, uridict=uridict, options=options)
-            probes += tmp_probes 
-        return probes
+            metrics += get_metrics_from_probe(probefile, self, options=options)
+
+        return metrics
 
 
     def getConfiguredProbes(self, hostid=None, options=None):
