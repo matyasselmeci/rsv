@@ -271,7 +271,10 @@ class OSGRSV:
             # directory may contain other files, probe files must end in "-probe"
             if not probefile.endswith("-probe"):
                 continue
-            metrics += get_metrics_from_probe(probefile, self, options=options)
+
+            tmp = get_metrics_from_probe(probefile, self, options=options)
+            if tmp:
+                metrics += tmp
 
         return metrics
 

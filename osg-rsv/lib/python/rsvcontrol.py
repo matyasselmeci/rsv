@@ -196,7 +196,13 @@ def new_table(header, options):
 
 
 def list_metrics(rsv, options, pattern):
-    log.info("Listing all metrics")
+    "Print a table of metrics"
+
+    if pattern:
+        log.info("Listing metrics matching pattern '%s'" % pattern)
+    else:
+        log.info("Listing all metrics")
+
     retlines = []
     num_metrics_displayed = 0
     num_disabled_metrics = 0
@@ -251,6 +257,17 @@ def list_metrics(rsv, options, pattern):
                 retlines += tables[host].formatBuffer()
                 retlines += "\n"
 
+        # Look for metrics that are installed but not configured
+        known_metrics = []
+        for probe in probelist:
+            known_metrics.append(probe.metricName)
+
+        for metric in rsv.load_installed_metrics():
+            if not metric.metricName in known_metrics:
+                log.info("Metric '%s' is installed but not configured." % metric.metricName)
+                tables['DISABLED'].addToBuffer(metric.metricName, metric.getType())
+
+        # Add a message about disabled metrics or print the disabled table
         if options.list_all:
             if num_disabled_metrics > 0:
                 retlines.append("The following metrics are not enabled on any host:")
