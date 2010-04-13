@@ -145,7 +145,7 @@ class Condor:
         # Build the command
         cmd = "condor_cron_rm"
         if constraint != None:
-            cmd += " -constraint \"%s\"" % constraint
+            cmd += " -constraint '%s'" % constraint
 
         (ret, out) = commands_getstatusoutput(cmd);
 
