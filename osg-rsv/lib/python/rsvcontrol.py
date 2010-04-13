@@ -108,9 +108,9 @@ def processoptions(arguments=None):
     parser.add_option("--off", action="store_true", dest="rsvctrl_off", default=False,
                       help="Turn off all running metrics.  If a metric is specified, turn off only that metric.")
     parser.add_option("--enable", action="store_true", dest="rsvctrl_enable", default=False,
-                      help="Enable metric. May be specified multiple times.")
+                      help="Enable supplied metric(s).")
     parser.add_option("--disable", action="store_true", dest="rsvctrl_disable", default=False,
-                      help="Disable metric. May be specified multiple times.")
+                      help="Disable supplied metric(s).")
     #parser.add_option("--setup", action="store_true", dest="rsvctrl_setup", default=False,
     #                  help="NOT READY... COMING SOON: Setup the RSV installation (change file permissions, start Condor, ...)")
     parser.add_option("--test", action="store_true", dest="rsvctrl_test", default=False,
@@ -299,7 +299,6 @@ def main_rsv_control():
     if options.verbose:
         set_console_logging_level(logging.INFO)
         log.info("%s: Executing rsvcontrol: %s" % (time.asctime(), sys.argv))
-    # init configuration
 
     # take care of RSV cert?
     if options.user:
