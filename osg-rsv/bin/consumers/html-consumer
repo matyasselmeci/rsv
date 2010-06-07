@@ -51,6 +51,7 @@ $SIG{TERM} = \&catch_term;
 my $output_file = "$VDT_LOCATION/osg-rsv/logs/consumers/html-consumer.output";
 open($output_fh, ">>", $output_file) or die("Cannot open '$output_file' for output: $!");
 
+my $probe_classads = get_probe_classads();
 
 # Generate alerts
 my $alerts = "";
@@ -107,6 +108,42 @@ sub die_nice {
 
 
 ## -----------------------------------------------------------
+## get_probe_classads
+## Call condor_cron_q and parse the probe classads.  
+## Fetches PROBE classads only, not CONSUMER classads
+## -----------------------------------------------------------
+sub get_probe_classads {
+    # Make sure Condor is running, and we can connect to the schedd
+    my $condor_ret_code = system("$VDT_LOCATION/condor-cron/wrappers/condor_cron_q > /dev/null 2>&1");
+    return undef unless($condor_ret_code == 0);
+
+    # Get the full classads then we'll parse them
+    my @output = `$VDT_LOCATION/condor-cron/wrappers/condor_cron_q -l -constraint 'OSGRSV == "probes"'`;
+    
+    my @classads = ();
+    my $tmp = {};
+    foreach my $line (@output) {
+	chomp($line);
+
+	# If the line is empty, this classad is finished
+	if($line eq "") {
+	    if(scalar(keys(%$tmp)) > 0) {
+		push @classads, $tmp;
+		$tmp = {};
+	    }
+	}
+	
+	my @pair = split(/\s*=\s*/, $line, 2);
+	if(@pair == 2) {
+	    $tmp->{$pair[0]} = $pair[1];
+	}
+    }
+
+    return \@classads;
+}
+
+
+## -----------------------------------------------------------
 ## Alerts
 ## -----------------------------------------------------------
 sub alert_about_failed_gratia_scripts {
@@ -122,21 +159,14 @@ sub alert_about_failed_gratia_scripts {
 }
 
 sub alert_about_probes_not_running {
-    my $condor_ret_code = system("$VDT_LOCATION/condor-cron/wrappers/condor_cron_q > /dev/null 2>&1");
-
-    my $num_probes_running = 0;
-    if($condor_ret_code == 0) {
-        $num_probes_running = `$VDT_LOCATION/condor-cron/wrappers/condor_cron_q -constraint 'OSGRSV == "probes"' | grep probe_wrapper | wc -l`;
+    if(not defined($probe_classads)) {
+	return "<p class=\"alert\">WARNING: Error connecting to condor_cron. Probes might not be running.";
     }
-    
-    if($num_probes_running > 0) {
-	return "";
-    }
-    else {
+    elsif(@$probe_classads == 0) {
 	return "<p class=\"alert\">WARNING: There are no RSV probes currently running on this machine.";
     }
+    return "";
 }
-
 
 
 ## -----------------------------------------------------------
@@ -424,13 +454,20 @@ sub write_main_html_page {
 		}
 	    }
 
-	    $table_rows .= "<tr id=\"$id\"><td><a href=\"$link\">$metric</a></td><td>$time</td><td>$status</td></tr>";
+	    # Attempted to calculate next run time
+	    my $next_run_time = calculate_next_run_time($host, $metric);
+
+	    $table_rows .= "<tr id=\"$id\"><td><a href=\"$link\">$metric</a></td><td>$time</td><td>$next_run_time</td><td>$status</td></tr>";
 	}
 
 	if($active_metrics->{$host}) {
 	    foreach my $metric (sort keys %{$active_metrics->{$host}}) {
 		next if($state->{$host}{$metric});
-		$table_rows .= "<tr id=\"missing\"><td>$metric</td><td>Info missing or metric has not yet run for the first time</td><td>MISSING</td></tr>";
+
+		# Attempted to calculate next run time
+		my $next_run_time = calculate_next_run_time($host, $metric);
+
+		$table_rows .= "<tr id=\"missing\"><td>$metric</td><td>Info missing or metric has not yet run for the first time</td><td>$next_run_time</td><td>MISSING</td></tr>";
 	    }
 	}
 	
@@ -445,7 +482,25 @@ sub write_main_html_page {
 }
 
 
-
+sub calculate_next_run_time {
+    my($host, $metric) = @_;
+    
+    # For now we'll just look at the Args line and try to find a match.
+    # We should be able to improve this when we add a specific job ID in a future RSV release
+    foreach my $classad (@$probe_classads) {
+        if(grep /[\s=]$metric/, lc($classad->{Args})) {
+            # Local metrics don't have a hostname in their arguments
+            if(grep /[\s=]$host\s/, lc($classad->{Args}) or $metric =~ /local/) {
+                my $hours_til_next_run = ($classad->{DeferralTime} - time()) / 3600;
+                my $hour   = int($hours_til_next_run);
+                my $minute = int(($hours_til_next_run - $hour) * 60);
+                my $time = strftime('%Y-%m-%d %H:%M:%S', localtime($classad->{DeferralTime}));
+                return sprintf("$time (~%02i:%02i hours)", $hour, $minute);
+            }
+        }
+    }
+    return "Unknown";
+}
 
 
 ## -----------------------------------------------------------
@@ -461,6 +516,7 @@ sub html_table_template {
          <tr>
             <th>Metric</th>
             <th>Last Executed</th>
+            <th>Approximate Next Run Time</th>
             <th>Status</th>
          </tr>
       <!-- NEXT LINK -->
