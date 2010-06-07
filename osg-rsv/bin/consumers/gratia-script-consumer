@@ -58,27 +58,27 @@ foreach my $file (@files) {
 
     my $exit_status;
     eval {
-	# Setup a timeout on the script.
-	local $SIG{ALRM} = sub { die "alarm\n" }; # NB: \n required
-	alarm $timeout;
-	$exit_status = system($file);
-	alarm 0;
+        # Setup a timeout on the script.
+        local $SIG{ALRM} = sub { die "alarm\n" }; # NB: \n required
+        alarm $timeout;
+        $exit_status = system($file);
+        alarm 0;
     };
     if ($@) {
-	die_nice($@) unless $@ eq "alarm\n";   # propagate unexpected errors
-	debug_print("ERROR: Script timed out after $timeout seconds ($file)\n");
+        die_nice($@) unless $@ eq "alarm\n";   # propagate unexpected errors
+        debug_print("ERROR: Script timed out after $timeout seconds ($file)\n");
 
-	# If one script times out, they probably all will since it's likely a collector issue
-	# We'll just bail out, and come back on the next invocation of this script.
-	exit 0;
+        # If one script times out, they probably all will since it's likely a collector issue
+        # We'll just bail out, and come back on the next invocation of this script.
+        exit 0;
     }
     
     if ($exit_status) {
-	debug_print("The script '$file' exited with value " . ($exit_status >> 8) . "\n");
-	system("mv $file $FAILED_PROBES_DIR");
+        debug_print("The script '$file' exited with value " . ($exit_status >> 8) . "\n");
+        system("mv $file $FAILED_PROBES_DIR");
     }
     else {
-	unlink($file);
+        unlink($file);
     }
 }
 

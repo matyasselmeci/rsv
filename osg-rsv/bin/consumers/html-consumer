@@ -123,20 +123,20 @@ sub get_probe_classads {
     my @classads = ();
     my $tmp = {};
     foreach my $line (@output) {
-	chomp($line);
+        chomp($line);
 
-	# If the line is empty, this classad is finished
-	if($line eq "") {
-	    if(scalar(keys(%$tmp)) > 0) {
-		push @classads, $tmp;
-		$tmp = {};
-	    }
-	}
-	
-	my @pair = split(/\s*=\s*/, $line, 2);
-	if(@pair == 2) {
-	    $tmp->{$pair[0]} = $pair[1];
-	}
+        # If the line is empty, this classad is finished
+        if($line eq "") {
+            if(scalar(keys(%$tmp)) > 0) {
+                push @classads, $tmp;
+                $tmp = {};
+            }
+        }
+        
+        my @pair = split(/\s*=\s*/, $line, 2);
+        if(@pair == 2) {
+            $tmp->{$pair[0]} = $pair[1];
+        }
     }
 
     return \@classads;
@@ -151,19 +151,19 @@ sub alert_about_failed_gratia_scripts {
     my $num = scalar(@files);
 
     if($num == 0) {
-	return "";
+        return "";
     }
     else {
-	return "<p class=\"alert\">WARNING: There are $num Gratia records that could not be sent.  Inspect the log file at \$VDT_LOCATION/osg-rsv/logs/consumers/gratia-script-consumer.output";
+        return "<p class=\"alert\">WARNING: There are $num Gratia records that could not be sent.  Inspect the log file at \$VDT_LOCATION/osg-rsv/logs/consumers/gratia-script-consumer.output";
     }
 }
 
 sub alert_about_probes_not_running {
     if(not defined($probe_classads)) {
-	return "<p class=\"alert\">WARNING: Error connecting to condor_cron. Probes might not be running.";
+        return "<p class=\"alert\">WARNING: Error connecting to condor_cron. Probes might not be running.";
     }
     elsif(@$probe_classads == 0) {
-	return "<p class=\"alert\">WARNING: There are no RSV probes currently running on this machine.";
+        return "<p class=\"alert\">WARNING: There are no RSV probes currently running on this machine.";
     }
     return "";
 }
@@ -180,12 +180,12 @@ sub read_state_file {
     
     my $state_info = {};
     foreach my $line (@lines) {
-	chomp($line);
-	my @tmp = split(/\s*\|\|\s*/, $line);
-	if(@tmp == 4) {
-	    $state_info->{$tmp[0]}{$tmp[1]}{status} = $tmp[2];
-	    $state_info->{$tmp[0]}{$tmp[1]}{time}   = $tmp[3];
-	}
+        chomp($line);
+        my @tmp = split(/\s*\|\|\s*/, $line);
+        if(@tmp == 4) {
+            $state_info->{$tmp[0]}{$tmp[1]}{status} = $tmp[2];
+            $state_info->{$tmp[0]}{$tmp[1]}{time}   = $tmp[3];
+        }
     }
     return $state_info;
 }
@@ -195,10 +195,10 @@ sub write_state_file {
     open(OUT, ">", $STATE_FILE) or die_nice("Cannot write to $STATE_FILE: $!");
 
     foreach my $host (keys %$state) {
-	foreach my $metric (keys %{$state->{$host}}) {
-	    print OUT join(" || ", $host, $metric, $state->{$host}{$metric}{status}, $state->{$host}{$metric}{time});
-	    print OUT "\n";
-	}
+        foreach my $metric (keys %{$state->{$host}}) {
+            print OUT join(" || ", $host, $metric, $state->{$host}{$metric}{status}, $state->{$host}{$metric}{time});
+            print OUT "\n";
+        }
     }
     close(OUT);
     unlock_state_file();
@@ -208,16 +208,16 @@ sub lock_state_file {
     my $tries = 0;
     my $max_tries = 10;
     while(-e $STATE_LOCK) {
-	if($tries++ >= $max_tries) {
-	    # We don't want this script to hang, but we also don't want to lose info.  So if this
-	    # is locked for too long, just take ownership.  rsv-control is the other script that
-	    # locks this, and it should only have the lock for <1 second.  So if this is locked for
-	    # 10 seconds, something probably went wrong.
-	    debug_print("Could not get lock for $max_tries seconds.  Removing lock and proceeding");
-	    unlink($STATE_LOCK);
-	    last;
-	}
-	sleep 1;
+        if($tries++ >= $max_tries) {
+            # We don't want this script to hang, but we also don't want to lose info.  So if this
+            # is locked for too long, just take ownership.  rsv-control is the other script that
+            # locks this, and it should only have the lock for <1 second.  So if this is locked for
+            # 10 seconds, something probably went wrong.
+            debug_print("Could not get lock for $max_tries seconds.  Removing lock and proceeding");
+            unlink($STATE_LOCK);
+            last;
+        }
+        sleep 1;
     }
     open(OUT, '>', $STATE_LOCK) or debug_print("Unable to create lock file $STATE_LOCK: $!");
     close(OUT);
@@ -414,10 +414,10 @@ sub rotate_log {
 sub read_submission_files {
     my $active_metrics = {};
     foreach my $file (glob("$SUBMISSION_DIR/*.sub")) {
-	my $base = basename($file);
-	if($base =~ /^(.+)__.+\@(.+)\.sub$/) {
-	    $active_metrics->{lc($1)}{lc($2)} = 1;
-	}
+        my $base = basename($file);
+        if($base =~ /^(.+)__.+\@(.+)\.sub$/) {
+            $active_metrics->{lc($1)}{lc($2)} = 1;
+        }
     }
     return $active_metrics;
 }
@@ -432,47 +432,47 @@ sub write_main_html_page {
     $main_html =~ s/<!-- BEGIN ALERTS -->.*<!-- END ALERTS -->/$alerts/;
     
     foreach my $host (sort keys %$state) {
-	my $host_table_html = html_table_template();
-	$host_table_html =~ s|<!-- HOSTNAME -->.*<!-- END HOSTNAME -->|<h3>$host</h3>|;
-	
-	my $table_rows = "";
-	foreach my $metric (sort keys %{$state->{$host}}) {
-	    my $time   = $state->{$host}{$metric}{time};
-	    my $status = $state->{$host}{$metric}{status};
-	    my $link   = "$host/index.html#$metric";
+        my $host_table_html = html_table_template();
+        $host_table_html =~ s|<!-- HOSTNAME -->.*<!-- END HOSTNAME -->|<h3>$host</h3>|;
+        
+        my $table_rows = "";
+        foreach my $metric (sort keys %{$state->{$host}}) {
+            my $time   = $state->{$host}{$metric}{time};
+            my $status = $state->{$host}{$metric}{status};
+            my $link   = "$host/index.html#$metric";
 
-	    my $id = $status;
-	    # Example timestamp: <td>2009-09-25t21:13:00z</td>
-	    if($time =~ m|(\d\d\d\d-\d\d-\d\d([t ])\d\d:\d\d:\d\d)(.*)$|i) {
-		my ($metric_time, $separator, $suffix) = ($1, $2, $3);
-		my $one_day_ago = strftime('%Y-%m-%dSEP%H:%M:%SSUF', localtime(time-(60*60*24)));
-		$one_day_ago =~ s/SEP/$separator/;
-		$one_day_ago =~ s/SUF/$suffix/;
-		if($metric_time lt $one_day_ago) {
-		    next unless($active_metrics->{$host}{$metric}); # drop inactive metrics
-		    $id = "old";
-		}
-	    }
+            my $id = $status;
+            # Example timestamp: <td>2009-09-25t21:13:00z</td>
+            if($time =~ m|(\d\d\d\d-\d\d-\d\d([t ])\d\d:\d\d:\d\d)(.*)$|i) {
+                my ($metric_time, $separator, $suffix) = ($1, $2, $3);
+                my $one_day_ago = strftime('%Y-%m-%dSEP%H:%M:%SSUF', localtime(time-(60*60*24)));
+                $one_day_ago =~ s/SEP/$separator/;
+                $one_day_ago =~ s/SUF/$suffix/;
+                if($metric_time lt $one_day_ago) {
+                    next unless($active_metrics->{$host}{$metric}); # drop inactive metrics
+                    $id = "old";
+                }
+            }
 
-	    # Attempted to calculate next run time
-	    my $next_run_time = calculate_next_run_time($host, $metric);
+            # Attempted to calculate next run time
+            my $next_run_time = calculate_next_run_time($host, $metric);
 
-	    $table_rows .= "<tr id=\"$id\"><td><a href=\"$link\">$metric</a></td><td>$time</td><td>$next_run_time</td><td>$status</td></tr>";
-	}
+            $table_rows .= "<tr id=\"$id\"><td><a href=\"$link\">$metric</a></td><td>$time</td><td>$next_run_time</td><td>$status</td></tr>";
+        }
 
-	if($active_metrics->{$host}) {
-	    foreach my $metric (sort keys %{$active_metrics->{$host}}) {
-		next if($state->{$host}{$metric});
+        if($active_metrics->{$host}) {
+            foreach my $metric (sort keys %{$active_metrics->{$host}}) {
+                next if($state->{$host}{$metric});
 
-		# Attempted to calculate next run time
-		my $next_run_time = calculate_next_run_time($host, $metric);
+                # Attempted to calculate next run time
+                my $next_run_time = calculate_next_run_time($host, $metric);
 
-		$table_rows .= "<tr id=\"missing\"><td>$metric</td><td>Info missing or metric has not yet run for the first time</td><td>$next_run_time</td><td>MISSING</td></tr>";
-	    }
-	}
-	
-	$host_table_html =~ s/<!-- NEXT LINK -->/$table_rows/;
-	$main_html =~ s/(<!-- NEXT DATA -->)/$host_table_html$1/;
+                $table_rows .= "<tr id=\"missing\"><td>$metric</td><td>Info missing or metric has not yet run for the first time</td><td>$next_run_time</td><td>MISSING</td></tr>";
+            }
+        }
+        
+        $host_table_html =~ s/<!-- NEXT LINK -->/$table_rows/;
+        $main_html =~ s/(<!-- NEXT DATA -->)/$host_table_html$1/;
     }
 
     ## Write the new file back out
