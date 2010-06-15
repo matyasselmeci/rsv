@@ -1475,8 +1475,8 @@ sub Check_Local_CA{
             close FILE;
             $status_out .= "WARNING: ";
         }
-        $status_out .= "Few of the files in your installations are out of sync with the OSG diistribution.\n";
-        $status_out .= "\tThe CA that are out of sync are: @error_hash \n";
+        $status_out .= "A few of the files in your installation are out of sync with the OSG distribution.\n";
+        $status_out .= "\tThe CA(s) that are out of sync are: @error_hash \n";
         $status_out .= "\tPlease ensure that your CA update process (e.g. vdt-update-certs or yum update) is configured and running \n\n";
         $status_out .= "\t$missing_count IGTF CAs are missing and is required for sites that need to conform to EGEE policy.\n";
         $status_out .= "\tList of missing CAs include: @egee_error_hash.\n";
