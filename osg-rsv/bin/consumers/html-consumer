@@ -490,7 +490,7 @@ sub calculate_next_run_time {
     foreach my $classad (@$probe_classads) {
         if(grep /[\s=]$metric/, lc($classad->{Args})) {
             # Local metrics don't have a hostname in their arguments
-            if(grep /[\s=]$host\s/, lc($classad->{Args}) or $metric =~ /local/) {
+            if(grep /[\s=]$host[\s:]/, lc($classad->{Args}) or $metric =~ /local/) {
                 my $hours_til_next_run = ($classad->{DeferralTime} - time()) / 3600;
                 my $hour   = int($hours_til_next_run);
                 my $minute = int(($hours_til_next_run - $hour) * 60);
