@@ -1,0 +1,46 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use Getopt::Long;
+
+my $VDT_LOCATION;
+my $metric;
+
+GetOptions("vdt-install=s" => \$VDT_LOCATION,
+           "m=s"           => \$metric,
+           "help|usage"    => \&usage);
+
+if(!$metric) {
+    print "Must supply -m <metric>\n";
+    exit 1;
+}
+
+if(!$ENV{OSG_LOCATION}) {
+    report("UNKNOWN", "\$OSG_LOCATION is not set.  Cannot find OSG installation.\n");
+}
+
+my $exe = "$ENV{OSG_LOCATION}/vdt/bin/vdt-version";
+if(-e $exe) {
+    my $output = `$exe --vdt-location $ENV{OSG_LOCATION} 2>&1`;
+    if($?) {
+        report("UNKNOWN", "vdt-version reported an error\n\nOutput:\n$output\n");
+    }
+    else {
+        report("OK", "vdt-version ran successfully.\n\nOutput:\n$output\n");
+    }
+}
+else {
+    my $details = "Cannot find vdt-version executable.\n";
+    $details .= "\$OSG_LOCATION is set to '" . $ENV{OSG_LOCATION} . "'\n";
+    report("UNKNOWN", "Cannot find vdt-version executable");
+}
+
+
+sub report {
+    my ($status, $details) = @_;
+    print "JOB RESULTS:\n";
+    print "$status\n";
+    print "$details\n";
+    exit 0;
+}

@@ -1,0 +1,20 @@
+
+execute:
+ remote - run via globus-job-run
+ local  - run on the current system
+
+type:
+ set the serviceType
+
+metricType:
+ set the metricType
+ defaults to 'status' and there are no current metrics that differ from this
+
+need_proxy:
+ defaults to true
+ set to false to skip the proxy check (e.g. ping-host)
+
+jobmanager:
+ only applicable for 'remote' execute jobs
+ defaults to fork
+ may be set to any other job manager (condor, pbs, lsf, sge)

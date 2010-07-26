@@ -1,0 +1,45 @@
+
+Rules for writing probes - 
+  - can be written in any standard language that will be universally available (e.g. sh, perl, python)
+
+  - Output:
+    - must return status and details (see Example Outputs below)
+    - should not print anything else to STDOUT or STDERR
+
+  - Return code:
+    - always return 0 if the job produced a status and details (even if the status is not OK)
+    - return non-zero if the job fails for a different reason (such as bad inputs)
+
+  - will be 'local' or 'remote':
+    - local - the job will run on the same computer RSV is running on
+    - remote - the job will be run via globus-job-run at the host being monitored
+
+  - How to install probes
+    - put probe in bin/probes directory
+    - make a symlink for each metric in bin/metrics directory pointing at probe
+    - create a configuration file (more to write here)
+
+
+
+
+
+Example outputs:
+
+--------
+JOB RESULTS:
+OK
+Ping succeeded
+
+--------
+JOB RESULTS:
+CRITICAL
+Ping unsuccessful against host foo.cs.wisc.edu
+
+Troubleshooting tips:
+ - Is the network available?
+ - Is the remote computer available?
+
+Ping output:
+ping: unknown host foo
+
+---------
