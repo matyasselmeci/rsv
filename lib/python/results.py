@@ -26,7 +26,7 @@ def print_result(status, data):
     # A value of 0 means do not trim it.
     #
     if config["details_data_trim_length"] > 0:
-        rsv.log("Trimming data to length %s because details_data_trim_length is set" %
+        rsv.log("Trimming data to %s bytes because details_data_trim_length is set" %
                 config["details_data_trim_length"], 2)
         data = data[:config["details_data_trim_length"]]
 
@@ -52,7 +52,7 @@ def print_result(status, data):
     # print to the rest of the consumers
     #
     for consumer in config["consumers"]:
-        create_consumer_record(consumer)
+        create_consumer_record(consumer, utc_summary, local_summary)
 
     #
     # enhance - should we have different exit codes based on status?
@@ -82,7 +82,7 @@ def get_summary(status, this_host, timestamp, data):
 
 
 
-def create_consumer_record(consumer):
+def create_consumer_record(consumer, utc_summary, local_summary):
     """ Make a file in the consumer records area """
 
     # Check that the directory exists
@@ -114,10 +114,20 @@ def expired_user_proxy(openssl_output):
     """ CRITICAL status if proxy file is expired """
 
     status = "CRITICAL"
-    data   = "Proxy file '" + config["proxy_file"] + "' is expired " +\
-             "(or is expiring within 10 minutes)\n\n" +\
-             "openssl output:\n" +\
-             openssl_output
+    data   = "Proxy file '%s'' is expired (or is expiring within 10 minutes)\n\n" % config["proxy_file"]
+    data  += "openssl output:\n%s" % openssl_output
+    
+    print_result(status, data)
+
+
+def service_proxy_renewal_failed(openssl_output):
+    """ CRITICAL status if we can't renew the proxy """
+
+    status = "CRITICAL"
+    data   = "Proxy file '%s' could not be renewed.\n" % config["service_proxy"]
+    data  += "Service cert - %s\n" % config["service_cert"]
+    data  += "Service key  - %s\n" % config["service_key"]
+    data  += "openssl output:\n%s" % openssl_output
     
     print_result(status, data)
 
@@ -126,31 +136,28 @@ def ping_failure(output):
     """ CRITICAL status if we can't ping remote host """
     
     status = "CRITICAL"
-    data   = "Failed to ping host\n\n" +\
-             "Troubleshooting:\n" +\
-             "  Is the network available?\n" +\
-             "  Is the remote host available?\n\n" +\
-             "Ping output:\n" +\
-             output
+    data   = "Failed to ping host\n\n"
+    data  += "Troubleshooting:\n"
+    data  += "  Is the network available?\n"
+    data  += "  Is the remote host available?\n\n"
+    data  += "Ping output:\n%s" % output
 
     print_result(status, data)
 
 
 def local_job_failed(command, output):
     status = "CRITICAL"
-    data   = "Failed to run local job\n\n" + \
-             "Job run:\n" +\
-             command + "\n\n"+\
-             "Output:\n" +\
-             output
+    data   = "Failed to run local job\n\n"
+    data  += "Job run:\n%s\n\n" % command
+    data  += "Output:\n%s" % output
+
     print_result(status, data)
 
 
 def remote_job_failed(command, output):
     status = "CRITICAL"
-    data   = "Failed to run job via globus-job-run\n\n" + \
-             "Job run:\n" +\
-             command + "\n\n"+\
-             "Output:\n" +\
-             output
+    data   = "Failed to run job via globus-job-run\n\n"
+    data  += "Job run:\n%s\n\n" % command
+    data  += "Output:\n%s" % output
+
     print_result(status, data)

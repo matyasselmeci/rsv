@@ -29,11 +29,8 @@ def initialize():
     
     process_arguments()
     load_config()
+    check_proxy()
 
-    if config_val("need_proxy", "false"):
-        log("Skipping proxy check because need_proxy=false", 2)
-    else:
-        check_proxy()
     return
 
 
@@ -46,7 +43,7 @@ def clean_up():
 
 
 
-def log(message, level):
+def log(message, level, indent=0):
     """ Print a message based on the verbosity level
     Current verbosity levels:
     0 - absolutely nothing
@@ -56,6 +53,9 @@ def log(message, level):
     """
 
     if(options.verbose >= level):
+        # Only indent for debugging messages.
+        if level > 1 and indent != 0:
+            message = " "*indent + message
         print message
     return
 
@@ -74,9 +74,7 @@ def process_arguments():
     parser.add_option("-m", "--metric",  dest="metric", help="Metric to run")
     parser.add_option("-u", "--uri",     dest="uri",    help="URI to probe")
     parser.add_option("-v", "--verbose", dest="verbose", default=1, type="int",
-                      help="Verbosity level (0-3). Default=1")
-    parser.add_option("-l", "--list",    dest="list", default=0,
-                      help="List available metrics to run")
+                      help="Verbosity level (0-3). [Default=%default]")
     parser.add_option("--vdt-location", dest="vdt_location",
                       help="Supersedes VDT_LOCATION environment variable")
 
@@ -98,15 +96,13 @@ def process_arguments():
     rsv_loc = os.path.join(options.vdt_location, "osg-rsv")
     results.rsv_loc = rsv_loc
 
-    # todo - implement list?
-
     if not options.metric:
         parser.error("You must provide a metric to run")
 
     options.executable = os.path.join(rsv_loc, "bin", "metrics", options.metric)
     if not os.path.exists(options.executable):
-        # todo - not parser error
-        parser.error("Metric does not exist at " + options.executable)
+        log("ERROR: Metric does not exist at %s" % options.executable, 1)
+        sys.exit(1)
 
     if not options.uri:
         parser.error("You must provide a URI to test against")
@@ -129,7 +125,10 @@ def load_config():
     global config
 
     # Load the default values
+    log("Loading default configuration settings:", 3, 0)
     config = conf.set_defaults()
+
+    log("Reading configuration files:", 2, 0)
 
     #
     # Load the global RSV configuration file
@@ -168,7 +167,7 @@ def load_config():
 def load_config_file(file, required):
     """ Parse a configuration file of "key=val" format. """
     
-    log("reading configuration file " + file, 2)
+    log("reading configuration file " + file, 2, 4)
 
     if not os.path.exists(file):
         if required:
@@ -201,7 +200,7 @@ def ping_test():
     """ Ping the remote host to make sure it's alive before we attempt
     to run jobs """
 
-    log("Pinging host " + options.uri, 2)
+    log("Pinging host %s:" % options.uri, 2)
 
     # Send a single ping, with a timeout.  We just want to know if we can reach
     # the remote host, we don't care about the latency unless it exceeds the timeout
@@ -211,38 +210,78 @@ def ping_test():
     if ret:
         results.ping_failure(out)
         
-    log("Ping successful", 2)
+    log("Ping successful", 2, 4)
     return
 
 
 
 def check_proxy():
-    """ If we're using a service certificate, renew it now.
-        If we're using a user certificate, check that it still is valid """
+    """ Determine if we're using a service cert or user proxy and
+    validate appropriately """
 
-    #
-    # User proxy file validation
-    # 
-    if "proxy_file" in config:
-        # Check that the file exists on disk
-        if not os.path.exists(config["proxy_file"]):
-            results.missing_user_proxy()
+    if config_val("need_proxy", "false"):
+        log("Skipping proxy check because need_proxy=false", 2)
+        return
 
-        # Check that the proxy is not expiring in the next 10 minutes.  If it is
-        # going to expire our job could have a strange failure
-        (ret, out) = utils.system("/usr/bin/openssl x509 -in " + config["proxy_file"] +\
-                                  " -noout -enddate -checkend 600")
-        if ret:
-            results.expired_user_proxy(out)
-        
-    # todo - check service certificate.  Renew if applicable
-
-    #
-    # Service certificate validation and renewal
-    #
+    if "service_cert" in config and "service_key" in config:
+        renew_service_certificate_proxy()
+    elif "proxy_file" in config:
+        check_user_proxy()
+    else:
+        pass
 
     return
+
+
+
+def renew_service_certificate_proxy():
+    """ Check the service certificate.  If it is expiring soon, renew it. """
+
+    log("Checking service certificate proxy:", 2, 0)
+
+    hours_til_expiry = 6
+    seconds_til_expiry = hours_til_expiry * 60 * 60
+    (ret, out) = utils.system("/usr/bin/openssl x509 -in %s -noout -enddate -checkend %s" %
+                              (config["service_proxy"], seconds_til_expiry))
     
+    if ret == 0:
+        log("Service certificate valid for at least %s hours." % hours_til_expiry, 2, 4)
+    else:
+        log("Service certificate proxy expiring within %s hours.  Renewing it." %
+            hours_til_expiry, 2, 4)
+
+        grid_proxy_init_exe = os.path.join(options.vdt_location, "globus", "bin", "grid-proxy-init")
+        (ret, out) = utils.system("%s -cert %s %s -key %s -valid 12:00 -debug -out %s" %
+                                  (grid_proxy_init_exe, config["service_cert"],
+                                   config["service_key"], config["service_proxy"]))
+
+        if ret:
+            results.service_proxy_renewal_failed(out)
+
+    return
+
+
+
+def check_user_proxy():
+    """ Check that a proxy file is valid """
+
+    log("Checking user proxy", 2, 0)
+    
+    # Check that the file exists on disk
+    if not os.path.exists(config["proxy_file"]):
+        results.missing_user_proxy()
+
+    # Check that the proxy is not expiring in the next 10 minutes.  globus-job-run
+    # doesn't seem to like a proxy that has a lifetime of less than 3 hours anyways,
+    # so this check might need to be adjusted if that behavior is more understood.
+    (ret, out) = utils.system("/usr/bin/openssl x509 -in " + config["proxy_file"] +\
+                              " -noout -enddate -checkend 600")
+    if ret:
+        results.expired_user_proxy(out)
+
+    return
+
+
 
 def parse_job_output(output):
     """ Parse the job output from the worker script """
@@ -282,10 +321,12 @@ def execute_job():
                                   options.uri)
 
     elif config["execute"] == "remote":
-        job = "globus-job-run %s/jobmanager-%s -s %s -m %s" % (options.uri,
-                                                               config["jobmanager"],
-                                                               options.executable,
-                                                               options.metric)
+        globus_job_run_exe = os.path.join(options.vdt_location, "globus", "bin", "globus-job-run")
+        job = "%s %s/jobmanager-%s -s %s -m %s" % (globus_job_run_exe,
+                                                   options.uri,
+                                                   config["jobmanager"],
+                                                   options.executable,
+                                                   options.metric)
 
     log("Running command '" + job + "'", 2)
     # todo - wrap in a timeout
