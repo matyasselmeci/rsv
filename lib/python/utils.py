@@ -1,7 +1,39 @@
 #!/usr/bin/env python
 
 import os
+import signal
 from time import strftime, gmtime
+
+class TimeoutError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+            
+
+def alarm_handler(signum, frame):
+    raise TimeoutError("Systam call timed out")
+
+
+def system_with_timeout(command, timeout):
+    signal.signal(signal.SIGALRM, alarm_handler)
+
+    if command.find("2>") == -1:
+        command += " 2>&1"
+
+    signal.alarm(timeout)
+    try:
+        child = os.popen(command)
+        data = child.read()
+        err = child.close()
+    except TimeoutError:
+        child.close()
+        return (None, None)
+        
+    signal.alarm(0)
+    return (err, data)
+
+
 
 def system(command):
     if command.find("2>") == -1:

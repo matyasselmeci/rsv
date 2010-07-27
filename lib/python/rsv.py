@@ -5,6 +5,7 @@ import os
 import re
 import sys
 from optparse import OptionParser
+import ConfigParser
 
 # RSV libraries
 import conf
@@ -18,8 +19,8 @@ import pdb
 #
 # Declare some variables globally so that we don't have to pass them around
 #
+config  = ConfigParser.RawConfigParser()
 options = None
-config  = None
 rsv_loc = None
 
 
@@ -54,7 +55,7 @@ def log(message, level, indent=0):
 
     if(options.verbose >= level):
         # Only indent for debugging messages.
-        if level > 1 and indent != 0:
+        if options.verbose > 1 and indent != 0:
             message = " "*indent + message
         print message
     return
@@ -122,11 +123,9 @@ def load_config():
     Load host-specific metric configuration
     """
 
-    global config
-
     # Load the default values
     log("Loading default configuration settings:", 3, 0)
-    config = conf.set_defaults()
+    conf.set_defaults(config, options)
 
     log("Reading configuration files:", 2, 0)
 
@@ -153,7 +152,7 @@ def load_config():
     #
     # Validate the configuration file
     #
-    config = conf.validate(config)
+    conf.validate(config, options)
 
     #
     # Share config with the functions in results
@@ -165,7 +164,7 @@ def load_config():
 
 
 def load_config_file(file, required):
-    """ Parse a configuration file of "key=val" format. """
+    """ Parse a configuration file in INI form. """
     
     log("reading configuration file " + file, 2, 4)
 
@@ -177,20 +176,8 @@ def load_config_file(file, required):
             log("configuration file does not exist " + file, 2)
             return
 
-    lines = open(file).readlines()
-    for line in lines:
-        line = line.strip()
-        
-        # Ignore comments
-        if re.match("\#", line):
-            continue
-
-        arr = re.split("\s*=\s*", line, 2)
-        if len(arr) == 2:
-            (key, val) = arr
-            if (key in config) and (val != str(config[key])):
-                log("Overriding '%s' in config: old '%s' - new '%s'" % (key, config[key], val), 3)
-            config[key] = val
+    # todo - add some error catching here
+    config.read(file)
 
     return
 
@@ -219,22 +206,35 @@ def check_proxy():
     """ Determine if we're using a service cert or user proxy and
     validate appropriately """
 
-    if config_val("need_proxy", "false"):
+    if config_val(options.metric, "need_proxy", "false"):
         log("Skipping proxy check because need_proxy=false", 2)
         return
 
-    if "service_cert" in config and "service_key" in config:
-        renew_service_certificate_proxy()
-    elif "proxy_file" in config:
-        check_user_proxy()
-    else:
+    # First look for the service certificate.  Since this is the preferred option,
+    # it will override the proxy_file if both are set.
+    try:
+        service_cert  = config.get("rsv", "service_cert")
+        service_key   = config.get("rsv", "service_key")
+        service_proxy = config.get("rsv", "service_proxy")
+        renew_service_certificate_proxy(service_cert, service_key, service_proxy)
+        return
+    except ConfigParser.NoOptionError:
         pass
 
-    return
+    # If the service certificate is not available, look for a user proxy file
+    try:
+        proxy_file = config.get("rsv", "proxy_file")
+        check_user_proxy(proxy_file)
+        return
+    except ConfigParser.NoOptionError:
+        pass
+
+    # If we won't have a proxy, and need_proxy was not set above, we gotta bail
+    results.no_proxy_found()
 
 
 
-def renew_service_certificate_proxy():
+def renew_service_certificate_proxy(cert, key, proxy):
     """ Check the service certificate.  If it is expiring soon, renew it. """
 
     log("Checking service certificate proxy:", 2, 0)
@@ -242,7 +242,7 @@ def renew_service_certificate_proxy():
     hours_til_expiry = 6
     seconds_til_expiry = hours_til_expiry * 60 * 60
     (ret, out) = utils.system("/usr/bin/openssl x509 -in %s -noout -enddate -checkend %s" %
-                              (config["service_proxy"], seconds_til_expiry))
+                              (proxy, seconds_til_expiry))
     
     if ret == 0:
         log("Service certificate valid for at least %s hours." % hours_til_expiry, 2, 4)
@@ -252,32 +252,33 @@ def renew_service_certificate_proxy():
 
         grid_proxy_init_exe = os.path.join(options.vdt_location, "globus", "bin", "grid-proxy-init")
         (ret, out) = utils.system("%s -cert %s %s -key %s -valid 12:00 -debug -out %s" %
-                                  (grid_proxy_init_exe, config["service_cert"],
-                                   config["service_key"], config["service_proxy"]))
+                                  (grid_proxy_init_exe, cert, key, proxy))
 
         if ret:
-            results.service_proxy_renewal_failed(out)
+            results.service_proxy_renewal_failed(cert, key, proxy, out)
 
     return
 
 
 
-def check_user_proxy():
+def check_user_proxy(proxy_file):
     """ Check that a proxy file is valid """
 
     log("Checking user proxy", 2, 0)
     
     # Check that the file exists on disk
-    if not os.path.exists(config["proxy_file"]):
-        results.missing_user_proxy()
+    if not os.path.exists(proxy_file):
+        results.missing_user_proxy(proxy_file)
 
     # Check that the proxy is not expiring in the next 10 minutes.  globus-job-run
     # doesn't seem to like a proxy that has a lifetime of less than 3 hours anyways,
     # so this check might need to be adjusted if that behavior is more understood.
-    (ret, out) = utils.system("/usr/bin/openssl x509 -in " + config["proxy_file"] +\
-                              " -noout -enddate -checkend 600")
+    minutes_til_expiration = 10
+    seconds_til_expiration = minutes_til_expiration * 60
+    (ret, out) = utils.system("/usr/bin/openssl x509 -in %s -noout -enddate -checkend %s" %
+                              (proxy_file, seconds_til_expiration))
     if ret:
-        results.expired_user_proxy(out)
+        results.expired_user_proxy(proxy_file, out, minutes_til_expiration)
 
     return
 
@@ -302,9 +303,10 @@ def parse_job_output(output):
 
         # We want to display the trimmed output, unless we're in full verbose mode
         if options.verbose != 0 and options.verbose < 3:
+            trim_length = config.get("rsv", "details_data_trim_length")
             log("Displaying first %s bytes of output (use -v3 for full output)" %
-                config["details_data_trim_length"], 1)
-            output = output[:config["details_data_trim_length"]]
+                trim_length, 1)
+            output = output[:trim_length]
         else:
             log("Displaying full output received from command:", 3)
             
@@ -315,27 +317,39 @@ def parse_job_output(output):
 def execute_job():
     """ Execute the job """
 
-    if config["execute"] == "local":
+    try:
+        jobmanager  = config.get(options.metric, "jobmanager")
+        job_timeout = config.get("rsv", "job_timeout")
+    except ConfigParser.NoOptionError:
+        fatal("ej1: jobmanager or job_timeout not defined in config")
+
+    if config_val(options.metric, "execute", "local"):
         job = "%s -m %s -u %s" % (options.executable,
                                   options.metric,
                                   options.uri)
 
-    elif config["execute"] == "remote":
+    elif config_val(options.metric, "execute", "remote"):
         globus_job_run_exe = os.path.join(options.vdt_location, "globus", "bin", "globus-job-run")
         job = "%s %s/jobmanager-%s -s %s -m %s" % (globus_job_run_exe,
                                                    options.uri,
-                                                   config["jobmanager"],
+                                                   jobmanager,
                                                    options.executable,
                                                    options.metric)
 
-    log("Running command '" + job + "'", 2)
-    # todo - wrap in a timeout
-    (ret, out) = utils.system(job)
 
+    log("Running command '%s'" % job, 2)
+
+    (ret, out) = utils.system_with_timeout(job, job_timeout)
+
+    # (None, None) will be returned on a timeout.  This could maybe be improved by throwing
+    # an exception?  My knowledge of Python is weak here.
+    if ret == None and out == None:
+        results.job_timed_out(job, job_timeout)
+        
     if ret:
-        if config["execute"] == "local":
+        if config_val("execute", "local"):
             results.local_job_failed(job, out)
-        elif config["execute"] == "remote":
+        elif config_val("execute", "remote"):
             results.remote_job_failed(job, out)
         
     parse_job_output(out)
@@ -344,13 +358,30 @@ def execute_job():
 
 
 
-def config_val(key, value):
-    """ Check if key is in config, and if it equals val (case-insensitive) """
+def config_val(section, key, value, cs=1):
+    """ Check if key is in config, and if it equals val.  cs = case-insensitive """
 
-    if not key in config:
+    try:
+        # cs = case insensitive
+        if cs == 1:
+            if config.get(section, key).lower() == str(value).lower():
+                return True
+        else:
+            if config.get(section, key) == str(value):
+                return True
+    except ConfigParser.NoOptionError:
         return False
-
-    if str(config[key]).lower() == str(value).lower():
-        return True
-
+        
     return False
+
+
+def fatal(msg=None):
+    """ For bad errors that we don't know the cause of """
+
+    output  = "ERROR: An unexpected internal error has occurred.  "
+    output += "Please re-run this script with -v3 and send the output to the developer."
+    if msg != None:
+        output += "Error message: %s" % msg
+
+    log(output, 1, 0)
+    sys.exit(1)
