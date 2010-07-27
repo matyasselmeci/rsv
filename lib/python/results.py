@@ -23,12 +23,12 @@ def print_result(status, data):
     """ Print the result to all consumers """
 
     #
-    # Trim the data appropriately based on details_data_trim_length.
+    # Trim the data appropriately based on details-data-trim-length.
     # A value of 0 means do not trim it.
     #
-    trim_length = CONFIG.get("rsv", "details_data_trim_length")
+    trim_length = CONFIG.get("rsv", "details-data-trim-length")
     if trim_length > 0:
-        rsv.log("Trimming data to %s bytes because details_data_trim_length is set" %
+        rsv.log("Trimming data to %s bytes because details-data-trim-length is set" %
                 trim_length, 2)
         data = data[:trim_length]
 
@@ -70,10 +70,10 @@ def get_summary(status, this_host, timestamp, data):
     """
 
     try:
-        metric_type  = CONFIG.get(OPTIONS.metric, "metric_type")
-        service_type = CONFIG.get(OPTIONS.metric, "service_type")
+        metric_type  = CONFIG.get(OPTIONS.metric, "metric-type")
+        service_type = CONFIG.get(OPTIONS.metric, "service-type")
     except ConfigParser.NoOptionError:
-        rsv.fatal("gs1: metric_type or service_type not defined in config")
+        rsv.fatal("gs1: metric-type or service-type not defined in config")
 
     result  = "metricName: %s\n"   % OPTIONS.metric
     result += "metricType: %s\n"   % metric_type

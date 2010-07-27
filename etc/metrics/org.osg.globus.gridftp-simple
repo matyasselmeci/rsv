@@ -1,0 +1,9 @@
+[org.osg.globus.gridftp-simple params]
+
+port = 2811
+# gridftp-destination-dir = /tmp
+# gridftp-delay = 60
+
+[org.osg.globus.gridftp-simple]
+execute = remote
+service-type = OSG-GridFtp

@@ -121,10 +121,10 @@ def validate(config, options):
     # check vital configuration for the job
     #
     try:
-        config.get(options.metric, "type")
+        config.get(options.metric, "service_type")
         config.get(options.metric, "execute")
     except ConfigParser.NoOptionError:
-        rsv.log("ERROR: metric configuration is missing 'type' or 'execute' declaration.\n" +
+        rsv.log("ERROR: metric configuration is missing 'service_type' or 'execute' declaration.\n" +
                 "This is likely caused by a missing or corrupt metric configuration file", 1, 0)
         sys.exit(1)
 

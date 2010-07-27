@@ -205,16 +205,16 @@ def check_proxy():
     """ Determine if we're using a service cert or user proxy and
     validate appropriately """
 
-    if config_val(OPTIONS.metric, "need_proxy", "false"):
-        log("Skipping proxy check because need_proxy=false", 2)
+    if config_val(OPTIONS.metric, "need-proxy", "false"):
+        log("Skipping proxy check because need-proxy=false", 2)
         return
 
     # First look for the service certificate.  Since this is the preferred option,
-    # it will override the proxy_file if both are set.
+    # it will override the proxy-file if both are set.
     try:
-        service_cert  = CONFIG.get("rsv", "service_cert")
-        service_key   = CONFIG.get("rsv", "service_key")
-        service_proxy = CONFIG.get("rsv", "service_proxy")
+        service_cert  = CONFIG.get("rsv", "service-cert")
+        service_key   = CONFIG.get("rsv", "service-key")
+        service_proxy = CONFIG.get("rsv", "service-proxy")
         renew_service_certificate_proxy(service_cert, service_key, service_proxy)
         return
     except ConfigParser.NoOptionError:
@@ -222,13 +222,13 @@ def check_proxy():
 
     # If the service certificate is not available, look for a user proxy file
     try:
-        proxy_file = CONFIG.get("rsv", "proxy_file")
+        proxy_file = CONFIG.get("rsv", "proxy-file")
         check_user_proxy(proxy_file)
         return
     except ConfigParser.NoOptionError:
         pass
 
-    # If we won't have a proxy, and need_proxy was not set above, we gotta bail
+    # If we won't have a proxy, and need-proxy was not set above, we gotta bail
     results.no_proxy_found()
 
 
@@ -302,7 +302,7 @@ def parse_job_output(output):
 
         # We want to display the trimmed output, unless we're in full verbose mode
         if OPTIONS.verbose != 0 and OPTIONS.verbose < 3:
-            trim_length = CONFIG.get("rsv", "details_data_trim_length")
+            trim_length = CONFIG.get("rsv", "details-data-trim-length")
             log("Displaying first %s bytes of output (use -v3 for full output)" %
                 trim_length, 1)
             output = output[:trim_length]
