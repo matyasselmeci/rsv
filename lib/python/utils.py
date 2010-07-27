@@ -5,6 +5,7 @@ import signal
 from time import strftime, gmtime
 
 class TimeoutError(Exception):
+    """ This defines an Exception that we can use if our system call times out """
     def __init__(self, value):
         self.value = value
     def __str__(self):
@@ -16,11 +17,20 @@ def alarm_handler(signum, frame):
 
 
 def system_with_timeout(command, timeout):
+    """ Run a system command with a timeout specified (in seconds).
+    Returns:
+      1) exit code
+      2) STDOUT/STDERR (combined)
+
+    I think this could be better done using the socket module, but we need
+    Python 2.7 for that.
+    """
     signal.signal(signal.SIGALRM, alarm_handler)
 
     if command.find("2>") == -1:
         command += " 2>&1"
 
+    # todo - is this the right way to time out a system call?
     signal.alarm(timeout)
     try:
         child = os.popen(command)
@@ -36,6 +46,14 @@ def system_with_timeout(command, timeout):
 
 
 def system(command):
+    """ Run a system command
+    Returns:
+      1) exit code
+      2) STDOUT/STDERR (combined)
+
+    I think this could be better done using the socket module, but we need
+    Python 2.7 for that.
+    """
     if command.find("2>") == -1:
         command += " 2>&1"
 

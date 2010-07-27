@@ -2,7 +2,6 @@
 
 # Standard libraries
 import os
-import re
 import sys
 from optparse import OptionParser
 import ConfigParser
@@ -19,9 +18,9 @@ import pdb
 #
 # Declare some variables globally so that we don't have to pass them around
 #
-config  = ConfigParser.RawConfigParser()
-options = None
-rsv_loc = None
+CONFIG  = ConfigParser.RawConfigParser()
+OPTIONS = None
+RSV_LOC = None
 
 
 def initialize():
@@ -53,9 +52,9 @@ def log(message, level, indent=0):
     3 - absolutely everything
     """
 
-    if(options.verbose >= level):
+    if(OPTIONS.verbose >= level):
         # Only indent for debugging messages.
-        if options.verbose > 1 and indent != 0:
+        if OPTIONS.verbose > 1 and indent != 0:
             message = " "*indent + message
         print message
     return
@@ -65,7 +64,7 @@ def log(message, level, indent=0):
 def process_arguments():
     """Process the command line arguments and populate global variables"""
 
-    global options
+    global OPTIONS
 
     #
     # Define the options to parse on the command line
@@ -79,38 +78,38 @@ def process_arguments():
     parser.add_option("--vdt-location", dest="vdt_location",
                       help="Supersedes VDT_LOCATION environment variable")
 
-    (options, args) = parser.parse_args()
+    (OPTIONS, args) = parser.parse_args()
 
     #
     # Do error checking on the options supplied
     #
-    if options.vdt_location:
+    if OPTIONS.vdt_location:
         log("Using alternate VDT_LOCATION supplied on command line", 1)
     elif "VDT_LOCATION" in os.environ:
-        options.vdt_location = os.environ["VDT_LOCATION"]
+        OPTIONS.vdt_location = os.environ["VDT_LOCATION"]
     else:
         parser.error("You must have VDT_LOCATION set in your environment.\n" +\
                      "  Either source setup.sh or pass --vdt-location")
 
-    # Set rsv_loc as a shortcut for using in other code
-    global rsv_loc
-    rsv_loc = os.path.join(options.vdt_location, "osg-rsv")
-    results.rsv_loc = rsv_loc
+    # Set RSV_LOC as a shortcut for using in other code
+    global RSV_LOC
+    RSV_LOC = os.path.join(OPTIONS.vdt_location, "osg-rsv")
+    results.RSV_LOC = RSV_LOC
 
-    if not options.metric:
+    if not OPTIONS.metric:
         parser.error("You must provide a metric to run")
 
-    options.executable = os.path.join(rsv_loc, "bin", "metrics", options.metric)
-    if not os.path.exists(options.executable):
-        log("ERROR: Metric does not exist at %s" % options.executable, 1)
+    OPTIONS.executable = os.path.join(RSV_LOC, "bin", "metrics", OPTIONS.metric)
+    if not os.path.exists(OPTIONS.executable):
+        log("ERROR: Metric does not exist at %s" % OPTIONS.executable, 1)
         sys.exit(1)
 
-    if not options.uri:
+    if not OPTIONS.uri:
         parser.error("You must provide a URI to test against")
 
 
     # Share options with the functions in results
-    results.options = options
+    results.OPTIONS = OPTIONS
 
     return
 
@@ -125,59 +124,59 @@ def load_config():
 
     # Load the default values
     log("Loading default configuration settings:", 3, 0)
-    conf.set_defaults(config, options)
+    conf.set_defaults(CONFIG, OPTIONS)
 
     log("Reading configuration files:", 2, 0)
 
     #
     # Load the global RSV configuration file
     #
-    global_conf_file = os.path.join(rsv_loc, "etc", "rsv.conf")
+    global_conf_file = os.path.join(RSV_LOC, "etc", "rsv.conf")
     load_config_file(global_conf_file, required=1)
 
     #
     # Load configuration specific to the metric
     #
-    metric_conf_file = os.path.join(rsv_loc, "etc", "metrics",
-                                    options.metric + ".conf")
+    metric_conf_file = os.path.join(RSV_LOC, "etc", "metrics",
+                                    OPTIONS.metric + ".conf")
     load_config_file(metric_conf_file, required=1)
     
     #
     # Load configuration specific to the metric/host combination
     #
-    metric_host_conf_file = os.path.join(rsv_loc, "etc", "metrics", options.uri,
-                                         options.metric + ".conf")
+    metric_host_conf_file = os.path.join(RSV_LOC, "etc", "metrics", OPTIONS.uri,
+                                         OPTIONS.metric + ".conf")
     load_config_file(metric_host_conf_file, required=0)
 
     #
     # Validate the configuration file
     #
-    conf.validate(config, options)
+    conf.validate(CONFIG, OPTIONS)
 
     #
     # Share config with the functions in results
     #
-    results.config = config
+    results.CONFIG = CONFIG
 
     return
 
 
 
-def load_config_file(file, required):
+def load_config_file(config_file, required):
     """ Parse a configuration file in INI form. """
     
-    log("reading configuration file " + file, 2, 4)
+    log("reading configuration file " + config_file, 2, 4)
 
-    if not os.path.exists(file):
+    if not os.path.exists(config_file):
         if required:
-            log("ERROR: missing required configuration file '%s'" % file, 1)
+            log("ERROR: missing required configuration file '%s'" % config_file, 1)
             sys.exit(1)
         else:
-            log("configuration file does not exist " + file, 2)
+            log("configuration file does not exist " + config_file, 2)
             return
 
     # todo - add some error catching here
-    config.read(file)
+    CONFIG.read(config_file)
 
     return
 
@@ -187,11 +186,11 @@ def ping_test():
     """ Ping the remote host to make sure it's alive before we attempt
     to run jobs """
 
-    log("Pinging host %s:" % options.uri, 2)
+    log("Pinging host %s:" % OPTIONS.uri, 2)
 
     # Send a single ping, with a timeout.  We just want to know if we can reach
     # the remote host, we don't care about the latency unless it exceeds the timeout
-    (ret, out) = utils.system("/bin/ping -W 3 -c 1 " + options.uri)
+    (ret, out) = utils.system("/bin/ping -W 3 -c 1 " + OPTIONS.uri)
 
     # If we can't ping the host, it's CRITICAL
     if ret:
@@ -206,16 +205,16 @@ def check_proxy():
     """ Determine if we're using a service cert or user proxy and
     validate appropriately """
 
-    if config_val(options.metric, "need_proxy", "false"):
+    if config_val(OPTIONS.metric, "need_proxy", "false"):
         log("Skipping proxy check because need_proxy=false", 2)
         return
 
     # First look for the service certificate.  Since this is the preferred option,
     # it will override the proxy_file if both are set.
     try:
-        service_cert  = config.get("rsv", "service_cert")
-        service_key   = config.get("rsv", "service_key")
-        service_proxy = config.get("rsv", "service_proxy")
+        service_cert  = CONFIG.get("rsv", "service_cert")
+        service_key   = CONFIG.get("rsv", "service_key")
+        service_proxy = CONFIG.get("rsv", "service_proxy")
         renew_service_certificate_proxy(service_cert, service_key, service_proxy)
         return
     except ConfigParser.NoOptionError:
@@ -223,7 +222,7 @@ def check_proxy():
 
     # If the service certificate is not available, look for a user proxy file
     try:
-        proxy_file = config.get("rsv", "proxy_file")
+        proxy_file = CONFIG.get("rsv", "proxy_file")
         check_user_proxy(proxy_file)
         return
     except ConfigParser.NoOptionError:
@@ -250,7 +249,7 @@ def renew_service_certificate_proxy(cert, key, proxy):
         log("Service certificate proxy expiring within %s hours.  Renewing it." %
             hours_til_expiry, 2, 4)
 
-        grid_proxy_init_exe = os.path.join(options.vdt_location, "globus", "bin", "grid-proxy-init")
+        grid_proxy_init_exe = os.path.join(OPTIONS.vdt_location, "globus", "bin", "grid-proxy-init")
         (ret, out) = utils.system("%s -cert %s %s -key %s -valid 12:00 -debug -out %s" %
                                   (grid_proxy_init_exe, cert, key, proxy))
 
@@ -302,8 +301,8 @@ def parse_job_output(output):
         log("ERROR: invalid data returned from job.", 1)
 
         # We want to display the trimmed output, unless we're in full verbose mode
-        if options.verbose != 0 and options.verbose < 3:
-            trim_length = config.get("rsv", "details_data_trim_length")
+        if OPTIONS.verbose != 0 and OPTIONS.verbose < 3:
+            trim_length = CONFIG.get("rsv", "details_data_trim_length")
             log("Displaying first %s bytes of output (use -v3 for full output)" %
                 trim_length, 1)
             output = output[:trim_length]
@@ -318,23 +317,23 @@ def execute_job():
     """ Execute the job """
 
     try:
-        jobmanager  = config.get(options.metric, "jobmanager")
-        job_timeout = config.get("rsv", "job_timeout")
+        jobmanager  = CONFIG.get(OPTIONS.metric, "jobmanager")
+        job_timeout = CONFIG.get("rsv", "job_timeout")
     except ConfigParser.NoOptionError:
         fatal("ej1: jobmanager or job_timeout not defined in config")
 
-    if config_val(options.metric, "execute", "local"):
-        job = "%s -m %s -u %s" % (options.executable,
-                                  options.metric,
-                                  options.uri)
+    if config_val(OPTIONS.metric, "execute", "local"):
+        job = "%s -m %s -u %s" % (OPTIONS.executable,
+                                  OPTIONS.metric,
+                                  OPTIONS.uri)
 
-    elif config_val(options.metric, "execute", "remote"):
-        globus_job_run_exe = os.path.join(options.vdt_location, "globus", "bin", "globus-job-run")
+    elif config_val(OPTIONS.metric, "execute", "remote"):
+        globus_job_run_exe = os.path.join(OPTIONS.vdt_location, "globus", "bin", "globus-job-run")
         job = "%s %s/jobmanager-%s -s %s -m %s" % (globus_job_run_exe,
-                                                   options.uri,
+                                                   OPTIONS.uri,
                                                    jobmanager,
-                                                   options.executable,
-                                                   options.metric)
+                                                   OPTIONS.executable,
+                                                   OPTIONS.metric)
 
 
     log("Running command '%s'" % job, 2)
@@ -358,16 +357,15 @@ def execute_job():
 
 
 
-def config_val(section, key, value, cs=1):
-    """ Check if key is in config, and if it equals val.  cs = case-insensitive """
+def config_val(section, key, value, case_sensitive=0):
+    """ Check if key is in config, and if it equals val. """
 
     try:
-        # cs = case insensitive
-        if cs == 1:
-            if config.get(section, key).lower() == str(value).lower():
+        if case_sensitive == 0:
+            if CONFIG.get(section, key).lower() == str(value).lower():
                 return True
         else:
-            if config.get(section, key) == str(value):
+            if CONFIG.get(section, key) == str(value):
                 return True
     except ConfigParser.NoOptionError:
         return False

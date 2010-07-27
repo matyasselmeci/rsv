@@ -2,7 +2,6 @@
 
 # Standard libraries
 import os
-import re
 import sys
 import ConfigParser
 from pwd import getpwnam
@@ -19,6 +18,7 @@ def set_defaults(config, options):
     config.add_section(options.metric)
 
     def set_default_value(section, key, val):
+        """ Set an individual item """
         config.set(section, key, val)
         rsv.log("Setting default '%s=%s'" % (key, val), 3, 4)
 
@@ -30,7 +30,7 @@ def set_defaults(config, options):
     # The only metricType that any current metric has is "status".  So instead
     # of declaring it in every single <metric>.conf file, we'll set it here but
     # still make it possible to configure in case it is needed in the future.
-    set_default_value(options.metric, "metricType", "status")
+    set_default_value(options.metric, "metric_type", "status")
 
     # Just in case the details data returned is enormous, we'll set the default
     # to trim it down to in bytes.  A value of 0 means no trimming.

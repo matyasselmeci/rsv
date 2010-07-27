@@ -4,9 +4,9 @@
 import os
 import re
 import sys
-import time
 import socket
 import tempfile
+import ConfigParser
 
 # RSV libraries
 import rsv
@@ -15,9 +15,9 @@ import utils
 # todo -remove before release
 import pdb
 
-options = None
-config  = None
-rsv_loc = None
+OPTIONS = None
+CONFIG  = None
+RSV_LOC = None
 
 def print_result(status, data):
     """ Print the result to all consumers """
@@ -26,7 +26,7 @@ def print_result(status, data):
     # Trim the data appropriately based on details_data_trim_length.
     # A value of 0 means do not trim it.
     #
-    trim_length = config.get("rsv", "details_data_trim_length")
+    trim_length = CONFIG.get("rsv", "details_data_trim_length")
     if trim_length > 0:
         rsv.log("Trimming data to %s bytes because details_data_trim_length is set" %
                 trim_length, 2)
@@ -46,7 +46,7 @@ def print_result(status, data):
     #
     # Create a record for each consumer
     #
-    for consumer in re.split("\s*,\s*", config.get("rsv", "consumers")):
+    for consumer in re.split("\s*,\s*", CONFIG.get("rsv", "consumers")):
         if not consumer.isspace():
             create_consumer_record(consumer, utc_summary, local_summary)
 
@@ -70,17 +70,17 @@ def get_summary(status, this_host, timestamp, data):
     """
 
     try:
-        metricType = config.get(options.metric, "metricType")
-        type =       config.get(options.metric, "type")
+        metric_type  = CONFIG.get(OPTIONS.metric, "metric_type")
+        service_type = CONFIG.get(OPTIONS.metric, "service_type")
     except ConfigParser.NoOptionError:
-        rsv.fatal("gs1: metricType or type not defined in config")
+        rsv.fatal("gs1: metric_type or service_type not defined in config")
 
-    result  = "metricName: %s\n"   % options.metric
-    result += "metricType: %s\n"   % metricType
+    result  = "metricName: %s\n"   % OPTIONS.metric
+    result += "metricType: %s\n"   % metric_type
     result += "timestamp: %s\n"    % timestamp
     result += "metricStatus: %s\n" % status
-    result += "serviceType: %s\n"  % type
-    result += "serviceURI: %s\n"   % options.uri
+    result += "serviceType: %s\n"  % service_type
+    result += "serviceURI: %s\n"   % OPTIONS.uri
     result += "gatheredAt: %s\n"   % this_host
     result += "summaryData: %s\n"  % status
     result += "detailsData: %s\n"  % data
@@ -94,12 +94,12 @@ def create_consumer_record(consumer, utc_summary, local_summary):
     """ Make a file in the consumer records area """
 
     # Check/create the directory that we'll put record into
-    output_dir = os.path.join(rsv_loc, "output", consumer)
+    output_dir = os.path.join(RSV_LOC, "output", consumer)
 
     if not validate_directory(output_dir):
         rsv.log("WARNING: Cannot write record for consumer '%s'" % consumer, 1, 0)
     else:
-        prefix = options.metric + "."
+        prefix = OPTIONS.metric + "."
         (file_handle, file_path) = tempfile.mkstemp(prefix=prefix, dir=output_dir)
 
         # todo - allow for consumer config files that specify which time to use
@@ -146,7 +146,7 @@ def validate_directory(output_dir):
 
 
 
-def missing_user_proxy():
+def no_proxy_found():
     """ CRITICAL status if we don't have a proxy """
     status = "CRITICAL"
     data   = "No proxy is setup in rsv.conf.\n\n"
@@ -159,7 +159,8 @@ def missing_user_proxy():
 
 
 def missing_user_proxy(proxy_file):
-    """ CRITICAL status if user proxy is missing """
+    """ Using a user proxy and the specified file does not exist """
+    
     status = "CRITICAL"
     data   = "proxy_file is set in rsv.conf, but the file '%s' does not exist." % proxy_file
     print_result(status, data)
@@ -167,10 +168,11 @@ def missing_user_proxy(proxy_file):
 
 
 def expired_user_proxy(proxy_file, openssl_output, minutes_til_expiration):
-    """ CRITICAL status if proxy file is expired """
+    """ If the user proxy is expired, we cannot renew it like we can with
+    the service proxy """
     
     status = "CRITICAL"
-    data   = "Proxy file '%s' is expired (or is expiring within %s minutes)\n\n" %\
+    data   = "Proxy file '%s' is expired (or is expiring within %s minutes)\n\n" % \
              (proxy_file, minutes_til_expiration)
     data  += "openssl output:\n%s" % openssl_output
     
@@ -178,7 +180,7 @@ def expired_user_proxy(proxy_file, openssl_output, minutes_til_expiration):
 
 
 def service_proxy_renewal_failed(cert, key, proxy, openssl_output):
-    """ CRITICAL status if we can't renew the proxy """
+    """ We failed to renew the service proxy using openssl """
 
     status = "CRITICAL"
     data   = "Proxy file '%s' could not be renewed.\n" % proxy
@@ -190,7 +192,7 @@ def service_proxy_renewal_failed(cert, key, proxy, openssl_output):
 
 
 def ping_failure(output):
-    """ CRITICAL status if we can't ping remote host """
+    """ We cannot ping the remote host """
     
     status = "CRITICAL"
     data   = "Failed to ping host\n\n"
@@ -203,6 +205,7 @@ def ping_failure(output):
 
 
 def local_job_failed(command, output):
+    """ Failed to run a metric of type local """
     status = "CRITICAL"
     data   = "Failed to run local job\n\n"
     data  += "Job run:\n%s\n\n" % command
@@ -212,6 +215,7 @@ def local_job_failed(command, output):
 
 
 def remote_job_failed(command, output):
+    """ Failed to run a metric of type remote """
     status = "CRITICAL"
     data   = "Failed to run job via globus-job-run\n\n"
     data  += "Job run:\n%s\n\n" % command
@@ -221,6 +225,7 @@ def remote_job_failed(command, output):
 
 
 def job_timed_out(command, timeout):
+    """ The job exceeded our timeout value """
     status = "CRITICAL"
     data   = "Timeout hit - execution of the job exceeded %s seconds\n\n" % timeout
     data  += "Job run:\n%s\n\n" % command
