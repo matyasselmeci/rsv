@@ -7,9 +7,10 @@ use Getopt::Long;
 my $VDT_LOCATION;
 my $metric;
 
-GetOptions("vdt-install=s" => \$VDT_LOCATION,
-           "m=s"           => \$metric,
-           "help|usage"    => \&usage);
+GetOptions("vdt-location=s" => \$VDT_LOCATION,
+           "m=s"            => \$metric,
+           "u=s"            => \$uri,
+           "help|usage"     => \&usage);
 
 if(!$metric) {
     print "Must supply -m <metric>\n";

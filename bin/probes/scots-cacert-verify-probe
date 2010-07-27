@@ -1,0 +1,243 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use Getopt::Long;
+use File::Basename;
+use File::Temp qw/ tempdir /;
+
+my $VDT_LOCATION;
+my $metric;
+my $uri;
+
+my $OPT_FIRST_ERROR_TIME;
+my $OPT_ERROR_HOURS = 3*24; # Default: error after 72 hours
+my $OPT_CACERTS_DIR;
+my $OPT_TYPE = "osg";
+my $OPT_MD5SUM_URL  = "http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt";
+my $OPT_CA_LIST_URL = "http://software.grid.iu.edu/pacman/cadist/INDEX.txt";
+
+GetOptions("vdt-location=s" => \$VDT_LOCATION,
+           "m=s"            => \$metric,
+           "u=s"            => \$uri,
+           "error-hours=i"  => \$OPT_ERROR_HOURS,
+           "cacerts-dir=s"  => \$OPT_CACERTS_DIR,
+           "type=s"         => \$OPT_TYPE,
+           "md5sum-url=s"   => \$OPT_MD5SUM_URL,
+           "ca-list-url=s"  => \$OPT_CA_LIST_URL, 
+           "first-error-time=i" => \$OPT_FIRST_ERROR_TIME,
+           "help|usage"     => \&usage);
+
+#if(!$metric) {
+#    print "Must supply -m <metric>\n";
+#    exit 1;
+#}
+
+#if(!$uri) {
+#    print "Must supply -u <uri>\n";
+#    exit 1;
+#}
+
+my $working_dir;
+initialize();
+my $correct_md5sums = get_osg_ca_md5sums();
+my $ca_list_sources = get_osg_ca_list_sources();
+my $local_md5sums   = get_local_md5sums();
+compare_md5sums($correct_md5sums, $local_md5sums, $ca_list_sources);
+
+sub initialize {
+    if(not $VDT_LOCATION) {
+        $VDT_LOCATION = determine_vdt_location();
+    }
+
+    # todo - this is using local VDT_LOCATION and it should use remote VDT_LOCATION
+    if(not $OPT_CACERTS_DIR) {
+        $OPT_CACERTS_DIR = "$VDT_LOCATION/globus/TRUSTED_CA";
+    }
+
+    $working_dir = tempdir("osgrsv-ca-XXXXXX", TMPDIR => 1, CLEANUP => 1);
+}
+
+sub determine_vdt_location {
+    if($ENV{OSG_LOCATION}) {
+        return $ENV{OSG_LOCATION};
+    }
+    elsif($ENV{VDT_LOCATION}) {
+        return $ENV{VDT_LOCATION};
+    }
+    else { 
+        report("UNKNOWN", 
+               "Neither \$OSG_LOCATION nor \$VDT_LOCATION is set.  Cannot find OSG installation.\n");
+    }
+
+}
+
+
+sub get_osg_ca_md5sums {
+    my $downloaded_md5_file = "$working_dir/certs-md5sums.txt";
+    my $cmd = "wget $OPT_MD5SUM_URL -O $downloaded_md5_file >/dev/null 2>&1";
+    
+    if(system($cmd)) {
+        report("UNKNOWN", 
+               "Could not download the md5sum for CA list from OSG ($OPT_MD5SUM_URL). " . 
+               "Unable to verify CAs");
+    }
+    
+    if(!open(FILE, '<', $downloaded_md5_file)) {
+        report("UNKNOWN", 
+               "The downloaded md5sum file from OSG could not be opened. Unable to verify CAs.");
+    }
+
+    my @contents = <FILE>;
+    close(FILE);
+    my %md5;
+    foreach my $line (@contents) {
+        chomp($line);
+        my @values = split /\s+/, $line;
+        my $local_hash = (split(/\.0/,$values[1]))[0];
+        $md5{$local_hash} = $values[0];
+    }
+    return \%md5;
+}
+
+
+sub get_osg_ca_list_sources {
+    # Get the list of Certs included in OSG from GOC website.
+    my $ca_index_file = "$working_dir/certs-list.txt";
+    my $cmd = "wget $OPT_CA_LIST_URL -O $ca_index_file >/dev/null 2>&1";
+
+    if(system($cmd)) {
+        report("UNKNOWN",
+               "Could not download the CA list from OSG ($OPT_CA_LIST_URL). Unable to verify CAs");
+    }
+
+    if(!open(FILE, '<', $ca_index_file)) {
+        report("UNKNOWN",
+               "The downloaded CA list from OSG could not be opened. Unable to verify CAs.");
+    }
+    
+    my @contents = <FILE>;  
+    close(FILE);
+
+    my %source;
+    foreach my $line (@contents) {
+        next if($line =~ /^Hash/i);
+        next if($line =~ /^--/i);
+        next if($line =~ /^\s+$/i);    # Empty lines
+        next if($line =~ /^\#/i);      # allow comments in future
+	last if($line =~ /^Sources/i); # Reached end of file
+	my @line_content = split /\s+/, $line;
+        my $hash = $line_content[0];
+        $source{$hash} = $line_content[$#line_content];
+    }
+
+    return \%source;
+}
+
+
+# Get the list of CAs installed on remote CE and their md5sums
+sub get_local_md5sums {
+
+    # todo - this shouldn't be *.0
+    my $CACERTS = "$OPT_CACERTS_DIR/*.0";
+    my @contents = split /\n/, `/usr/bin/md5sum $CACERTS`;
+
+    if( ($? >> 8) != 0 ) {
+        report("UNKNOWN", "Failed to calculate md5sums of your CA files in $CACERTS");
+    }
+
+    my %local_md5sum;
+    foreach my $line (@contents) {
+        my ($md5sum, $path) = split(/\s+/, $line);
+        my $cert = basename($path);
+        (my $hash = $cert) =~ s/\.\d$//;
+        $local_md5sum{$hash} = $md5sum;
+    }
+
+    return \%local_md5sum;
+}
+
+
+# Check the CAs to ensure that md5sums matchup
+sub compare_md5sums {
+    my ($correct_md5sum, $local_md5sum, $ca_list_sources) = @_;
+
+    my @error_hash;
+    foreach my $local_hash (keys %$local_md5sum) {
+        # Ignore CAs not from OSG.
+        next if(!exists $ca_list_sources->{$local_hash});
+
+        # For EGEE test we want to check only IGTF CAs
+        next if($OPT_TYPE =~ /egee/i and $ca_list_sources->{$local_hash} !~ /I/ );
+
+        if ($correct_md5sum->{$local_hash} ne $local_md5sum->{$local_hash}){
+            # We have detected at least a warning
+            push @error_hash, $local_hash;
+        }
+    }
+
+    #
+    # Special Case: For EGEE tests we want to notify of errors if any IGTF CAs are missing.
+    #
+    my @egee_error_hash;
+    if(lc($OPT_TYPE) eq "egee") {
+        for my $hash (keys %$ca_list_sources) {
+            next if ($ca_list_sources->{$hash} !~ /I/ ); # Ignore non IGTF CAs
+            next if ($local_md5sum->{$hash});            # CA is present. 
+            push @egee_error_hash, $hash;
+        }
+    }
+
+    #
+    # See if the warning should be an error
+    #
+    my $now = time();
+    
+    my $problem_found = (@error_hash > 0 or @egee_error_hash > 0) ? 1 : 0;
+
+    my $status = "OK";
+    if($problem_found) {
+        if ($OPT_FIRST_ERROR_TIME) {
+            my $error_threshold_time = $OPT_FIRST_ERROR_TIME + $OPT_ERROR_HOURS*60*60;
+            if ($now > $error_threshold_time){
+                # Escalate warning to error
+                $status = "ERROR";
+            }
+            else {
+                $status = "WARNING";
+            }
+        }
+        else {
+            # Out of sync for the first time
+            $status = "WARNING";
+        }
+
+        my $details = "Some of the certificate in your installation are out of " . 
+            "sync with the OSG distribution.\n";
+        $details .= "Ensure that your CA update process (e.g. vdt-update-certs " .
+            "or yum update) is configured and running \n\n";
+
+        if(@error_hash) {
+            $details .= "\tThe CA that are out of sync are: " . join(" ", @error_hash) . "\n";
+        }
+
+        if(@egee_error_hash) {
+            my $missing_count = scalar(@egee_error_hash);
+            $details .= "\t$missing_count IGTF CA(s) are missing and are required for sites that need to conform to EGEE policy.\n";
+            $details .= "\tList of missing CAs: " . join(" ", @egee_error_hash) . "\n";
+        }
+        report($status, $details);
+    }
+
+    # Everything is OK
+    report("OK", "CAs are in sync with OSG distribution");
+}
+
+
+sub report {
+    my ($status, $details) = @_;
+    print "JOB RESULTS:\n";
+    print "$status\n";
+    print "$details\n";
+    exit 0;
+}

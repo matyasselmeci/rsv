@@ -8,7 +8,7 @@ my $VDT_LOCATION;
 my $metric;
 my $uri;
 
-GetOptions("vdt-install=s" => \$VDT_LOCATION,
+GetOptions("vdt-location=s" => \$VDT_LOCATION,
            "m=s"           => \$metric,
            "u=s"           => \$uri,
            "help|usage"    => \&usage);

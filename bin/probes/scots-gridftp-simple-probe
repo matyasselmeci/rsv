@@ -1,0 +1,106 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use Getopt::Long;
+use File::Basename;
+
+my $VDT_LOCATION;
+my $metric;
+my $uri;
+
+# Remote port number.  2811 is the default
+my $OPT_PORT = 2811;
+# Remote directory to transfer file to
+my $OPT_DEST_DIR = "/tmp";
+my $OPT_LOCAL_DIR = "/tmp";
+# Delay (in seconds) between sending and receiving
+my $OPT_GRIDFTP_DELAY = 60;
+
+GetOptions("vdt-location=s" => \$VDT_LOCATION,
+           "m=s"            => \$metric,
+           "u=s"            => \$uri,
+           "port"           => \$OPT_PORT,
+           "gridftp-destination-dir=s" => \$OPT_DEST_DIR,
+           "local-destination-dir=s"   => \$OPT_LOCAL_DIR,
+           "gridftp-delay=i" => \$OPT_GRIDFTP_DELAY,
+           "help|usage"     => \&usage);
+
+#if(!$metric) {
+#    print "Must supply -m <metric>\n";
+#    exit 1;
+#}
+
+if(!$uri) {
+    print "Must supply -u <uri>\n";
+    exit 1;
+}
+
+if(!$VDT_LOCATION) {
+    if(!$ENV{VDT_LOCATION}) {
+        report("UNKNOWN", 
+               "Either set \$VDT_LOCATION (source setup.sh) or pass --vdt-location.\n");
+    }
+    else {
+        $VDT_LOCATION = $ENV{VDT_LOCATION};
+    }
+}
+
+#initialize();
+call_gridftp();
+
+
+sub call_gridftp {
+    my $test_file = "$VDT_LOCATION/osg-rsv/bin/probes/test-files/gridftp-probe-test-file";
+    my $test_file_uri = "file://$test_file";
+    
+    my $timestamp = time();
+    my $remote_file = "$OPT_DEST_DIR/gridftp-probe-test-file-remote.$timestamp.$$";
+    my $remote_file_uri = "gsiftp://$uri:$OPT_PORT/$remote_file";
+
+    my $copyback_file = "$OPT_LOCAL_DIR/gridftp-probe-test-file-copy.$timestamp.$$";
+    my $copyback_file_uri = "file://$copyback_file";
+
+    my $globus_url_copy_exe = "$VDT_LOCATION/globus/bin/globus-url-copy";
+
+    if(system("$globus_url_copy_exe $test_file_uri $remote_file_uri")) {
+        # todo - get output
+        report("CRITICAL", "Failed to transfer file")
+    }
+
+    # Sleep for a bit in between the transfers (the original probe did this)
+    sleep($OPT_GRIDFTP_DELAY);
+
+    if(system("$globus_url_copy_exe $remote_file_uri $copyback_file_uri")) {
+        # todo - get output
+        report("CRITICAL", "Failed to transfer file back");
+    }
+    
+    my $diff_exe = "/usr/bin/diff";
+    if(!-e $diff_exe) {
+        report("CRITICAL", "$diff_exe does not exist to compare files");
+    }
+
+    if(system("$diff_exe $test_file $copyback_file")) {
+        report("CRITICAL", "File copied to uri and back is different from the original file.\n" .
+               "Absolute error message: todo")
+    }
+
+    unlink($copyback_file);
+    # todo - remove remote file
+
+    report("OK", "Gridftp was succesfully tested! Upload to and download from remote " . 
+           "host succeeded; Received file is valid.");
+}
+
+
+
+
+
+sub report {
+    my ($status, $details) = @_;
+    print "JOB RESULTS:\n";
+    print "$status\n";
+    print "$details\n";
+    exit 0;
+}

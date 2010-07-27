@@ -1,0 +1,6 @@
+cacert-verify-probe - 
+The probe is stateful.  If it notices that certificates are out of sync with the
+distribution it is a warning, and it records the time.  If the problem persists
+72 hours after it is first detected, it escalates to an error.
+
+A successful check resets the timer (it deletes the state file)
