@@ -322,18 +322,31 @@ def execute_job():
     except ConfigParser.NoOptionError:
         fatal("ej1: jobmanager or job_timeout not defined in config")
 
+    # Build the custom parameters to the script
+    params_section = OPTIONS.metric + " params"
+    args = ""
+    try:
+        for option in CONFIG.options(params_section):
+            args += "--%s %s " % (option, CONFIG.get(params_section, option))
+    except ConfigParser.NoSectionError:
+        log("No '%s' section found" % params_section, 2, 0)
+    
+
     if config_val(OPTIONS.metric, "execute", "local"):
-        job = "%s -m %s -u %s" % (OPTIONS.executable,
-                                  OPTIONS.metric,
-                                  OPTIONS.uri)
+        job = "%s -m %s -u %s %s" % (OPTIONS.executable,
+                                     OPTIONS.metric,
+                                     OPTIONS.uri,
+                                     args)
 
     elif config_val(OPTIONS.metric, "execute", "remote"):
         globus_job_run_exe = os.path.join(OPTIONS.vdt_location, "globus", "bin", "globus-job-run")
-        job = "%s %s/jobmanager-%s -s %s -m %s" % (globus_job_run_exe,
-                                                   OPTIONS.uri,
-                                                   jobmanager,
-                                                   OPTIONS.executable,
-                                                   OPTIONS.metric)
+        job = "%s %s/jobmanager-%s -s %s -m %s -u %s %s" % (globus_job_run_exe,
+                                                            OPTIONS.uri,
+                                                            jobmanager,
+                                                            OPTIONS.executable,
+                                                            OPTIONS.metric,
+                                                            OPTIONS.uri,
+                                                            args)
 
 
     log("Running command '%s'" % job, 2)

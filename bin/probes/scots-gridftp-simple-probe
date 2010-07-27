@@ -20,7 +20,7 @@ my $OPT_GRIDFTP_DELAY = 60;
 GetOptions("vdt-location=s" => \$VDT_LOCATION,
            "m=s"            => \$metric,
            "u=s"            => \$uri,
-           "port"           => \$OPT_PORT,
+           "port=s"         => \$OPT_PORT,
            "gridftp-destination-dir=s" => \$OPT_DEST_DIR,
            "local-destination-dir=s"   => \$OPT_LOCAL_DIR,
            "gridftp-delay=i" => \$OPT_GRIDFTP_DELAY,

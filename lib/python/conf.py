@@ -30,11 +30,11 @@ def set_defaults(config, options):
     # The only metricType that any current metric has is "status".  So instead
     # of declaring it in every single <metric>.conf file, we'll set it here but
     # still make it possible to configure in case it is needed in the future.
-    set_default_value(options.metric, "metric_type", "status")
+    set_default_value(options.metric, "metric-type", "status")
 
     # Just in case the details data returned is enormous, we'll set the default
     # to trim it down to in bytes.  A value of 0 means no trimming.
-    set_default_value("rsv", "details_data_trim_length", 10000)
+    set_default_value("rsv", "details-data-trim-length", 10000)
 
     # Set the job timeout default in seconds
     set_default_value("rsv", "job_timeout", 300)
@@ -121,10 +121,10 @@ def validate(config, options):
     # check vital configuration for the job
     #
     try:
-        config.get(options.metric, "service_type")
+        config.get(options.metric, "service-type")
         config.get(options.metric, "execute")
     except ConfigParser.NoOptionError:
-        rsv.log("ERROR: metric configuration is missing 'service_type' or 'execute' declaration.\n" +
+        rsv.log("ERROR: metric configuration is missing 'service-type' or 'execute' declaration.\n" +
                 "This is likely caused by a missing or corrupt metric configuration file", 1, 0)
         sys.exit(1)
 
