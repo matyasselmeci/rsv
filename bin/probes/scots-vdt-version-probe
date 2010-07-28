@@ -6,6 +6,7 @@ use Getopt::Long;
 
 my $VDT_LOCATION;
 my $metric;
+my $uri;
 
 GetOptions("vdt-location=s" => \$VDT_LOCATION,
            "m=s"            => \$metric,

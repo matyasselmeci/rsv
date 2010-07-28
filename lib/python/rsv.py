@@ -340,7 +340,7 @@ def execute_job():
 
     elif config_val(OPTIONS.metric, "execute", "remote"):
         globus_job_run_exe = os.path.join(OPTIONS.vdt_location, "globus", "bin", "globus-job-run")
-        job = "%s %s/jobmanager-%s -s %s -m %s -u %s %s" % (globus_job_run_exe,
+        job = "%s %s/jobmanager-%s -s %s -- -m %s -u %s %s" % (globus_job_run_exe,
                                                             OPTIONS.uri,
                                                             jobmanager,
                                                             OPTIONS.executable,
@@ -359,9 +359,9 @@ def execute_job():
         results.job_timed_out(job, job_timeout)
         
     if ret:
-        if config_val("execute", "local"):
+        if config_val("rsv", "execute", "local"):
             results.local_job_failed(job, out)
-        elif config_val("execute", "remote"):
+        elif config_val("rsv", "execute", "remote"):
             results.remote_job_failed(job, out)
         
     parse_job_output(out)
