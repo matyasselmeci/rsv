@@ -22,6 +22,8 @@ CONFIG  = ConfigParser.RawConfigParser()
 OPTIONS = None
 RSV_LOC = None
 
+OPENSSL_EXE = "/usr/bin/openssl"
+
 
 def initialize():
     """ Handle the command line, load configuration files and do other basic
@@ -240,7 +242,7 @@ def renew_service_certificate_proxy(cert, key, proxy):
 
     hours_til_expiry = 6
     seconds_til_expiry = hours_til_expiry * 60 * 60
-    (ret, out) = utils.system("/usr/bin/openssl x509 -in %s -noout -enddate -checkend %s" %
+    (ret, out) = utils.system("OPENSSL_EXE x509 -in %s -noout -enddate -checkend %s" %
                               (proxy, seconds_til_expiry))
     
     if ret == 0:
@@ -250,11 +252,16 @@ def renew_service_certificate_proxy(cert, key, proxy):
             hours_til_expiry, 2, 4)
 
         grid_proxy_init_exe = os.path.join(OPTIONS.vdt_location, "globus", "bin", "grid-proxy-init")
-        (ret, out) = utils.system("%s -cert %s %s -key %s -valid 12:00 -debug -out %s" %
+        (ret, out) = utils.system("%s -cert %s -key %s -valid 12:00 -debug -out %s" %
                                   (grid_proxy_init_exe, cert, key, proxy))
 
         if ret:
             results.service_proxy_renewal_failed(cert, key, proxy, out)
+
+    # Globus needs help finding the service proxy since it probably does not have the
+    # default naming scheme of /tmp/x509_u<UID>
+    os.environ["X509_USER_PROXY"] = proxy
+    os.environ["X509_PROXY_FILE"] = proxy
 
     return
 
@@ -274,10 +281,14 @@ def check_user_proxy(proxy_file):
     # so this check might need to be adjusted if that behavior is more understood.
     minutes_til_expiration = 10
     seconds_til_expiration = minutes_til_expiration * 60
-    (ret, out) = utils.system("/usr/bin/openssl x509 -in %s -noout -enddate -checkend %s" %
+    (ret, out) = utils.system("OPENSSL_EXE x509 -in %s -noout -enddate -checkend %s" %
                               (proxy_file, seconds_til_expiration))
     if ret:
         results.expired_user_proxy(proxy_file, out, minutes_til_expiration)
+
+    # Just in case this isn't the default /tmp/x509_u<UID> we'll explicitly set it
+    os.environ["X509_USER_PROXY"] = proxy
+    os.environ["X509_PROXY_FILE"] = proxy
 
     return
 

@@ -57,7 +57,11 @@ def validate(config, options):
         rsv.log("ERROR: 'user' is missing in rsv.conf.  Set this value to your RSV user", 1)
         sys.exit(1)
 
-    (desired_uid, desired_gid) = getpwnam(user)[2:4]
+    try:
+        (desired_uid, desired_gid) = getpwnam(user)[2:4]
+    except KeyError:
+        rsv.log("ERROR: The '%s' user defined in rsv.conf does not exist" % user, 1, 4)
+        sys.exit(1)
         
     this_process_uid = os.getuid()
     if this_process_uid == desired_uid:
