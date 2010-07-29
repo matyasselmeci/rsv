@@ -242,8 +242,8 @@ def renew_service_certificate_proxy(cert, key, proxy):
 
     hours_til_expiry = 6
     seconds_til_expiry = hours_til_expiry * 60 * 60
-    (ret, out) = utils.system("OPENSSL_EXE x509 -in %s -noout -enddate -checkend %s" %
-                              (proxy, seconds_til_expiry))
+    (ret, out) = utils.system("%s x509 -in %s -noout -enddate -checkend %s" %
+                              (OPENSSL_EXE, proxy, seconds_til_expiry))
     
     if ret == 0:
         log("Service certificate valid for at least %s hours." % hours_til_expiry, 2, 4)
@@ -281,14 +281,14 @@ def check_user_proxy(proxy_file):
     # so this check might need to be adjusted if that behavior is more understood.
     minutes_til_expiration = 10
     seconds_til_expiration = minutes_til_expiration * 60
-    (ret, out) = utils.system("OPENSSL_EXE x509 -in %s -noout -enddate -checkend %s" %
-                              (proxy_file, seconds_til_expiration))
+    (ret, out) = utils.system("%s x509 -in %s -noout -enddate -checkend %s" %
+                              (OPENSSL_EXE, proxy_file, seconds_til_expiration))
     if ret:
         results.expired_user_proxy(proxy_file, out, minutes_til_expiration)
 
     # Just in case this isn't the default /tmp/x509_u<UID> we'll explicitly set it
-    os.environ["X509_USER_PROXY"] = proxy
-    os.environ["X509_PROXY_FILE"] = proxy
+    os.environ["X509_USER_PROXY"] = proxy_file
+    os.environ["X509_PROXY_FILE"] = proxy_file
 
     return
 
