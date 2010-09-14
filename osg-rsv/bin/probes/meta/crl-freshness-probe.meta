@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.certificates.crl-expiry
-metricType: status
-probeType: OSG-CE
-enableByDefault: true
-metricInterval: 30 */6 * * *
-description: This is a site-level probe that checks if the CRLs have been updated recently.
-EOT

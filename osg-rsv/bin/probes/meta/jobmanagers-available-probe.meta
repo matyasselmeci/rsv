@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.batch.jobmanagers-available
-metricType: status
-probeType: OSG-CE
-enableByDefault: true
-metricInterval: 59 4 * * *
-description: Probe to report the job-managers available on the remote host.
-EOT

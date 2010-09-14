@@ -1,8 +1,0 @@
-serviceType: OSG-GridFtp
-metricName: org.osg.globus.gridftp-simple
-metricType: status
-probeType: OSG-GridFTP
-enableByDefault: true
-metricInterval: 8 * * * *
-description: Probe to check if GridFTP works to and from remote host.
-EOT

@@ -1,0 +1,3 @@
+[gratia-consumer]
+
+environment = PYTHONPATH=!!VDT_LOCATION!!/gratia/probe/common:!!VDT_LOCATION!!/gratia/probe/metric:!!VDT_PYTHONPATH!!

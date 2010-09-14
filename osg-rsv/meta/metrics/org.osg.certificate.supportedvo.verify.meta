@@ -1,0 +1,13 @@
+[org.osg.certificate.supportedvo.verify]
+default-cron-interval = 55 */6 * * *
+
+execute = local
+service-type = OSG-CE
+output-format = wlcg
+probe-spec = v3
+
+
+[org.osg.certificate.supportedvo.verify env]
+PERL5LIB = PREPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes:!!VDT_PERL5LIB!!
+LD_LIBRARY_PATH = APPEND | !!VDT_LOCATION!!/globus/lib
+GLOBUS_LOCATION = SET | !!VDT_LOCATION!!/globus

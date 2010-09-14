@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.certificate.supportedvo.verify
-metricType: status
-probeType: OSG-CE
-enableByDefault: false
-metricInterval: 55 */6 * * *
-description: Checks the supported VO list at the site and verifies if all the CAs needed by the VOs in that list are present at the site.
-EOT

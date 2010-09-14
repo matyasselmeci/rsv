@@ -1,0 +1,8 @@
+#!/bin/sh
+python_path=$(
+cd -P -- "$(dirname -- "$0")/../lib/python" &&
+pwd -P
+)
+export PYTHONPATH="$python_path:$PYTHONPATH"
+python $python_path/rsv-control.py $@
+

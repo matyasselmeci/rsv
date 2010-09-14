@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.general.osg-directories-diskspace
-metricType: status
-probeType: OSG-CE
-enableByDefault: false
-metricInterval: 27 * * * *
-description: Probe to print disk space available on OSG directories defined by various common OSG environment variables.
-EOT

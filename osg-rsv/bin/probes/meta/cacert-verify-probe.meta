@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.certificates.cacert-expiry
-metricType: status
-probeType: OSG-CE
-enableByDefault: true
-metricInterval: 15 */6 * * *
-description: Verifies if the CA distribution at the site is up to date.
-EOT

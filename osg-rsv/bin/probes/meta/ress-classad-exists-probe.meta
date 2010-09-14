@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.ress.ress-classad-exists
-metricType: status
-probeType: OSG-CE
-enableByDefault: true
-metricInterval: 24 */2 * * *
-description: Checks if a site is advertising to the ReSS collector
-EOT

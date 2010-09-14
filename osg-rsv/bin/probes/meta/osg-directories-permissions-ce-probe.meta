@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.general.osg-directories-CE-permissions
-metricType: status
-probeType: OSG-CE
-enableByDefault: true
-metricInterval: 37 * * * *
-description: Probe to check if permissions are set correctly on important user-accesible OSG directories defined by various common OSG environment variables.
-EOT

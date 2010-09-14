@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.ress.classad-valid
-metricType: status
-probeType: OSG-CE
-enableByDefault: false
-metricInterval: 24 */2 * * *
-description: Test if all the classad attributes are valid for a resource.
-EOT

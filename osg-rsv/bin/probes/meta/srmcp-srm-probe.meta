@@ -1,8 +1,0 @@
-serviceType: OSG-SRM
-metricName: org.osg.srm.srmcp-readwrite
-metricType: status
-probeType: OSG-SRM
-enableByDefault: true
-metricInterval: 28 * * * *
-description: Probe to check if srmcp can perform a data transfer to and from a stroage element using the srm protocol.
-EOT

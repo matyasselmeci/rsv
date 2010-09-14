@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.general.vdt-version
-metricType: status
-probeType: OSG-CE
-enableByDefault: true
-metricInterval: 47 18 * * *
-description: Probe to report the version of vdt stack running on remote host.
-EOT

@@ -1,8 +1,0 @@
-serviceType: OSG-SRM
-metricName: org.osg.srm.srmping
-metricType: status
-probeType: OSG-SRM
-enableByDefault: true
-metricInterval: 13,33,53 * * * *
-description: Probe to check if a SRM server node is responding to srm-pings.
-EOT

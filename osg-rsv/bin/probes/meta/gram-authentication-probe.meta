@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.globus.gram-authentication
-metricType: status
-probeType: OSG-CE
-enableByDefault: true
-metricInterval: 31 * * * *
-description: Probe to check if we can authenticate to remote site with available proxy.
-EOT

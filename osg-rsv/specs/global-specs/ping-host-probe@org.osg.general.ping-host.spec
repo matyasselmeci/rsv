@@ -1,1 +1,0 @@
---ping-timeout 4 --ping-count 2

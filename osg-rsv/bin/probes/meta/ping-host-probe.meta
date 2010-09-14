@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.general.ping-host
-metricType: status
-probeType: OSG-CE
-enableByDefault: true
-metricInterval: 7,27,47 * * * *
-description: Probe to check if a remote host is responding to pings.
-EOT

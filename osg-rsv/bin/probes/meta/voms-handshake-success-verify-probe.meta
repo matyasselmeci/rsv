@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.verify.voms.handshake.success
-metricType: status
-probeType: OSG-CE
-enableByDefault: false
-metricInterval: 50 */6 * * *
-description: This is a local probe that checks the log file to see if there were any failures when running edg-mkgridmap.
-EOT

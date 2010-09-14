@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.verify.voms.handshake
-metricType: status
-probeType: OSG-CE
-enableByDefault: false
-metricInterval: 50 */6 * * *
-description: This is a site-level probe that checks when edg-mkgridmap was last run.
-EOT

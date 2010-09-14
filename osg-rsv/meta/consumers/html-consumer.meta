@@ -1,0 +1,4 @@
+[html-consumer]
+
+timestamp = local
+environment = PERL5LIB=!!VDT_PERL5LIB!!

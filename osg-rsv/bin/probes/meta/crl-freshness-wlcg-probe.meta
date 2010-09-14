@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.crl.wlcg.freshness
-metricType: status
-probeType: OSG-CE
-enableByDefault: false
-metricInterval: 30 */6 * * *
-description: This is a site-lvel probe that checks if CRLs have been updated recently.
-EOT

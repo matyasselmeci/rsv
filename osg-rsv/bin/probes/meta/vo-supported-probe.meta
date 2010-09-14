@@ -1,8 +1,0 @@
-serviceType: OSG-CE
-metricName: org.osg.general.vo-supported
-metricType: status
-probeType: OSG-CE
-enableByDefault: true
-metricInterval: 47 6,18 * * *
-description: Probe to print the list of supported VOs on remote host.
-EOT

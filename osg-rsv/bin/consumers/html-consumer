@@ -1,534 +1,441 @@
-#!/usr/bin/env perl
-use strict;
-use warnings;
+#!/usr/bin/env python
 
-use POSIX;
-use IO::File;
-use File::Basename;
-use Getopt::Long;
+""" This script processes records generates a local HTML page for viewing results """
 
-# Declare this early
-my $output_fh;
+import os
+import re
+import sys
+import time
+import pickle
+import signal
+import ConfigParser
+from time import strftime
+from optparse import OptionParser
 
-# Turn autoflush on
-$|=1;
+# Holds all the metric info.  This is a multi-level data structure with the following
+# format:
+#   <Host> -> {}
+#             <Metric> -> {}
+#                         time   = Last time metric ran
+#                         status = Last status of metric
+#                         history -> []
+#                                    <full text of record>
+#                                    <full text of record>
+#                                    ...
+#            <Metric2> -> {}
+#                         ...
+#  <Host2> -> {}
+#             ...
+STATE = {}
 
-##
-## Make sure we have VDT_LOCATION set in our environment
-##
-my $VDT_LOCATION = $ENV{VDT_LOCATION};
-die("ERROR: The VDT_LOCATION environment variable is not set") unless ($VDT_LOCATION);
-die("ERROR: VDT_LOCATION is set to an non-existing location '$VDT_LOCATION'") unless (-e $VDT_LOCATION);
+ALERTS = []
+OPTIONS = None
+CONSUMER_DONE = 0
 
-##
-my $PROBE_LOG_DIRECTORY = "$VDT_LOCATION/osg-rsv/output/probes";
-my $PROBE_END_MARK = "EOT";
-
-my $SUBMISSION_DIR = "$VDT_LOCATION/osg-rsv/submissions/probes";
-my $FAILED_GRATIA_SCRIPTS_DIR = "$VDT_LOCATION/osg-rsv/output/failed-gratia-scripts";
-
-# Get command line options
-my $OUTPUT_DIR = "$VDT_LOCATION/osg-rsv/output/html";
-GetOptions("html-output" => \$OUTPUT_DIR);
-
-my $STATE_FILE = "$OUTPUT_DIR/state.file";
-my $STATE_LOCK = "$STATE_FILE.lock";
-my $MAIN_HTML  = "$OUTPUT_DIR/index.html";
-
-
-## If this is set to true, we'll exit
-my $CONSUMER_DONE = 0;
-
-#
-# Allow for graceful shutdown
-$SIG{TERM} = \&catch_term;
+class InvalidRecordError(Exception):
+    """ Custom exception for a bad record format """
+    pass
 
 
-##
-## If we print to STDOUT and STDERR, Condor will overwrite the file everytime the
-## script executes.  So we'll use a file to record all output, and rotate it.
-##
-my $output_file = "$VDT_LOCATION/osg-rsv/logs/consumers/html-consumer.output";
-open($output_fh, ">>", $output_file) or die("Cannot open '$output_file' for output: $!");
-
-my $probe_classads = get_probe_classads();
-
-# Generate alerts
-my $alerts = "";
-$alerts .= alert_about_failed_gratia_scripts();
-$alerts .= alert_about_probes_not_running();
-
-my $state = read_state_file();
-process_records($state);
-write_state_file($state);
-my $active_metrics = read_submission_files();
-write_main_html_page($alerts, $state, $active_metrics);
-
-debug_print("Finished execution\n");
-close(OUT);
-exit 0;
+def main():
+    initialize()
+    load_state_file()
+    process_files()
+    generate_html_files()
+    write_state_file()
+    sys.exit(0)
 
 
-## -----------------------------------------------------------
-## debug_print
-## Add a timestamp to messages
-## -----------------------------------------------------------
-sub debug_print {
-   my ($str) = @_;
-   my $msg = strftime("%Y-%m-%d %H:%M:%S - $str\n" , localtime);
-   print $msg;
+def initialize():
+    """ Check that environment is valid """
 
-   # Just in case this hasn't been opened yet
-   if(defined($output_fh)) {
-       print $output_fh $msg;
-   }
-}
+    usage = """usage: html-consumer
+      --vdt-location <VDT directory>
+      --output-dir <HTML directory>
+      --max-history <Number of historical entries>
+      --help | -h 
+      --version
+    """
+
+    version = "html-consumer 4.0"
+    description = "This script processes RSV records and generates an HTML status page."
+
+    parser = OptionParser(usage=usage, description=description, version=version)
+    parser.add_option("--vdt-location", dest="vdt_location", default=None,
+                      help="Root directory of the OSG installation", metavar="DIR")
+    parser.add_option("--output-dir", dest="output-dir", default=None,
+                      help="Directory to store HTML output", metavar="DIR")
+    parser.add_option("--max_history", dest="max_history", default=20, type="int",
+                      help="Number of historical entries to store for each metric.", metavar="SIZE")
+    parser.add_option("--record_trim_length", dest="record_trim_length", type="int", default=10000,
+                      help="Size in bytes to trim each record.  Default=%default", metavar="LENGTH" )
+
+    global OPTIONS
+    (OPTIONS, args) = parser.parse_args()
+
+    #
+    # Validate VDT-LOCATION
+    #
+    if not OPTIONS.vdt_location:
+        if "VDT_LOCATION" not in os.environ:
+            die("ERROR: VDT_LOCATION must be set in the environment or passed on the command line.")
+        else:
+            OPTIONS.vdt_location = os.environ["VDT_LOCATION"]
+
+    if not os.path.exists(OPTIONS.vdt_location):
+        die("ERROR: VDT_LOCATION is set to a non-existent directory: '%s'" % OPTIONS.vdt_location)
+
+    OPTIONS.rsv_location = os.path.join(OPTIONS.vdt_location, "osg-rsv")
+
+    #
+    # Open a file for logging all output.  If we print all output to STDOUT it will end up in
+    # a file that Condor will overwrite every time this script executes, so we'll move it to
+    # a more permanent log file and rotate it manually.
+    #
+    log_file = os.path.join(OPTIONS.rsv_location, "logs", "consumers", "html-consumer.output")
+    OPTIONS.log = open(log_file, 'a')
+
+    log("html-consumer initializing.")
+
+    # Where records will be read from
+    # This script will delete files from this directory, so it also needs write access.
+    OPTIONS.records_dir = os.path.join(OPTIONS.rsv_location, "output", "html-consumer")
+    if not os.access(OPTIONS.records_dir, os.F_OK):
+        die("ERROR: Records directory does not exist '%s'" % OPTIONS.records_dir)
+    if not os.access(OPTIONS.records_dir, os.R_OK):
+        die("ERROR: Cannot read records directory '%s'" % OPTIONS.records_dir)
+    if not os.access(OPTIONS.records_dir, os.W_OK):
+        die("ERROR: Cannot write records directory '%s'" % OPTIONS.records_dir)
+
+    # Catch some signals and exit gracefully if we get them
+    signal.signal(signal.SIGINT, sigterm_handler)
+    signal.signal(signal.SIGTERM, sigterm_handler)
+
+    return
 
 
-## -----------------------------------------------------------
-## catch_term
-## SIGTERM handler - used to allow the consumer to exit gently.
-## -----------------------------------------------------------
-sub catch_term {
-    debug_print "Caught signal! Exiting...\n";
-    $CONSUMER_DONE = 1;
-}
+def get_state_file_path():
+    """ Returns the path of the state file """
+    return os.path.join(OPTIONS.rsv_location, "output", "html", "state.file")
 
 
-## -----------------------------------------------------------
-## die_nice
-## Record the message in the output file before die'ing
-## -----------------------------------------------------------
-sub die_nice {
-    my $message = shift;
-    print OUT debug_print($message);
-    close(OUT);
-    die $message;
-}
+def load_state_file():
+    """ Process the HTML state file """
 
+    global ALERTS
+    state_file = get_state_file_path()
 
-## -----------------------------------------------------------
-## get_probe_classads
-## Call condor_cron_q and parse the probe classads.  
-## Fetches PROBE classads only, not CONSUMER classads
-## -----------------------------------------------------------
-sub get_probe_classads {
-    # Make sure Condor is running, and we can connect to the schedd
-    my $condor_ret_code = system("$VDT_LOCATION/condor-cron/wrappers/condor_cron_q > /dev/null 2>&1");
-    return undef unless($condor_ret_code == 0);
+    if not os.path.exists(state_file):
+        log("State file does not exist.")
+        return
 
-    # Get the full classads then we'll parse them
-    my @output = `$VDT_LOCATION/condor-cron/wrappers/condor_cron_q -l -constraint 'OSGRSV == "probes"'`;
-    
-    my @classads = ();
-    my $tmp = {};
-    foreach my $line (@output) {
-        chomp($line);
+    try:
+        state_file_fp = open(state_file, 'r')
+    except IOError, err:
+        # If we can't read/write to the state file we won't be able to save any
+        # results, but we should still write an HTML page with the problem.
+        msg = "Error trying to load state file - %s" % err
+        log(msg)
+        ALERTS.append(msg)
+        return
 
-        # If the line is empty, this classad is finished
-        if($line eq "") {
-            if(scalar(keys(%$tmp)) > 0) {
-                push @classads, $tmp;
-                $tmp = {};
-            }
-        }
+    try:
+        global STATE
+        STATE = pickle.load(state_file_fp)
+    except EOFError, err:
+        # Should this be a warning?
+        log("State file is empty")
+    except pickle.UnpicklingError, err:
+        msg = "Error loading state file - %s" % err
+        log(msg)
+        # We should assume nobody will ever read the log file.  Push all error
+        # messages to the web page for higher visibility.
+        ALERTS.append(msg)
         
-        my @pair = split(/\s*=\s*/, $line, 2);
-        if(@pair == 2) {
-            $tmp->{$pair[0]} = $pair[1];
-        }
-    }
-
-    return \@classads;
-}
+    return
 
 
-## -----------------------------------------------------------
-## Alerts
-## -----------------------------------------------------------
-sub alert_about_failed_gratia_scripts {
-    my @files = glob("$FAILED_GRATIA_SCRIPTS_DIR/*");
-    my $num = scalar(@files);
+def write_state_file():
+    """ Save the state back to disk """
 
-    if($num == 0) {
-        return "";
-    }
-    else {
-        return "<p class=\"alert\">WARNING: There are $num Gratia records that could not be sent.  Inspect the log file at \$VDT_LOCATION/osg-rsv/logs/consumers/gratia-script-consumer.output";
-    }
-}
+    state_file = get_state_file_path()
 
-sub alert_about_probes_not_running {
-    if(not defined($probe_classads)) {
-        return "<p class=\"alert\">WARNING: Error connecting to condor_cron. Probes might not be running.";
-    }
-    elsif(@$probe_classads == 0) {
-        return "<p class=\"alert\">WARNING: There are no RSV probes currently running on this machine.";
-    }
-    return "";
-}
+    state_fp = open(state_file, 'w')
+    pickle.dump(STATE, state_fp)
+    state_fp.close()
+
+    return
 
 
-## -----------------------------------------------------------
-## State file
-## -----------------------------------------------------------
+def process_files():
+    """ Open the records directory and load each file """
 
-sub read_state_file {
-    lock_state_file();
-
-    my @lines = (-e $STATE_FILE) ? @{readfile($STATE_FILE)} : ();
-    
-    my $state_info = {};
-    foreach my $line (@lines) {
-        chomp($line);
-        my @tmp = split(/\s*\|\|\s*/, $line);
-        if(@tmp == 4) {
-            $state_info->{$tmp[0]}{$tmp[1]}{status} = $tmp[2];
-            $state_info->{$tmp[0]}{$tmp[1]}{time}   = $tmp[3];
-        }
-    }
-    return $state_info;
-}
-
-sub write_state_file {
-    my ($state) = @_;
-    open(OUT, ">", $STATE_FILE) or die_nice("Cannot write to $STATE_FILE: $!");
-
-    foreach my $host (keys %$state) {
-        foreach my $metric (keys %{$state->{$host}}) {
-            print OUT join(" || ", $host, $metric, $state->{$host}{$metric}{status}, $state->{$host}{$metric}{time});
-            print OUT "\n";
-        }
-    }
-    close(OUT);
-    unlock_state_file();
-}
-
-sub lock_state_file {
-    my $tries = 0;
-    my $max_tries = 10;
-    while(-e $STATE_LOCK) {
-        if($tries++ >= $max_tries) {
-            # We don't want this script to hang, but we also don't want to lose info.  So if this
-            # is locked for too long, just take ownership.  rsv-control is the other script that
-            # locks this, and it should only have the lock for <1 second.  So if this is locked for
-            # 10 seconds, something probably went wrong.
-            debug_print("Could not get lock for $max_tries seconds.  Removing lock and proceeding");
-            unlink($STATE_LOCK);
-            last;
-        }
-        sleep 1;
-    }
-    open(OUT, '>', $STATE_LOCK) or debug_print("Unable to create lock file $STATE_LOCK: $!");
-    close(OUT);
-}
-
-sub unlock_state_file {
-    unlink($STATE_LOCK);
-}
-
-
-## -----------------------------------------------------------
-## Record processing
-## -----------------------------------------------------------
-
-sub process_records {
-    my ($state) = @_;
-
-    ## Main loop
-    my @files = glob("$PROBE_LOG_DIRECTORY/*");
-    debug_print("Beginning execution, found " . scalar(@files) . " files");
-    foreach my $file (@files) {
-        last if($CONSUMER_DONE);
+    files = os.listdir(OPTIONS.records_dir)
+    log("Processing %s files" % len(files))
+    for filename in files:
+        if CONSUMER_DONE == 1:
+            break
         
-        my @lines = @{readfile($file)};
-        my $file_data = join("", @lines);
+        success = 0
+
+        file = os.path.join(OPTIONS.records_dir, filename)
+        fh = open(file, 'r')
+        record = fh.read()
+        fh.close()
+
+        if not record or record.isspace():
+            log("The record in %s is empty.  Removing file." % filename)
+        else:
+            try:
+                process_record(record)
+            except InvalidRecordError, err:
+                log("Error processing record: %s\nFull record:\n%s" % (err, record))
+
+        try:
+            os.remove(file)
+        except OSError, err:
+            # If we cannot remove the files then we are going to process them again
+            # So stop processing now to avoid duplicate data.
+            die("ERROR: Failed to remove record '%s'.  Error: %s" % (file, err))
+
+    return
+
+
+def parse_wlcg_record(raw_record):
+    """ Parse a record in WLCG format and return a dict with values.  Example of WLCG record:
+
+    metricName: org.osg.general.ping-host
+    metricType: status
+    timestamp: 2010-08-21T17:47:08Z
+    metricStatus: OK
+    serviceType: OSG-CE
+    serviceURI: osg-edu
+    gatheredAt: vdt-itb.cs.wisc.edu
+    summaryData: OK
+    detailsData: Host osg-edu is alive and responding to pings!
+    EOT
+
+    Note: for local probe serviceURI and gatheredAt are replaced by hostName
+
+    """
+
+    record = {}
+
+    # detailsData will always come last, and might be multiple lines
+    # Keep state so that once we are in the detailsData section, we put the rest of the
+    # lines into detailsData and return when we see EOT
+    in_details_data = 0
+    for line in raw_record.split('\n'):
+        if not in_details_data:
+            match = re.match("(\w+): (.+)$", line)
+            if match:
+                record[match.group(1)] = match.group(2)
+                if match.group(1) == "detailsData":
+                    in_details_data = 1
+            else:
+                raise InvalidRecordError("Invalid line:\n\t%s" % line)
+        else:
+            if re.match("EOT$", line):
+                return record
+            else:
+                record["detailsData"] += line
+
+    # If we reach this point, it means we did not see EOT.  So the record is invalid
+    raise InvalidRecordError("'EOT' marker missing")
+
+
+def process_record(raw_record):
+    """ Process a record in WLCG format """
+
+    record = parse_wlcg_record(raw_record)
+
+    #
+    # Check that we got the values we are expecting
+    #
+    for attribute in ("metricName", "metricType", "metricStatus", "timestamp", "serviceType",
+                      "summaryData", "detailsData"):
+        if attribute not in record:
+            raise InvalidRecordError("Missing %s" % attribute)
+
+    # We need to have either (hostName) or (serviceURI + gatheredAt)
+    host = None
+    if "serviceURI" in record and "gatheredAt" in record:
+        host = record["serviceURI"]
+    elif "hostName" in record:
+        host = record["hostName"]
+    else:
+        raise InvalidRecordError("Missing either hostName or (serviceURI + gatheredAt)")
+
+
+    #
+    # Update the state
+    #
+    metric = record["metricName"]
+
+    global STATE
+    if host not in STATE:
+        STATE[host] = {}
+
+    # Set the top-level metric info
+    STATE[host][metric] = {}
+    STATE[host][metric]["time"]   = record["timestamp"]
+    STATE[host][metric]["status"] = record["metricStatus"]
+
+    # Add an item to the history.  We could either do a history based on the number
+    # of records kept (for each metric) or based on an expiration date since the record
+    # was generated.  I'm picking the easier approach for now of just keeping an absolute
+    # number.
+    trimmed_record = raw_record[:OPTIONS.record_trim_length]
+
+    if "history" not in STATE[host][metric]:
+        STATE[host][metric]["history"] = []
+    
+    STATE[host][metric]["history"].insert(0, trimmed_record)
+    if len(STATE[host][metric]["history"]) > OPTIONS.max_history:
+        STATE[host][metric]["history"] = STATE[host][metric]["history"][0:OPTIONS.max_history]
+
+    return
+
+
+def generate_html_files():
+    """ Write out the top-level HTML file and any host-specific files """
+
+    main_page = html_template()
+
+    # Fill in the basics
+    timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    title = "OSG RSV Main Status - %s" % timestamp
+    header = "OSG RSV Main Status :: %s" % timestamp
+    main_page = re.sub("!!TITLE!!", title, main_page)
+    main_page = re.sub("!!HEADER!!", header, main_page)
+
+    # Add in any alerts
+    alerts = ""
+    for alert in ALERTS:
+        alerts += "<p class=\"alert\">WARNING: %s\n" % alert
+
+    main_page = re.sub("!!ALERTS!!", alerts, main_page)
+
+    # Generate a table for each host
+    tables = ""
+    if len(STATE) == 0:
+        tables = "<p>There is no data to display.</p>"
+    else:
+        for host in STATE.keys():
+            generate_host_html(host, STATE[host])
+            host_table = html_table_template()
+            host_table = re.sub("!!HOSTNAME!!", host, host_table)
+            rows = []
+            for metric in sorted(STATE[host]):
+                link = "%s.html#%s" % (host, metric)
+                row = "<tr><td><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td>" %\
+                      (link, metric, STATE[host][metric]["time"], "TODO", STATE[host][metric]["status"])
+                rows.append(row)
+
+            table = '\n'.join(rows)
+            host_table = re.sub("!!ROWS!!", table, host_table)
+            tables += host_table
         
-        ## Check whether we have a probe end marker
-        if ($#lines != -1 && $lines[$#lines] =~ m/^$PROBE_END_MARK/) {
-            write_data($state, $file, $file_data);
-        }
+    main_page = re.sub("!!TABLES!!", tables, main_page)
+
+    # There is no data for the main HTML page.  This section is only used for the
+    # host-specific pages
+    main_page = re.sub("!!DATA!!", "", main_page)
+
+    try:
+        main_html_file = os.path.join(OPTIONS.rsv_location, "output", "html", "index.html")
+        fp = open(main_html_file, 'w')
+        fp.write(main_page)
+        fp.close()
+    except IOError, err:
+        log("Error writing main HTML file '%s': %s" % (main_html_file, err))
+
+    return
+
+
+def generate_host_html(host, info):
+    """ Create the host-specific HTML file """
+
+    host_page = html_template()
+
+    # Fill in the basics
+    timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    title = "OSG RSV Status - %s - %s" % (host, timestamp)
+    header = "OSG RSV Status :: %s :: %s" % (host, timestamp)
+    host_page = re.sub("!!TITLE!!", title, host_page)
+    host_page = re.sub("!!HEADER!!", header, host_page)
+
+    # Add in any alerts
+    alerts = ""
+    for alert in ALERTS:
+        alerts += "<p class=\"alert\">WARNING: %s\n" % alert
+
+    host_page = re.sub("!!ALERTS!!", alerts, host_page)
+
+    # Generate a table for the host, and display each historical result
+    table = ""
+    data = ""
+    if len(info) == 0:
+        table = "<p>There is no data to display.</p>"
+    else:
+        host_table = html_table_template()
+        host_table = re.sub("!!HOSTNAME!!", host, host_table)
+        rows = []
+        for metric in sorted(info):
+            link = "#%s" % metric
+            row = "<tr><td><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td>" %\
+                  (link, metric, info[metric]["time"], "TODO", info[metric]["status"])
+            rows.append(row)
+
+            data += "<a name='%s'></a><h2>%s</h2>\n" % (metric, metric)
+            for entry in info[metric]["history"]:
+                data += "<pre>%s</pre>\n" % entry
+
+        table = re.sub("!!ROWS!!", '\n'.join(rows), host_table)
         
-        unlink($file);
-    }
-}
+    host_page = re.sub("!!TABLES!!", table, host_page)
+    host_page = re.sub("!!DATA!!", data, host_page)
+
+    try:
+        host_html_file = os.path.join(OPTIONS.rsv_location, "output", "html", "%s.html" % host)
+        fp = open(host_html_file, 'w')
+        fp.write(host_page)
+        fp.close()
+    except IOError, err:
+        log("Error writing main HTML file '%s': %s" % (host_html_file, err))
+
+    return
 
 
-sub readfile {
-    my ($file) = @_;
-    
-    open(FILE, "<", $file) or die("ERROR: Unable to open '$file' for reading : $!");
-    my @lines = <FILE>;
-    close(FILE);
+def log(msg):
+    """ Print a message with a timestamp """
+    timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    print "%s: %s" % (timestamp, msg)
 
-    return \@lines;
-}
-
-
-sub write_data {
-    my ($state, $file, $data) = @_;
-    
-    my ($host, $metric) = basename($file) =~ /^\d+-(.*)__(.*)\.record$/;
-    
-    if(!$host || !$metric) {
-        print STDERR "ERROR: Failed to get hostname ($host) or metric name ($metric) from file '$file'\n";
-        return;
-    }
-    
-    ## Pull out the probe's attributes
-    my %attrs = ( "metricName"    => undef,
-                  "metricStatus"  => undef,
-                  "timestamp"     => undef,
-                  );
-    foreach my $attr (keys %attrs) {
-        if ($data =~ m/$attr: (.*)\n/) {
-            $attrs{$attr} = lc($1);
-            chomp($attrs{$attr});
-        } 
-        else {
-            print STDERR "ERROR: Unable to get '$attr' field.  Skipping '$file'.\n";
-            print STDERR "Data:\n$data\n";
-            return;
-        }
-    }
-    
-    # Wrap the data here, so that it doesn't create overly wide HTML pages
-    eval {
-        use Text::Wrap;
-        $Text::Wrap::columns = 150;
-        $data = wrap('', '', $data);
-    };
-    
-    my $html_key  = "$attrs{metricName}";
-    my $html_data_header = "<a name=\"$html_key\"></a><h2>$attrs{metricName}</h2>";
-    my $html_data = "<pre>\n$data\n</pre>";
-    my $html_link = "\t<tr id=\"$attrs{metricStatus}\">" .
-        "<td><a href=\"#$html_key\">$attrs{metricName}</a></td>" .
-        "<td>$attrs{timestamp}</td>" .
-        "<td>$attrs{metricStatus}</td>" .
-        "</tr>";
-    $html_key .= " $host";
-    
-    # For main HTML page
-    $state->{$host}{$attrs{metricName}}{status} = $attrs{metricStatus};
-    $state->{$host}{$attrs{metricName}}{time}   = $attrs{timestamp};
-
-    # For host HTML page - still use old way of populating this
-    add_host_html_entry($host, $html_key, $html_data_header, $html_data, $html_link);
-}
-
-
-sub add_host_html_entry {
-   my ($host, $html_key, $html_data_header, $html_data, $html_link) = @_;
-
-   my $HOST_DIR = "$OUTPUT_DIR/$host";
-   system("mkdir -p $HOST_DIR") unless(-d "$HOST_DIR");
-   my $HOST_HTML = "$HOST_DIR/index.html";
-
-   rotate_log($HOST_HTML);
-
-   my $contents;
-   if(-e $HOST_HTML) {
-      my $fh = IO::File->new("<$HOST_HTML") or die_nice("ERROR: Unable to open '$HOST_HTML' for reading : $!");
-      $contents = join("", <$fh>);
-      close($fh);
-   }
-
-   ## If the file is empty, set up the scaffolding for ourselves
-   if(!$contents) {
-       $contents = html_template();
-       
-       my $table_html = html_table_template();
-       $contents =~ s/<!-- FIRST TABLE -->/$table_html/;
-
-       # Update the old.html link, since it needs to point to the parent dir
-       $contents =~ s/(<!-- BEGIN OLD HTML LINK -->.*)href='old.html'(.*<!-- END OLD HTML LINK -->)/${1}href='..\/old.html'$2/;
-   }
-
-   # Fix the hostname, if necessary
-   $contents =~ s/(<!-- HOSTNAME -->)(<!-- END HOSTNAME -->)/$1<h3>$host<\/h3>$2/;
-   
-   # Look to see if we've been in this file before and we just need to replace the data we put in last time
-   if ($contents =~ m/<!-- BEGIN DATA $html_key -->/) {
-      $contents =~ s/(<!-- BEGIN DATA $html_key -->)($html_data_header)(.*)(<!-- END DATA $html_key -->)/$1$2$html_data$3$4/s;
-      $contents =~ s/(<!-- BEGIN LINK $html_key -->).*(<!-- END LINK $html_key -->)/$1$html_link$2/;
-   } 
-   else {
-      # Otherwise we will append it to the bottom. Be sure to add markers for the next addition
-      $contents =~ s/(<!-- NEXT LINK -->)/<!-- BEGIN LINK $html_key -->$html_link<!-- END LINK $html_key -->\n$1/;
-      $contents =~ s/(<!-- NEXT DATA -->)/<!-- BEGIN DATA $html_key -->$html_data_header$html_data<!-- END DATA $html_key -->\n$1/;
-   }
-   
-   ## Write the header information
-   my $title = "OSG RSV Status - $host";
-   my $time  = strftime('%m-%d-%Y %H:%M:%S', localtime);
-   $contents =~ s/(<!-- BEGIN HEADER -->).*(<!-- END HEADER -->)/$1<h1>$title<BR>$time<\/h1>$2/g;
-   $contents =~ s/(<!-- BEGIN TITLE -->).*(<!-- END TITLE -->)/$1<title>$title :: $time<\/title>$2/g;
-
-   ## Write the new file back out
-   my $fh = IO::File->new(">$HOST_HTML") or die_nice("ERROR: Unable to open '$HOST_HTML' for writing : $!");
-   print $fh $contents;
-   close($fh);
-   return;
-}
-
-sub rotate_log {
-    my (@logs) = @_;
-
-    # There is a template file so that we can "reset" the conf file daily.
-    # This is to prevent junk from accumulating forever in the conf file.
-    my $conf_file = "$ENV{VDT_LOCATION}/osg-rsv/logs/logrotate/rotate_html_files.conf";
-    my $template_file = "$conf_file.tmpl";
-    
-    my $new = 0;
-    unless(-e $conf_file) {
-        system("cp $template_file $conf_file");
-        $new = 1;
-    }
-
-    my $rotate_conf = join("", @{readfile($conf_file)});
-
-    # Append on the location of log files, for use with the rotate script
-    if($new) {
-        $rotate_conf .= "\n# HTML_DIRECTORY=$OUTPUT_DIR\n";
-    }
-
-    my $change = 0;
-    foreach my $log (@logs) {
-        next if $rotate_conf =~ /^$log/m;
-        $rotate_conf .= "$log {}\n";
-        $change = 1;
-    }
-
-    if($change || $new) {
-        if(!open(CONF, ">", $conf_file)) {
-            print STDERR "Unable to open log rotate conf file ($conf_file) for writing: $!";
-            return 1;
-        }
-        print CONF $rotate_conf;
-        close(CONF);
-    }
-}
-
-
-sub read_submission_files {
-    my $active_metrics = {};
-    foreach my $file (glob("$SUBMISSION_DIR/*.sub")) {
-        my $base = basename($file);
-        if($base =~ /^(.+)__.+\@(.+)\.sub$/) {
-            $active_metrics->{lc($1)}{lc($2)} = 1;
-        }
-    }
-    return $active_metrics;
-}
-
-sub write_main_html_page {
-    my ($alerts, $state, $active_metrics) = @_;
-
-    my $main_html = html_template();
-    my $time = strftime('%Y-%m-%d %H:%M:%S', localtime);
-    $main_html =~ s/<!-- BEGIN HEADER -->.*<!-- END HEADER -->/<h1>OSG RSV Status - Main<BR>$time<\/h1>/g;
-    $main_html =~ s/<!-- BEGIN TITLE -->.*<!-- END TITLE -->/<title>OSG RSV Status - Main :: $time<\/title>/g;
-    $main_html =~ s/<!-- BEGIN ALERTS -->.*<!-- END ALERTS -->/$alerts/;
-    
-    foreach my $host (sort keys %$state) {
-        my $host_table_html = html_table_template();
-        $host_table_html =~ s|<!-- HOSTNAME -->.*<!-- END HOSTNAME -->|<h3>$host</h3>|;
+    if OPTIONS.log:
+        OPTIONS.log.write("%s: %s\n" % (timestamp, msg))
         
-        my $table_rows = "";
-        foreach my $metric (sort keys %{$state->{$host}}) {
-            my $time   = $state->{$host}{$metric}{time};
-            my $status = $state->{$host}{$metric}{status};
-            my $link   = "$host/index.html#$metric";
 
-            my $id = $status;
-            # Example timestamp: <td>2009-09-25t21:13:00z</td>
-            if($time =~ m|(\d\d\d\d-\d\d-\d\d([t ])\d\d:\d\d:\d\d)(.*)$|i) {
-                my ($metric_time, $separator, $suffix) = ($1, $2, $3);
-                my $one_day_ago = strftime('%Y-%m-%dSEP%H:%M:%SSUF', localtime(time-(60*60*24)));
-                $one_day_ago =~ s/SEP/$separator/;
-                $one_day_ago =~ s/SUF/$suffix/;
-                if($metric_time lt $one_day_ago) {
-                    next unless($active_metrics->{$host}{$metric}); # drop inactive metrics
-                    $id = "old";
-                }
-            }
-
-            # Attempted to calculate next run time
-            my $next_run_time = calculate_next_run_time($host, $metric);
-
-            $table_rows .= "<tr id=\"$id\"><td><a href=\"$link\">$metric</a></td><td>$time</td><td>$next_run_time</td><td>$status</td></tr>";
-        }
-
-        if($active_metrics->{$host}) {
-            foreach my $metric (sort keys %{$active_metrics->{$host}}) {
-                next if($state->{$host}{$metric});
-
-                # Attempted to calculate next run time
-                my $next_run_time = calculate_next_run_time($host, $metric);
-
-                $table_rows .= "<tr id=\"missing\"><td>$metric</td><td>Info missing or metric has not yet run for the first time</td><td>$next_run_time</td><td>MISSING</td></tr>";
-            }
-        }
-        
-        $host_table_html =~ s/<!-- NEXT LINK -->/$table_rows/;
-        $main_html =~ s/(<!-- NEXT DATA -->)/$host_table_html$1/;
-    }
-
-    ## Write the new file back out
-    my $fh = IO::File->new(">$MAIN_HTML") or die_nice("ERROR: Unable to open '$MAIN_HTML' for writing : $!");
-    print $fh $main_html;
-    close($fh);
-}
+def die(msg):
+    """ Print an error message and exit with a non-zero status """
+    log(msg)
+    sys.exit(1)
 
 
-sub calculate_next_run_time {
-    my($host, $metric) = @_;
-    
-    # For now we'll just look at the Args line and try to find a match.
-    # We should be able to improve this when we add a specific job ID in a future RSV release
-    foreach my $classad (@$probe_classads) {
-        if(grep /[\s=]$metric/, lc($classad->{Args})) {
-            # Local metrics don't have a hostname in their arguments
-            if(grep /[\s=]$host[\s:]/, lc($classad->{Args}) or $metric =~ /local/) {
-                my $hours_til_next_run = ($classad->{DeferralTime} - time()) / 3600;
-                my $hour   = int($hours_til_next_run);
-                my $minute = int(($hours_til_next_run - $hour) * 60);
-                my $time = strftime('%Y-%m-%d %H:%M:%S', localtime($classad->{DeferralTime}));
-                return sprintf("$time (~%02i:%02i hours)", $hour, $minute);
-            }
-        }
-    }
-    return "Unknown";
-}
+def sigterm_handler(signum, frame):
+    """ The handler for SIGTERM and SIGKILL """
+    log("Caught signal #%s.  Exiting after processing current record." % signum)
+    global CONSUMER_DONE
+    CONSUMER_DONE = 1
+    return
 
 
-## -----------------------------------------------------------
-## Templates
-## -----------------------------------------------------------
+def html_template():
+    """ Returns the HTML template file """
 
-
-sub html_table_template {
-    return "<p>
-<!-- BEGIN TABLE -->
-      <table id='links_table'>
-         <tr colspan=4><!-- HOSTNAME --><!-- END HOSTNAME --></tr>
-         <tr>
-            <th>Metric</th>
-            <th>Last Executed</th>
-            <th>Approximate Next Run Time</th>
-            <th>Status</th>
-         </tr>
-      <!-- NEXT LINK -->
-      </table>
-      <!-- END TABLE -->
-";
-}
-
-sub html_template {
-    return "<html>
+    return """<html>
    <head>
-      <!-- BEGIN TITLE --><!-- END TITLE -->
+      !!TITLE!!
       <style type='text/css'>
       <!--
       pre {
@@ -559,35 +466,25 @@ sub html_template {
       .invisible { display: none }
 
       p.alert { background-color: red }
-  }
-
       -->
       </style>
 
-      <script language=javascript>
-        function toggle(i) {
-          var e = document.getElementById(i);
-          var t = e.className;
-          if (t.match('invisible')) { t = t.replace(/invisible/gi, 'visible'); }
-          else { t = t.replace(/visible/gi, 'invisible'); }
-          e.className = t;
-        }
       </script>
-
    </head>
+
    <body>
      <table>
        <tr>
          <td><a href='http://www.opensciencegrid.org' title='Open Science Grid'><img src='http://vdt.cs.wisc.edu/pictures/osg_logo.gif' border='0'></a></td>
-         <td align='center'><!-- BEGIN HEADER --><!-- END HEADER --></td>
+         <td align='center'>!!HEADER!!</td>
        </tr>
     </table>
-    <!-- BEGIN ALERTS --><!-- END ALERTS -->
+    !!ALERTS!!
     <p><a href=\"#legend\">Explanation of colors</a>
-    <!-- BEGIN OLD HTML LINK --><p><a href='old.html'>Archived HTML pages</a><!-- END OLD HTML LINK -->
+    <p><a href='old.html'>Archived HTML pages</a>
     <p>
-    <!-- FIRST TABLE -->
-    <!-- NEXT DATA -->
+    !!TABLES!!
+    !!DATA!!
 
    <p>&nbsp;<p><a name=\"legend\">Legend:</a>
    <table>
@@ -600,6 +497,22 @@ sub html_template {
    </table>
    </body>
 </html>
-";
+"""
 
-}
+def html_table_template():
+    """ Return the HTML table template """
+    return """<p>
+      <table id='links_table'>
+         <tr colspan=4>!!HOSTNAME!!</tr>
+         <tr>
+            <th>Metric</th>
+            <th>Last Executed</th>
+            <th>Approximate Next Run Time</th>
+            <th>Status</th>
+         </tr>
+         !!ROWS!!
+      </table>
+      """
+
+
+main()
