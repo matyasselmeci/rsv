@@ -1,7 +1,7 @@
 #!/bin/sh
 
-VERSION=3.2.1
+VERSION=3.3.0
 
 # Form the two tarballs
-tar zcf osg-rsv-metrics-$VERSION.tar.gz `find osg-rsv/bin/probes osg-rsv/CHANGELOG.metrics ! -name \*~ ! -name .#\* ! -type d | grep -v '\.svn'`
-tar zcf  osg-rsv-core-$VERSION.tar.gz `find osg-rsv/bin/consumers osg-rsv/bin/misc osg-rsv/config osg-rsv/lib osg-rsv/logs osg-rsv/sbin osg-rsv/setup osg-rsv/specs osg-rsv/CHANGELOG.core ! -name \*~ ! -name .#\* ! -type d | grep -v '\.svn'`
+tar zcf osg-rsv-metrics-$VERSION.tar.gz `find osg-rsv/bin/probes osg-rsv/bin/metrics osg-rsv/CHANGELOG.metrics osg-rsv/etc/metrics osg-rsv/meta/metrics ! -name \*~ ! -name .#\* ! -type d | grep -v '\.svn'`
+tar zcf  osg-rsv-core-$VERSION.tar.gz `find osg-rsv/bin/consumers osg-rsv/bin/misc osg-rsv/config osg-rsv/lib osg-rsv/meta/consumers osg-rsv/setup osg-rsv/CHANGELOG.core ! -name \*~ ! -name .#\* ! -type d | grep -v '\.svn'`
