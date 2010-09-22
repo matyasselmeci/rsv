@@ -26,10 +26,11 @@ class Sysutils:
         """ Run a system command with a timeout specified (in seconds).
         Returns:
           1) exit code
-          2) STDOUT/STDERR (combined)
+          2) STDOUT
+          3) STDERR
 
-        I think this could be better done using the socket module, but we need
-        Python 2.7 for that.
+        I think this could possibly be better done using the subprocess module, but
+        that requires Python 2.4 and we need to support Python 2.3+.
         """
 
         try:
