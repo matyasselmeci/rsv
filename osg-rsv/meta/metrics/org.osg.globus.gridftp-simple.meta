@@ -5,6 +5,7 @@ execute = local
 service-type = OSG-GridFtp
 output-format = wlcg
 probe-spec = v3
+enable-by-default = true
 
 
 [org.osg.globus.gridftp-simple env]

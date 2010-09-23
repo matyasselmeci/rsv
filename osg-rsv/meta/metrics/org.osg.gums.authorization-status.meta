@@ -5,6 +5,7 @@ execute = local
 service-type = OSG-GUMS
 output-format = wlcg
 probe-spec = v3
+enable-by-default = false
 
 [org.osg.gums.authorization-status env]
 PERL5LIB = PREPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes:!!VDT_PERL5LIB!!
