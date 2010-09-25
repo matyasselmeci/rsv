@@ -2,7 +2,7 @@
 default-cron-interval = 8 * * * *
 
 execute = local
-service-type = OSG-GridFtp
+service-type = OSG-GridFTP
 output-format = wlcg
 probe-spec = v3
 enable-by-default = true
