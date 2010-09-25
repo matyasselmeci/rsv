@@ -122,9 +122,10 @@ def dispatcher(rsv, action, jobs=None, hostname=None):
 
     condor = Condor.Condor(rsv)
 
-    if not condor.is_condor_running():
-        rsv.echo("ERROR: condor-cron is not running.")
-        return False
+    if action == "start" or action == "stop":
+        if not condor.is_condor_running():
+            rsv.echo("ERROR: condor-cron is not running.")
+            return False
 
     # 
     # If we are not passed specific jobs to start, start all metrics and consumers
