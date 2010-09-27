@@ -277,7 +277,7 @@ class RSV:
                     else:
                         consumers.append(consumer)
             return consumers
-        except ConfigParser.NoOptionError:
+        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
             self.log("WARNING", "No enabled consumers defined in consumers.conf")
             return []
 
@@ -342,7 +342,7 @@ class RSV:
         self.log("INFO", "Writing consumer configuration file '%s'" % self.consumer_config_file)
         
         if not os.path.exists(self.consumer_config_file):
-            self.rsv.echo("Creating configuration file '%s'" % self.consumer_config_file)
+            self.echo("Creating configuration file '%s'" % self.consumer_config_file)
             
         config_fp = open(self.consumer_config_file, 'w')
         self.consumer_config.write(config_fp)
