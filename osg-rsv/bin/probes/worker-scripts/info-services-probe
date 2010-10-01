@@ -17,6 +17,9 @@ This probe tests the following metrics:
          * config.ini resource defaults to sitename if resource value not
            present
    * org.osg.gip.freshness: The BDII data is less than 30 minutes old.
+      * UNKNOWN if the BDII cannot be contacted or ldapsearch is not found.
+      * WARNING if the BDII's data for this site is more than 20 minutes old.
+      * CRITICAL if the BDII's data for this site is more than 30 minutes old.
    * org.osg.gip.lastrun: The GIP has been run recently and all its providers
      and probes have succeeded.
       * UNKNOWN if unable to list or stat the temp directory
@@ -78,14 +81,19 @@ parse_args()
 # Bootstrap the GIP
 if 'GIP_LOCATION' not in os.environ:
     if 'VDT_LOCATION' in os.environ:
-        os.environ['GIP_LOCATION'] = os.path.join(os.environ['VDT_LOCATION'], 'gip')
+        os.environ['GIP_LOCATION'] = os.path.join(os.environ['VDT_LOCATION'],
+            'gip')
 if 'GIP_LOCATION' in os.environ:
     gip_dir = os.path.join(os.environ['GIP_LOCATION'], 'lib', 'python')
     if gip_dir not in sys.path:
         sys.path.append(gip_dir)
+    gip_libexec_dir = os.path.join(os.environ['GIP_LOCATION'], 'libexec')
+    if gip_libexec_dir not in sys.path:
+        sys.path.append(gip_libexec_dir)
 
 try:
    import gip_common
+   import osg_info_wrapper
 except ImportError, ie:
    print "Unable to import the GIP common library.  This likely indicates a bad environment."
    print "The python search path is: %s." % ", ".join(sys.path)
@@ -511,6 +519,55 @@ def metric_freshness():
     stdout += "BDII information is %i seconds old." % age
     return stdout, ""
 
+def metric_se():
+    try:
+        # This prevents gip_common.config from choking.
+        sys.argv = [sys.argv[0]]
+        cp = gip_common.config()
+    except:
+        raise UnknownException("Unable to open and parse config.ini.")
+    entries = osg_info_wrapper.main(cp=cp, return_entries=True)
+    se_entries = [i for i in entries if 'GlueSE' in i.objectClass]
+    if len(se_entries) == 0:
+        raise CriticalException("BDII output has no storage information; " \
+            "contact osg-gip@opensciencegrid.org for help.")
+    first_se = se_entries[0]
+    total_size = first_se.glue.get("SESizeTotal", None)
+    if total_size == None:
+        raise CriticalException("BDII SE information has no size entry!" \
+            "  Contact osg-gip@opensciencegrid.org; it is likely a GIP bug.")
+    if total_size == 0:
+        raise CriticalException("SE exists in the BDII output, but its size" \
+            " is zero.  Consult the Release Documentation or contact " \
+            "osg-gip@opensciencegrid.org for help.")
+    stdout = "There are %i SEs listed in the GIP output." % len(se_entries)
+    return stdout, ""
+
+def metric_ce():
+    try:
+        # This prevents gip_common.config from choking.
+        sys.argv = [sys.argv[0]]
+        cp = gip_common.config()
+    except:
+        raise UnknownException("Unable to open and parse config.ini.")
+    entries = osg_info_wrapper.main(cp=cp, return_entries=True)
+    ce_entries = [i for i in entries if 'GlueCE' in i.objectClass]
+    if len(ce_entries) == 0:
+        raise CriticalException("BDII output has no CE information; " \
+            "contact osg-gip@opensciencegrid.org for help.")
+    first_ce = ce_entries[0]
+    total_size = first_ce.glue.get("CEInfoTotalCPUs", None)
+    if total_size == None:
+        raise CriticalException("BDII CE information has no size entry!" \
+            "  Contact osg-gip@opensciencegrid.org; it is likely a GIP bug.")
+    if total_size == 0:
+        raise CriticalException("CE exists in the BDII output, but its size" \
+            " is zero.  Consult the Release Documentation or contact " \
+            "osg-gip@opensciencegrid.org for help.")
+    stdout = "There are %i CE queues." % len(ce_entries)
+    return stdout, ""
+
+
 def run_metric(metric_name, fcn, args, kwargs):
     stdout, stderr = "", ""
     try:
@@ -556,6 +613,10 @@ def main():
     elif metricname == "org.osg.gip.freshness":
         metric_output.append(run_metric(metricname,
             metric_freshness, tuple(), {}))
+    elif metricname == "org.osg.gip.ce":
+        metric_output.append(run_metric(metricname, metric_ce, tuple(), {}))
+    elif metricname == "org.osg.gip.se":
+        metric_output.append(run_metric(metricname, metric_se, tuple(), {}))
     else:
         print "Unknown metric: %s" % metricname
         sys.exit(2)
