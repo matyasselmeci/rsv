@@ -386,7 +386,7 @@ class RSV:
         # If the service certificate is not available, look for a user proxy file
         try:
             proxy_file = self.config.get("rsv", "proxy-file")
-            check_user_proxy(metric, proxy_file)
+            self.check_user_proxy(metric, proxy_file)
             self.proxy = proxy_file
             return
         except ConfigParser.NoOptionError:
@@ -445,8 +445,8 @@ class RSV:
         # so this check might need to be adjusted if that behavior is more understood.
         minutes_til_expiration = 10
         seconds_til_expiration = minutes_til_expiration * 60
-        (ret, out) = self.run_command("%s x509 -in %s -noout -enddate -checkend %s" %
-                                      (OPENSSL_EXE, proxy_file, seconds_til_expiration))
+        (ret, out, err) = self.run_command("%s x509 -in %s -noout -enddate -checkend %s" %
+                                           (OPENSSL_EXE, proxy_file, seconds_til_expiration))
         if ret:
             self.results.expired_user_proxy(metric, proxy_file, out, minutes_til_expiration)
 

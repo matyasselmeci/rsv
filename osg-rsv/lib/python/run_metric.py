@@ -311,7 +311,9 @@ def main(rsv, options, metrics):
         (options.host, options.port) = re.split(":", options.uri, 1)
 
     # Process the command line and initialize
+    count = 0
     for metric_name in metrics:
+        count += 1
         metric = Metric.Metric(metric_name, rsv, options.uri)
         validate_config(rsv, metric)
 
@@ -320,6 +322,10 @@ def main(rsv, options, metrics):
         ping_test(rsv, metric, options)
     
         # Run the job and parse the result
+        if len(metrics) > 1:
+            rsv.echo("\nRunning metric %s (%s of %s)\n" % (metric.name, count, len(metrics)))
+        else:
+            rsv.echo("\nRunning metric %s:\n" % metric.name)
         execute_job(rsv, metric)
 
     return
