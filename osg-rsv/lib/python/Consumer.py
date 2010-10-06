@@ -136,6 +136,14 @@ class Consumer:
 
         return env
 
+    def get_args_string(self):
+        """ Return the arguments string as defined in the configuration file """
+
+        try:
+            return self.config.get(self.name, "args")
+        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+            return ""
+
 def get_consumer_defaults(consumer_name):
     """ Load consumer default values """
     defaults = {}

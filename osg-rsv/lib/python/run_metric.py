@@ -14,9 +14,6 @@ import Metric
 import Results
 import Sysutils
 
-# todo - remove before releasing
-import pdb
-
 
 #
 # Globals
