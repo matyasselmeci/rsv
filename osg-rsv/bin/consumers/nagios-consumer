@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-
+use Getopt::Long;
 use POSIX;
 
 # Turn autoflush on
@@ -9,6 +9,8 @@ $|=1;
 
 # The file we will write all output to
 my $output_fh;
+my $conf_file;
+GetOptions("conf-file=s" => \$conf_file);
 
 ##
 ## Make sure we have VDT_LOCATION set in our environment
@@ -17,8 +19,11 @@ my $VDT_LOCATION = $ENV{VDT_LOCATION};
 die("ERROR: The VDT_LOCATION environment variable is not set") unless ($VDT_LOCATION);
 die("ERROR: VDT_LOCATION is set to an non-existing location '$VDT_LOCATION'") unless (-e $VDT_LOCATION);
 
-if(@ARGV != 1) {
-    die("ERROR: Usage: $0 <path to Nagios config file>");
+if(!$conf_file) {
+    die("ERROR: Usage: $0 --conf-file <path to Nagios config file>");
+}
+elsif(!-e $conf_file) {
+    die("ERROR: Specified configuration file ($conf_file) does not exist");
 }
 
 ##
@@ -112,7 +117,7 @@ sub write_data {
     ########################
     # Do nagios calls here #
     ########################
-    my $rsvnagios_cmd = "$ENV{VDT_LOCATION}/osg-rsv/bin/misc/rsv2nagios.py $ARGV[0] $info{metricName} <$file >>$ENV{VDT_LOCATION}/osg-rsv/logs/consumers/rsv2nagios.log";
+    my $rsvnagios_cmd = "$ENV{VDT_LOCATION}/osg-rsv/bin/misc/rsv2nagios.py $conf_file $info{metricName} <$file >>$ENV{VDT_LOCATION}/osg-rsv/logs/consumers/rsv2nagios.log";
     debug_print("RSV 2 NAGIOS Cmd: $rsvnagios_cmd");
     system("$rsvnagios_cmd");
 }
