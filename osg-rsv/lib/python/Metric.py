@@ -26,7 +26,10 @@ class Metric:
 
         # Find executable
         self.executable = os.path.join(rsv.rsv_location, "bin", "metrics", metric)
-        if not os.path.exists(self.executable):
+        if os.path.lexists(self.executable) and not os.path.exists(self.executable):
+            rsv.log("ERROR", "Metric is a broken symlink at %s" % self.executable)
+            sys.exit(1)
+        elif not os.path.exists(self.executable):
             rsv.log("ERROR", "Metric does not exist at %s" % self.executable)
             sys.exit(1)
 
