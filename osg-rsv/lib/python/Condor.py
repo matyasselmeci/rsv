@@ -304,10 +304,9 @@ class Condor:
             if "DeferralTime" in classad:
                 next_run_time = strftime("%m-%d %H:%M", time.localtime(int(classad["DeferralTime"])))
 
-            match = re.search("\s([\w.-]+)\s*\"", classad["Args"])
             metric = "UNKNOWN?"
-            if match:
-                metric = match.group(1)
+            if "OSGRSVMetric" in classad:
+                metric = classad["OSGRSVMetric"].strip('"')
 
             owner = classad["Owner"].replace('"', "")
 
@@ -327,10 +326,9 @@ class Condor:
             self.rsv.echo("No metrics are running")
         else:
             for classad in classads:
-                match = re.search("-u ([\w.-]+)", classad["Args"])
                 host = "UNKNOWN?"
-                if match:
-                    host = match.group(1)
+                if "OSGRSVHost" in classad:
+                    host = classad["OSGRSVHost"].strip('"')
 
                 if hostname and hostname != host:
                     continue
