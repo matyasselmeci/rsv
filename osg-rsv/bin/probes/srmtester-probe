@@ -1,0 +1,451 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original RSV Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+## Probe created by: Doug Strain, 2010 (dstrain@fnal.gov)
+##
+## This Perl script tests if the srm works via srm-tester interface
+## Requires the bestman srm-tester application to be installed
+##
+## REQUIRES
+##  'RSV::Probe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+## All the operations (metrics) this probe supports
+our @job_managers = ("ping","put","get",
+		"bringonline", "push", "pull",
+                "gsiftp","ls","mv","srmrm",
+		"mkdir","rmdir","reserve",
+		"getspacemeta","getspacetokens",
+		"release","gettransferprotocols");
+
+## srm-tester reports the final results at the end of its run.
+## This array tells you what to look for in that summary:
+our %testname= (
+	'ping', 'srmPing',
+	'put', 'srmPutDone',
+	'get', 'gsiftp-get',
+	'bringonline', 'srmBringOnline',
+	'pull', 'srmCopy-pull',
+	'push', 'srmCopy',
+	'gsiftp', 'srmCopy-pull-gsiftp',
+	'ls', 'srmLs',
+	'mv', 'srmMv',
+        'srmrm', 'srmRm',
+	'mkdir', 'srmMkdir',
+	'rmdir', 'srmRmdir',
+	'reserve','srmReserveSpace',
+	'getspacemeta','srmGetSpaceMetadata',
+	'getspacetokens', 'srmGetSpaceTokens',
+	'release', 'srmReleaseSpace',
+	'gettransferprotocols','srmGetTransferProtocols',
+	 );
+	
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+## Init
+##
+## This function uses RSVProbeBase.pm functions to initialize
+## probe parameters.
+## Service type is OSG-SRM i
+## (This to enables probes on configure_osg_rsv with --srm-probes option)
+## Probes do not start by default.
+sub Init {
+
+    &RSVProbeBase::Set_MultiMetric ("true");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-SRM");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 1.0.0");
+    &RSVProbeBase::Set_ProbeType ("OSG-SRM");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval (int(rand(60)). " * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("IMPORTANT NOTE: This probe tests different aspects of a storage element\n".
+	 " it is REQUIRED to specify a metric using the -m argument as shown below.\n\n".
+	 ".\n");
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+	("                                  To list all the possible metric names you\n".
+	 "                                   can specify as value to this switch, type\n".
+	 ".");
+
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("srm-client-type=s","srmClientType");
+    &RSVProbeBase::Extra_CLI_Option ("srm-client-loc=s","srmClientDir");
+    &RSVProbeBase::Extra_CLI_Option ("srm-protocol-version=i","srmProtocolVersion");
+    &RSVProbeBase::Extra_CLI_Option ("srm-webservice-path=s","srmWebservicePath");
+    &RSVProbeBase::Extra_CLI_Option ("srm-destination-dir=s","srmcpDestinationDir" );
+    &RSVProbeBase::Extra_CLI_Option ("srm-tester-dir=s","srmtesterDir" );
+    &RSVProbeBase::Extra_CLI_Option ("test-file=s","srmcpTestfile" );
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+## Setup_Srm_Metric
+##
+## Setup default directories
+sub Setup_Srm_Metric {
+    $o{'srmPortNumber'}  = $o{'portNumber'} if ($o{'portNumber'});
+    $o{'srmServiceType'} = $o{'serviceType'} if ($o{'serviceType'});
+    if ($o{'srmtesterDir'} eq "")
+    {
+	$o{'srmtesterDir'}=$o{'VDT_LOCATION_LOCAL'}."/srm-tester-lbnl/bin";
+    }
+   
+}
+
+## Run
+##
+## This runs the probe.  Essentially just calls srm-tester and 
+## records the result.
+sub Run {
+    ##### Begin special section since this is a multi metric probe ##### 
+    ## Process some simple options, and exit if they're specified after acting
+    &Process_Multi_Metrics ();
+    ## If we this far then probe is in normal operation
+
+
+    ## Extract probe name from metric name 
+    my $probe_name = &RSVProbeBase::Get_MetricName();
+    $probe_name    =~ /.*\.srmtester-(.*)$/;
+    $probe_name    = $1;
+
+    # First, sanity check: make sure the probe requested is a supported op
+    my $probe_match=0;
+    foreach my $srm_probe_name (@job_managers) {
+	if ($srm_probe_name eq $probe_name)
+	{
+		$probe_match=1;
+	}
+    }
+
+    if ($probe_match != 1)
+    {
+	&RSVProbeBase::Exit_Error (3, "The operation $probe_name is not a supported option.  Please see the options to see all valid operations.\n");	
+    }
+
+    &Setup_Srm_Metric();
+    my $cmd_output="";
+    my $op_name=$probe_name;
+    my $remotesfn=$o{'srmcpDestinationDir'};
+    my $copysource=$o{'srmcpDestinationDir'};
+
+
+#	Add command specific parameters
+##
+## Some commands require additional operations in order to function
+## correctly (ie, srmrm for cleanup, or calling reserve before release, etc)
+
+	## put: call with a testfile and srmrm to cleanup
+	if ($probe_name eq "put")
+	{
+		$op_name="put,srmrm";
+		my $srmtester_putfile="srmtester-put-testfile."
+			.int(rand(10000));
+		$remotesfn=$o{'srmcpDestinationDir'}. "/".$srmtester_putfile;
+		$copysource=$o{'srmcpDestinationDir'}."/".$srmtester_putfile;
+	}
+
+	## get: call with a testfile.  Also, call put first to put the file
+	my $srmtester_getfile="srmtester-get-testfile."
+			.int(rand(10000));
+	if ($probe_name eq "get")
+	{
+		$op_name="put,get,srmrm";
+		$remotesfn=$o{'srmcpDestinationDir'}. "/".$srmtester_getfile;
+		$copysource=$o{'srmcpDestinationDir'}."/".$srmtester_getfile;
+	}	
+
+	## srmrm: Call put to put a file to delete first.
+	if ($probe_name eq "srmrm")
+	{
+		$op_name="put,srmrm";
+		my $srmtester_rmfile="srmtester-rm-testfile."
+			.int(rand(10000));
+		$remotesfn=$o{'srmcpDestinationDir'}. "/".$srmtester_rmfile;
+		$copysource=$o{'srmcpDestinationDir'}."/".$srmtester_rmfile;
+	}
+
+	## bringonline:  call put to create a file first, then srmrm to cleanup
+	if ($probe_name eq "bringonline")
+        {
+                $op_name="put,bringonline,srmrm";
+                my $srmtester_rmfile="srmtester-bringonline-testfile."
+                        .int(rand(10000));
+                $remotesfn=$o{'srmcpDestinationDir'}. "/".$srmtester_rmfile;
+                $copysource=$o{'srmcpDestinationDir'}."/".$srmtester_rmfile;
+        }
+
+	## mv: I could only get mv working by doing two separate calls:
+	## First, put the file, then mv it to a seperate location.
+	if ($probe_name eq "mv")
+	{
+                $op_name="put";
+                my $srmtester_mvfile="srmtester-mv-testfile."
+                        .int(rand(10000));
+                my $srmtester_mvtargetfile="srmtester-mv-target-testfile."
+                        .int(rand(10000));
+                $remotesfn=$o{'srmcpDestinationDir'}."/".$srmtester_mvfile;
+                $copysource=$o{'srmcpDestinationDir'}."/.$srmtester_mvfile";
+		my $srmtester_cmd1=$o{'srmtesterDir'}.
+			"/srm-tester -serviceurl " .
+			$o{'srmServiceType'} . "://" .
+			$o{'hostName'} . ":".
+			$o{'srmPortNumber'} . "/". $o{'srmWebservicePath'} .
+			" -op " . $op_name .
+			" -localsource " . $o{'srmcpTestfile'} .
+			" -localtargetdir " . $o{'slashTmp'} .
+			" -remotesfn " . $remotesfn .
+			" -localtargetdir " . $o{'slashTmp'} .
+			" -gsiftpcopysource gsiftp://" . $o{'hostName'}
+			. "/" . $copysource;
+		&RSVProbeBase::Run_Command ($srmtester_cmd1, "backtick");
+		$cmd_output .= "Command run:".$srmtester_cmd1 . "\n";
+		$cmd_output .= $o{'cmdOut'};
+                $op_name="mv,srmrm";
+	}
+
+	## mkdir, rmdir: call mkdir then rmdir to cleanup.
+	if ($probe_name eq "mkdir")
+	{
+		$op_name="mkdir,rmdir";
+		$remotesfn.= "/";
+		$copysource .= "/"; 
+	}
+	if ($probe_name eq "rmdir")
+	{
+		$op_name="mkdir,rmdir";
+		$remotesfn.= "/";
+		$copysource .= "/"; 
+	}
+	if ($probe_name eq "gsiftp")
+	{
+		$op_name="put,gsiftp,srmrm";
+                my $srmtester_putfile="srmtester-gsiftp-testfile."
+                        .int(rand(10000));
+                $remotesfn=$o{'srmcpDestinationDir'}. "/".$srmtester_putfile;
+                $copysource=$o{'srmcpDestinationDir'}."/".$srmtester_putfile;
+	}
+	## Space reservation ops: call reserve first to get a token
+	## and call release to cleanup
+	if ($probe_name eq "getspacemeta")
+	{
+		$op_name="reserve,getspacemeta,release";
+	}
+	if ($probe_name eq "getspacetokens")
+	{
+		$op_name="reserve,getspacetokens,release";
+	}
+	if ($probe_name eq "release")
+	{
+		$op_name="reserve,release";
+	}
+	if ($probe_name eq "reserve")
+	{
+		$copysource .= " -retrytimeallowed 300 -statuswaittime 200";
+	}
+	if ($probe_name eq "push")
+	{
+		$op_name="push";
+		my $srmtester_pushfile="srmtester-push-target-testfile."
+                        .int(rand(10000));
+                $remotesfn=$o{'srmcpDestinationDir'}."/".$srmtester_pushfile;
+                $copysource=$o{'srmcpDestinationDir'}."/".$srmtester_pushfile;
+		$copysource .= " -pushmode"; 
+	}
+	if ($probe_name eq "pull")
+	{
+		my $srmtester_pullfile="srmtester-pull-target-testfile."
+                        .int(rand(10000));
+                $remotesfn=$o{'srmcpDestinationDir'}."/".$srmtester_pullfile;
+                $copysource=$o{'srmcpDestinationDir'}."/".$srmtester_pullfile;
+
+	}
+	if ($probe_name eq "gsiftp")
+	{
+		$o{'timeout'}=600;
+	}
+
+
+## Actually call the command now:
+
+    my $srmtester_cmd=$o{'srmtesterDir'}."/srm-tester -serviceurl " .
+	$o{'srmServiceType'} . "://" .
+        $o{'hostName'} . ":".
+        $o{'srmPortNumber'} . "/". $o{'srmWebservicePath'} .
+	" -op " . $op_name . 
+	" -localsource " . $o{'srmcpTestfile'} .
+	" -localtargetdir " . $o{'slashTmp'} .
+	" -remotesfn " . $remotesfn .
+	" -localtargetdir " . $o{'slashTmp'} .
+	" -gsiftpcopysource gsiftp://" . $o{'hostName'} 
+	. "/" . $copysource;
+
+	#Run command and save output
+	&RSVProbeBase::Run_Command ($srmtester_cmd, "backtick");
+        $cmd_output .= "Command run:".$srmtester_cmd . "\n";
+        $cmd_output .= $o{'cmdOut'};
+
+
+	# Check the output for the summary section and then record the result.
+	my $line="";
+	my $output_value=3;
+	my $summary_yet=0;
+	foreach $line (split /\n/ ,$cmd_output)
+	{
+		if ($line=~/^\s*Summary\s*$/)
+		{
+			$summary_yet=1;
+		}
+		if (($line=~/:\s*Failed/)&&($summary_yet==1))
+		{
+			$summary_yet=2;
+		}
+
+		
+		# Check to see if the applicable test succeeded
+		# Note that getspacemeta is inconsistent
+		if (($line =~ /$testname{$probe_name}/)||
+		   (($probe_name eq "getspacemeta")&&($line=~"srmGetMetadata")) )
+		{
+			$cmd_output .= "Relevant command-line:" . $line;
+			if ($line =~ /Ok/)
+			{
+				$output_value=0;
+			}
+			if ($line =~ /N\.S\./)
+			{
+				$output_value=1;
+			}
+			if ($line =~ /Failed/)
+			{
+				$output_value=2;
+			}
+		}
+		
+	}
+
+	# Mark the output as failed if another operation failed
+	# Leave untouched if marked as unsupported/unknown.
+	if (($summary_yet==2)&&($output_value==0))
+	{
+		$output_value=2;
+	}
+
+	
+	## If the result is unknown and previous dependencies
+	## are not supported, mark this as unsupported (warning)
+	if (($cmd_output =~ /SRM_NOT_SUPPORTED/)&&($output_value==3))
+	{
+		$output_value=1;
+	}
+
+	# Cleanup
+	if ($probe_name eq "get")
+	{
+		my $rm_cmd =  "$o{'rmCmd'} $o{'slashTmp'}/"
+			.$srmtester_getfile ." 2>&1";
+        	&RSVProbeBase::Run_Command ($rm_cmd, "backtick");
+
+	}
+	if ($probe_name eq "mv")
+	{
+		my $srmtester_rmcmd=$o{'srmtesterDir'}.
+                        "/srm-tester -serviceurl " .
+                        $o{'srmServiceType'} . "://" .
+                        $o{'hostName'} . ":".
+                        $o{'srmPortNumber'} . "/". $o{'srmWebservicePath'} .
+                        " -op srmrm" .
+                        " -localsource " . $o{'srmcpTestfile'} .
+                        " -localtargetdir " . $o{'slashTmp'} .
+                        " -remotesfn " . $remotesfn .
+                        " -localtargetdir " . $o{'slashTmp'} .
+                        " -gsiftpcopysource gsiftp://" . $o{'hostName'}
+                        . "/" . $copysource;
+        	&RSVProbeBase::Run_Command ($srmtester_rmcmd, "backtick");
+	}
+
+
+	&RSVProbeBase::Set_Summary_Metric_Results ($output_value, "SRM tester finished on $metric{'hostName'}. Output: $cmd_output");
+        &RSVProbeBase::Print_Metric();
+	
+
+
+}
+
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+###### Local Sub routines begin ###########
+################################################################################
+
+
+
+
+################################################################################
+##
+##  Process_Informational_Arguments ()
+##
+## OUTPUT: 
+##  None
+##
+## RETURNS:
+##  None
+## 
+################################################################################
+
+sub Process_Multi_Metrics {
+
+    if (defined ($o{'listmetric'})) {
+        ## Array probes within XML will have <probe>name</probe> elements
+        foreach my $srm_probe_name (@job_managers) {
+            &RSVProbeBase::Set_MetricName("org.osg.srm.srmtester-".$srm_probe_name);
+            &RSVProbeBase::Set_EnableByDefault("false");
+            ## Unix cron type metric interval
+            &RSVProbeBase::Set_MetricInterval (int(rand(60))." * * * *");
+            &RSVProbeBase::List_Summary_Metric();
+        }
+        exit 0;
+    }
+}

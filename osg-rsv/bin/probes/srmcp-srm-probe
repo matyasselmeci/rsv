@@ -294,4 +294,9 @@ sub Cleanup {
     else {
 	&RSVProbeBase::Set_DetailsData (&RSVProbeBase::Get_DetailsData()."\n Clean up of test file $o{'srmcpRemoteTestfileUri'} successful.");
     }
+
+    ## Remove file on local system
+    my $rm_cmd =  "$o{'rmCmd'} $o{'srmcpBackTestfile'} 2>&1";
+    &RSVProbeBase::Run_Command ($rm_cmd, "backtick");
+
 }
