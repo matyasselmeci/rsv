@@ -201,19 +201,27 @@ class Metric:
 
     def get_cron_entry(self):
         """ Return a dict containing the cron time information """
-        try:
-            arr = self.config.get(self.name, "default-cron-interval").split()
-            cron = {}
+        if self.config.has_option(self.name, "cron-interval"):
+            interval = self.config.get(self.name, "cron-interval")
+        elif self.config.has_option(self.name, "default-cron-interval"):
+            interval = self.config.get(self.name, "default-cron-interval")
+        else:
+            self.rsv.log("ERROR", "cron-interval missing from metric")
+            return {}
+
+        arr = interval.split()
+
+        cron = {}
+        if len(arr) != 5:
+            self.rsv.log("ERROR", "cron-interval is invalid: '%s'" % interval)
+        else:
             cron["Minute"]     = arr[0]
             cron["Hour"]       = arr[1]
             cron["DayOfMonth"] = arr[2]
             cron["Month"]      = arr[3]
             cron["DayOfWeek"]  = arr[4]
-            return cron
-        except ConfigParser.NoOptionError:
-            self.rsv.log("ERROR", "cron-interval missing from metric")
-            return {}
 
+        return cron
 
 
 def get_metric_defaults(metric_name):
