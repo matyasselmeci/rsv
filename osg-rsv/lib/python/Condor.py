@@ -89,6 +89,15 @@ class Condor:
             return parse_classads(out)
 
 
+    def number_of_running_metrics(self):
+        """ Return the number of running metrics """
+        return len(self.get_classads("OSGRSV==\"metrics\""))
+
+    def number_of_running_consumers(self):
+        """ Return the number of running consumers """
+        return len(self.get_classads("OSGRSV==\"consumers\""))
+
+
     def start_metric(self, metric, host):
         """
         Start a single metric condor-cron job.

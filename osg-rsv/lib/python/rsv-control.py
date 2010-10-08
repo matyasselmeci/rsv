@@ -22,6 +22,7 @@ def process_options(arguments=None):
       --off     [METRIC|CONSUMER ...]
       --enable  --host <host-name> METRIC|CONSUMER [METRIC|CONSUMER ...]
       --disable --host <host-name> METRIC|CONSUMER [METRIC|CONSUMER ...]
+      --verify
       --help | -h 
       --version
     """
@@ -56,6 +57,8 @@ def process_options(arguments=None):
                       help="Disable metric. May be specified multiple times.")
     parser.add_option("-u", "--host", dest="host", default=None,
                       help="Specify the host [and port] to be used by the metric (e.g. host or host:port)")
+    parser.add_option("--verify", action="store_true", dest="verify", default=False,
+                      help="Run some basic tests to validate your RSV install.")
 
     if arguments == None:
         (options, args) = parser.parse_args()
@@ -75,10 +78,10 @@ def process_options(arguments=None):
 
     # Check that we got exactly one command
     number_of_commands = len([i for i in [options.run, options.enable, options.disable, options.on,
-                                          options.off, options.list, options.job_list] if i])
+                                          options.off, options.list, options.job_list, options.verify] if i])
     
     if number_of_commands > 1:
-        parser.error("You can use only one of run, list, enable, disable, on, or off.")
+        parser.error("You can use only one of run, list, job-list, enable, disable, on, off, or verify.")
     if number_of_commands == 0:
         parser.error("You must specify one command.")
 
@@ -125,7 +128,8 @@ def main_rsv_control():
         return actions.dispatcher(rsv, "enable", args, options.host)
     elif options.disable:
         return actions.dispatcher(rsv, "disable", args, options.host)
-
+    elif options.verify:
+        actions.verify(rsv)
     
 if __name__ == "__main__":
     PROGNAME = os.path.basename(sys.argv[0])
