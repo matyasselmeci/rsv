@@ -7,7 +7,7 @@ from optparse import OptionParser
 
 # Custom RSV libraries
 import RSV
-import rc_metric
+import actions
 import run_metric
 
 import pdb
@@ -110,21 +110,21 @@ def main_rsv_control():
     # List the metrics
     if options.list:
         if not args:
-            return rc_metric.list_metrics(rsv, options, "")
+            return actions.list_metrics(rsv, options, "")
         else:
-            return rc_metric.list_metrics(rsv, options, args[0])
+            return actions.list_metrics(rsv, options, args[0])
     elif options.run:
         run_metric.main(rsv, options, args)
     elif options.job_list:
-        rc_metric.job_list(rsv, options.host)
+        actions.job_list(rsv, options.host)
     elif options.on:
-        return rc_metric.dispatcher(rsv, "start", args, options.host)
+        return actions.dispatcher(rsv, "start", args, options.host)
     elif options.off:
-        return rc_metric.dispatcher(rsv, "stop", args, options.host)
+        return actions.dispatcher(rsv, "stop", args, options.host)
     elif options.enable:
-        return rc_metric.dispatcher(rsv, "enable", args, options.host)
+        return actions.dispatcher(rsv, "enable", args, options.host)
     elif options.disable:
-        return rc_metric.dispatcher(rsv, "disable", args, options.host)
+        return actions.dispatcher(rsv, "disable", args, options.host)
 
     
 if __name__ == "__main__":
