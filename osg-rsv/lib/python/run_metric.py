@@ -18,7 +18,7 @@ import Sysutils
 #
 # Globals
 #
-VALID_OUTPUT_FORMATS = ["wlcg", "brief"]
+VALID_OUTPUT_FORMATS = ["wlcg", "wlcg-multiple", "brief"]
 
 
 def validate_config(rsv, metric):
@@ -149,6 +149,8 @@ def parse_job_output(rsv, metric, stdout, stderr):
 
     if(metric.config_val("output-format", "wlcg")):
         parse_job_output_wlcg(rsv, metric, stdout, stderr)
+    elif(metric.config_val("output-format", "wlcg-multiple")):
+        parse_job_output_multiple_wlcg(rsv, metric, stdout, stderr)
     elif(metric.config_val("output-format", "brief")):
         parse_job_output_brief(rsv, metric, stdout, stderr)
     else:
@@ -159,6 +161,12 @@ def parse_job_output(rsv, metric, stdout, stderr):
 def parse_job_output_wlcg(rsv, metric, stdout, stderr):
     """ Parse WLCG formatted output. """
     rsv.results.wlcg_result(metric, stdout, stderr)
+
+
+def parse_job_output_multiple_wlcg(rsv, metric, stdout, stderr):
+    """ Parse multiple WLCG formatted records separated by EOT. """
+    for record in stdout.split("\nEOT\n"):
+        rsv.results.wlcg_result(metric, record, stderr)
 
 
 

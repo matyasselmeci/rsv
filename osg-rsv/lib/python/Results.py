@@ -69,7 +69,7 @@ class Results:
             local_timestamp = utc_to_local(match.group(1))
             local_output = re.sub("timestamp: [\w\-\:]+", "timestamp: %s" % local_timestamp, local_output)
 
-        return self.print_result(metric, record, local_output, stderr)
+        return self.create_records(metric, record, local_output, stderr)
 
 
     def brief_result(self, metric, status, data, stderr):
@@ -98,11 +98,11 @@ class Results:
         utc_summary   = self.get_summary(metric, status, this_host, utc_timestamp,   data)
         local_summary = self.get_summary(metric, status, this_host, local_timestamp, data)
 
-        return self.print_result(metric, utc_summary, local_summary, stderr)
+        return self.create_records(metric, utc_summary, local_summary, stderr)
 
 
 
-    def print_result(self, metric, utc_summary, local_summary, stderr):
+    def create_records(self, metric, utc_summary, local_summary, stderr):
         """ Generate a result record for each consumer, and print to the screen """
 
         #
