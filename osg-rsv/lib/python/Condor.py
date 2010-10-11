@@ -311,7 +311,10 @@ class Condor:
 
             next_run_time = "UNKNOWN"
             if "DeferralTime" in classad:
-                next_run_time = strftime("%m-%d %H:%M", time.localtime(int(classad["DeferralTime"])))
+                if parsable:
+                    next_run_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(int(classad["DeferralTime"])))
+                else:
+                    next_run_time = strftime("%m-%d %H:%M", time.localtime(int(classad["DeferralTime"])))
 
             metric = "UNKNOWN?"
             if "OSGRSVMetric" in classad:
