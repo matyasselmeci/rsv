@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import time
+import popen2
 import pickle
 import signal
 import ConfigParser
@@ -41,6 +42,7 @@ def main():
     initialize()
     load_state_file()
     process_files()
+    get_job_info()
     generate_html_files()
     write_state_file()
     sys.exit(0)
@@ -293,6 +295,7 @@ def process_record(raw_record):
     STATE[host][metric] = {}
     STATE[host][metric]["time"]   = record["timestamp"]
     STATE[host][metric]["status"] = record["metricStatus"]
+    STATE[host][metric]["next"]   = "UNKNOWN"
 
     # Add an item to the history.  We could either do a history based on the number
     # of records kept (for each metric) or based on an expiration date since the record
@@ -308,6 +311,46 @@ def process_record(raw_record):
         STATE[host][metric]["history"] = STATE[host][metric]["history"][0:OPTIONS.max_history]
 
     return
+
+
+def get_job_info():
+    """ Figure out if any jobs are missing """
+
+    rsv_control = os.path.join(OPTIONS.vdt_location, "osg-rsv", "bin", "rsv-control")
+    try:
+        (ret, out, err) = system("%s -j --parsable" % rsv_control, 15)
+    except TimeoutError:
+        log("ERROR: rsv-control timed out while trying to get job information")
+        return
+
+    if ret != 0:
+        log("ERROR: Could not get job information from rsv-control")
+        log("STDOUT:\n%s" % out)
+        log("STDERR:\n%s" % err)
+
+    host = ""
+    for line in out.split("\n"):
+        match = re.match("Hostname: (\S+)", line)
+        if match:
+            host = match.group(1)
+            continue
+
+        # For now we'll just drop any lines for hosts we don't know anything about
+        if host not in STATE:
+            continue
+
+        match = re.match("MISSING: (.+)", line)
+        if match:
+            missing_metrics = match.group(1).split('|')
+            ALERTS.append("On host %s there are %s metrics enabled that are not running: %s" %
+                          (host, len(missing_metrics), " ".join(missing_metrics)))
+
+        arr = line.split('|')
+        if len(arr) == 5:
+            metric = arr[4].strip()
+            if metric in STATE[host]:
+                next_run_time = arr[3].strip()
+                STATE[host][metric]["next"] = next_run_time
 
 
 def generate_html_files():
@@ -342,8 +385,10 @@ def generate_html_files():
             for metric in sorted(STATE[host]):
                 link = "%s.html#%s" % (host, metric)
                 id   = STATE[host][metric]["status"].lower()
-                row  = "<tr id='%s'><td><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
-                       (id, link, metric, STATE[host][metric]["time"], "NOT YET IMPLEMENTED", STATE[host][metric]["status"])
+
+                row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
+                       (id, link, metric, STATE[host][metric]["time"], STATE[host][metric]["next"],
+                        STATE[host][metric]["status"])
                 rows.append(row)
 
             table = '\n'.join(rows)
@@ -398,8 +443,8 @@ def generate_host_html(host, info):
         for metric in sorted(info):
             link = "#%s" % metric
             id   = info[metric]["status"].lower()
-            row  = "<tr id='%s'><td><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
-                   (id, link, metric, info[metric]["time"], "NOT YET IMPLEMENTED", info[metric]["status"])
+            row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
+                   (id, link, metric, info[metric]["time"], info[metric]["next"], info[metric]["status"])
             rows.append(row)
 
             data += "<a name='%s'></a><h2>%s</h2>\n" % (metric, metric)
@@ -464,7 +509,7 @@ def html_template():
          color: black;
          background-color: white;
       }
-      #links_table { border: 1px solid black; width: 100%; }
+      #links_table { border: 1px solid black; width: 100%; text-align: center; }
       a:link {background: none; color: #000000; text-decoration: underline}
       a:visited {background: none; color: #000000; text-decoration: underline}
       a:hover {background: #000000; color: #FFFFFF; text-decoration: underline}
@@ -472,9 +517,7 @@ def html_template():
       #ok { background-color: #8ae234; }
       #warning { background-color: #fce94f; }
       #critical { background-color: #ef2929; }
-      #old { background-color: #e0ae8b; }
       #unknown { background-color: #eeeeec; }
-      #missing { background-color: #000000; color: #bbbbbb; }
 
       .question { cursor:pointer; text-decoration:underline; }
       .visible { display: block }
@@ -506,8 +549,6 @@ def html_template():
      <tr id=\"warning\"><td>The metric produced some warnings</td></tr>
      <tr id=\"critical\"><td>The metric failed</td></tr>
      <tr id=\"unknown\"><td>The metric produced an unknown result</td></tr>
-     <tr id=\"old\"><td>The metric is enabled, but it has not run for 24 hours</td></tr>
-     <tr id=\"missing\"><td>The metric is enabled, but there is no data available yet</td></tr>
    </table>
    </body>
 </html>
@@ -527,6 +568,42 @@ def html_table_template():
          !!ROWS!!
       </table>
       """
+
+
+
+class TimeoutError(Exception):
+    """ This defines an Exception that we can use if our system call times out """
+    pass
+
+def alarm_handler(signum, frame):
+    raise TimeoutError("System call timed out")
+
+def system(command, timeout):
+    """ Run a system command with a timeout specified (in seconds).
+    Returns:
+    1) exit code
+    2) STDOUT
+    3) STDERR
+    
+    I think this could possibly be better done using the subprocess module, but
+    that requires Python 2.4 and we need to support Python 2.3+.
+    """
+    
+    try:
+        signal.signal(signal.SIGALRM, alarm_handler)
+        signal.alarm(timeout)
+        child = popen2.Popen3(command, capturestderr=1)
+        ret = child.wait()
+        signal.alarm(0)
+    except TimeoutError:
+        log("ERROR", "Command timed out (timeout=%s): %s" % (timeout, command))
+        os.kill(child.pid, signal.SIGKILL)
+        raise TimeoutError("Command timed out (timeout=%s)" % timeout)
+    
+    out = child.fromchild.read()
+    err = child.childerr.read()
+    return (ret, out, err)
+
 
 
 main()
