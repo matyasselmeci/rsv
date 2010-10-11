@@ -254,13 +254,14 @@ def execute_job(rsv, metric):
     #
     # Build the command line for the job
     #
-    if metric.config_val("execute", "local"):
+    execute_type = metric.config_get("execute").lower()
+    if execute_type == "local":
         job = "%s -m %s -u %s %s" % (metric.executable,
                                      metric.name,
                                      metric.host,
                                      args)
 
-    elif metric.config_val("execute", "remote-globus"):
+    elif execute_type == "grid":
         globus_job_run_exe = os.path.join(rsv.vdt_location, "globus", "bin", "globus-job-run")
         job = "%s %s/jobmanager-%s -s %s -- -m %s -u %s %s" % (globus_job_run_exe,
                                                                metric.host,
@@ -270,6 +271,13 @@ def execute_job(rsv, metric):
                                                                metric.host,
                                                                args)
 
+    elif execute_type == "condor-grid":
+        rsv.log("ERROR", "The condor-grid execute type is not yet implemented")
+        sys.exit(1)
+
+    else:
+        rsv.log("ERROR", "The execute type of the probe is unknown: '%s'" % execute_type)
+        sys.exit(1)
 
     rsv.log("INFO", "Running command '%s'" % job)
 
@@ -291,8 +299,10 @@ def execute_job(rsv, metric):
     if ret:
         if metric.config_val("execute", "local"):
             rsv.results.local_job_failed(metric, job, out, err)
-        elif metric.config_val("execute", "remote-globus"):
-            rsv.results.remote_globus_job_failed(metric, job, out, err)
+        elif metric.config_val("execute", "grid"):
+            rsv.results.grid_job_failed(metric, job, out, err)
+        elif metric.config_val("execute", "condor-grid"):
+            rsv.results.condor_grid_job_failed(metric, job, out, err)
         
     parse_job_output(rsv, metric, out, err)
 

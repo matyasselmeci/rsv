@@ -293,10 +293,21 @@ class Results:
         self.brief_result(metric, status, data, stderr="")
 
 
-    def remote_globus_job_failed(self, metric, command, stdout, stderr):
-        """ Failed to run a metric of type remote-globus """
+    def grid_job_failed(self, metric, command, stdout, stderr):
+        """ Failed to run a metric of type grid """
         status = "CRITICAL"
         data   = "Failed to run job via globus-job-run\n\n"
+        data  += "Job run:\n%s\n\n" % command
+        data  += "Stdout:\n%s\n" % stdout
+        data  += "Stderr:\n%s\n" % stderr
+
+        self.brief_result(metric, status, data, stderr="")
+
+
+    def condor_grid_job_failed(self, metric, command, stdout, stderr):
+        """ Failed to run a metric of type condor-grid """
+        status = "CRITICAL"
+        data   = "Failed to run job via Condor-G\n\n"
         data  += "Job run:\n%s\n\n" % command
         data  += "Stdout:\n%s\n" % stdout
         data  += "Stderr:\n%s\n" % stderr
