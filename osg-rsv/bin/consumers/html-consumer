@@ -107,6 +107,19 @@ def initialize():
     if not os.access(OPTIONS.records_dir, os.W_OK):
         die("ERROR: Cannot write records directory '%s'" % OPTIONS.records_dir)
 
+    # Validate the HTML output directory and create it if necessary
+    OPTIONS.output_dir = os.path.join(OPTIONS.rsv_location, "output", "html")
+    if not os.access(OPTIONS.output_dir, os.F_OK):
+        log("Directory for HTML output does not exist at %s.  Creating it." % OPTIONS.output_dir)
+        try:
+            os.mkdir(OPTIONS.output_dir, 0755)
+        except OSError, err:
+            die("ERROR: Could not create directory.  Error: %s" % err)
+    if not os.access(OPTIONS.output_dir, os.R_OK):
+        die("ERROR: Cannot read HTML output directory '%s'" % OPTIONS.output_dir)
+    if not os.access(OPTIONS.output_dir, os.W_OK):
+        die("ERROR: Cannot write HTML output directory '%s'" % OPTIONS.output_dir)
+
     # Catch some signals and exit gracefully if we get them
     signal.signal(signal.SIGINT, sigterm_handler)
     signal.signal(signal.SIGTERM, sigterm_handler)
@@ -116,7 +129,7 @@ def initialize():
 
 def get_state_file_path():
     """ Returns the path of the state file """
-    return os.path.join(OPTIONS.rsv_location, "output", "html", "state.file")
+    return os.path.join(OPTIONS.output_dir, "state.file")
 
 
 def load_state_file():
@@ -304,8 +317,8 @@ def generate_html_files():
 
     # Fill in the basics
     timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    title = "OSG RSV Main Status - %s" % timestamp
-    header = "OSG RSV Main Status :: %s" % timestamp
+    title = "RSV Main Status - %s" % timestamp
+    header = "RSV Main Status :: %s" % timestamp
     main_page = re.sub("!!TITLE!!", title, main_page)
     main_page = re.sub("!!HEADER!!", header, main_page)
 
@@ -321,15 +334,16 @@ def generate_html_files():
     if len(STATE) == 0:
         tables = "<p>There is no data to display.</p>"
     else:
-        for host in STATE.keys():
+        for host in sorted(STATE.keys()):
             generate_host_html(host, STATE[host])
             host_table = html_table_template()
             host_table = re.sub("!!HOSTNAME!!", host, host_table)
             rows = []
             for metric in sorted(STATE[host]):
                 link = "%s.html#%s" % (host, metric)
-                row = "<tr><td><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td>" %\
-                      (link, metric, STATE[host][metric]["time"], "TODO", STATE[host][metric]["status"])
+                id   = STATE[host][metric]["status"].lower()
+                row  = "<tr id='%s'><td><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
+                       (id, link, metric, STATE[host][metric]["time"], "NOT YET IMPLEMENTED", STATE[host][metric]["status"])
                 rows.append(row)
 
             table = '\n'.join(rows)
@@ -343,7 +357,7 @@ def generate_html_files():
     main_page = re.sub("!!DATA!!", "", main_page)
 
     try:
-        main_html_file = os.path.join(OPTIONS.rsv_location, "output", "html", "index.html")
+        main_html_file = os.path.join(OPTIONS.output_dir, "index.html")
         fp = open(main_html_file, 'w')
         fp.write(main_page)
         fp.close()
@@ -360,8 +374,8 @@ def generate_host_html(host, info):
 
     # Fill in the basics
     timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    title = "OSG RSV Status - %s - %s" % (host, timestamp)
-    header = "OSG RSV Status :: %s :: %s" % (host, timestamp)
+    title = "RSV Status - %s - %s" % (host, timestamp)
+    header = "RSV Status :: %s :: %s" % (host, timestamp)
     host_page = re.sub("!!TITLE!!", title, host_page)
     host_page = re.sub("!!HEADER!!", header, host_page)
 
@@ -383,8 +397,9 @@ def generate_host_html(host, info):
         rows = []
         for metric in sorted(info):
             link = "#%s" % metric
-            row = "<tr><td><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td>" %\
-                  (link, metric, info[metric]["time"], "TODO", info[metric]["status"])
+            id   = info[metric]["status"].lower()
+            row  = "<tr id='%s'><td><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
+                   (id, link, metric, info[metric]["time"], "NOT YET IMPLEMENTED", info[metric]["status"])
             rows.append(row)
 
             data += "<a name='%s'></a><h2>%s</h2>\n" % (metric, metric)
@@ -397,7 +412,7 @@ def generate_host_html(host, info):
     host_page = re.sub("!!DATA!!", data, host_page)
 
     try:
-        host_html_file = os.path.join(OPTIONS.rsv_location, "output", "html", "%s.html" % host)
+        host_html_file = os.path.join(OPTIONS.output_dir, "%s.html" % host)
         fp = open(host_html_file, 'w')
         fp.write(host_page)
         fp.close()
@@ -435,7 +450,7 @@ def html_template():
 
     return """<html>
    <head>
-      !!TITLE!!
+      <title>!!TITLE!!</title>
       <style type='text/css'>
       <!--
       pre {
@@ -476,12 +491,11 @@ def html_template():
      <table>
        <tr>
          <td><a href='http://www.opensciencegrid.org' title='Open Science Grid'><img src='http://vdt.cs.wisc.edu/pictures/osg_logo.gif' border='0'></a></td>
-         <td align='center'>!!HEADER!!</td>
+         <td align='center'><h1>!!HEADER!!</h1></td>
        </tr>
     </table>
     !!ALERTS!!
     <p><a href=\"#legend\">Explanation of colors</a>
-    <p><a href='old.html'>Archived HTML pages</a>
     <p>
     !!TABLES!!
     !!DATA!!
