@@ -59,6 +59,8 @@ def process_options(arguments=None):
                       help="Specify the host [and port] to be used by the metric (e.g. host or host:port)")
     parser.add_option("--verify", action="store_true", dest="verify", default=False,
                       help="Run some basic tests to validate your RSV install.")
+    parser.add_option("--parsable", action="store_true", dest="parsable", default=False,
+                      help="Output the job list (-j) in an easy-to-parse format.")
 
     if arguments == None:
         (options, args) = parser.parse_args()
@@ -119,7 +121,7 @@ def main_rsv_control():
     elif options.run:
         run_metric.main(rsv, options, args)
     elif options.job_list:
-        actions.job_list(rsv, options.host)
+        return actions.job_list(rsv, options.parsable, options.host)
     elif options.on:
         return actions.dispatcher(rsv, "start", args, options.host)
     elif options.off:

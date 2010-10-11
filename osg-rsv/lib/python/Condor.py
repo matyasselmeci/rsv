@@ -301,12 +301,12 @@ class Condor:
         return ret, out
 
 
-    def display_jobs(self, hostname=None):
+    def display_jobs(self, parsable=False, hostname=None):
         """ Create a nicely formatted list of RSV jobs running in Condor-Cron """
 
         job_status = ["U", "I", "R", "X", "C", "H", "E"]
 
-        def display_metric(classad):
+        def display_metric(classad, parsable):
             status = job_status[int(classad["JobStatus"])]
 
             next_run_time = "UNKNOWN"
@@ -319,9 +319,14 @@ class Condor:
 
             owner = classad["Owner"].replace('"', "")
 
-            return (metric,
-                    "%5s.%-1s %-10s %-2s %-15s %-44s\n" % (classad["ClusterId"], classad["ProcId"],
-                                                           owner, status, next_run_time, metric))
+            if parsable:
+                output = "%s.%s | %s | %s | %s | %s\n" % (classad["ClusterId"], classad["ProcId"],
+                                                                owner, status, next_run_time, metric)
+            else:
+                output = "%5s.%-1s %-10s %-2s %-15s %-44s\n" % (classad["ClusterId"], classad["ProcId"],
+                                                                owner, status, next_run_time, metric)
+                
+            return (metric, output)
 
 
         #
@@ -345,10 +350,11 @@ class Condor:
                 if host not in hosts:
                     running_metrics[host] = []
                     hosts[host] = "Hostname: %s\n" % host
-                    hosts[host] += "%7s %-10s %-2s %-15s %-44s\n" % \
-                                   ("ID", "OWNER", "ST", "NEXT RUN TIME", "METRIC")
+                    if not parsable:
+                        hosts[host] += "%7s %-10s %-2s %-15s %-44s\n" % \
+                                       ("ID", "OWNER", "ST", "NEXT RUN TIME", "METRIC")
 
-                (metric, text) = display_metric(classad)
+                (metric, text) = display_metric(classad, parsable)
                 running_metrics[host].append(metric)
                 hosts[host] += text
 
@@ -365,14 +371,17 @@ class Condor:
                         missing_metrics.append(metric)
 
                 if missing_metrics:
-                    self.rsv.echo("WARNING: The following metrics are enabled for this host but not running:\n%s\n" %
-                                  " ".join(missing_metrics))
+                    if parsable:
+                        self.rsv.echo("MISSING: " + " | ".join(missing_metrics))
+                    else:
+                        self.rsv.echo("WARNING: The following metrics are enabled for this host but not running:\n%s\n" %
+                                      " ".join(missing_metrics))
 
                 
         #
         # Show the consumers also if a specific hostname was not requested
         #
-        if not hostname:
+        if not hostname and not parsable:
             classads = self.get_classads("OSGRSV==\"consumers\"")
             running_consumers = []
             if not classads:
@@ -399,6 +408,7 @@ class Condor:
                     self.rsv.echo("\nWARNING: The following consumers are enabled but not running:\n%s\n" %
                                   " ".join(missing_consumers))
 
+        return True
 
 def parse_classads(output):
     """

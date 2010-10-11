@@ -102,7 +102,7 @@ def list_metrics(rsv, options, pattern):
     return True
 
 
-def job_list(rsv, hostname=None):
+def job_list(rsv, parsable=False, hostname=None):
     """ Display jobs running similar to condor_cron_q but in a better format """
     condor = Condor.Condor(rsv)
 
@@ -110,7 +110,7 @@ def job_list(rsv, hostname=None):
         rsv.echo("ERROR: condor-cron is not running.")
         return False
 
-    if condor.display_jobs(hostname):
+    if condor.display_jobs(parsable, hostname):
         return True
     else:
         return False
