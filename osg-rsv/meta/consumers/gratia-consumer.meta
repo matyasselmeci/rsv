@@ -1,3 +1,5 @@
 [gratia-consumer]
 
-environment = PYTHONPATH=!!VDT_LOCATION!!/gratia/probe/common:!!VDT_LOCATION!!/gratia/probe/metric:!!VDT_PYTHONPATH!!
+# The HOME=/tmp declaration is a workaround in Gratia the Chris Green indicated
+# that we need.
+environment = HOME=/tmp;PYTHONPATH=!!VDT_LOCATION!!/gratia/probe/common:!!VDT_LOCATION!!/gratia/probe/metric:!!VDT_PYTHONPATH!!
