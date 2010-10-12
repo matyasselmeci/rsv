@@ -1,3 +1,0 @@
-This directory and the symlink to configure_osg_rsv are here for historical
-reasons.  At some point during RSV development, configure_osg_rsv was moved
-here, then moved back to $VDT_LOCATION/vdt/setup.
