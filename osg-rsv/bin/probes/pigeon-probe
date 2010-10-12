@@ -142,8 +142,8 @@ sub print_file {
 	$outString.="\nsummaryData: ".$o{'current_summary'};
 	$outString.="\ndetailsData: ".$o{'current_details'};
 	$outString.="\nEOT\n";
-	open(PROBE_OUT, ">".$o{'VDT_LOCATION_LOCAL'}."/osg-rsv/output/probes/".time()."-".$o{'current_name'}."__org.srm.pigeon-".$o{'current_type'}.".record");
-	print PROBE_OUT $outString;
+	#open(PROBE_OUT, ">".$o{'VDT_LOCATION_LOCAL'}."/osg-rsv/output/probes/".time()."-".$o{'current_name'}."__org.srm.pigeon-".$o{'current_type'}.".record");
+	print $outString;
 }
 
 ### Special parser for srm-ping results.
@@ -434,7 +434,7 @@ sub Run {
 		my $job_file=$1;
 		$job_file =~ s/TESTFILE-RSV\d+/TESTFILE-RSV*/;
 		
-		$gsiCommand="globus-job-run $job_dest /bin/sh -c '/bin/sh /bin/rm -f /$job_file'";
+		$gsiCommand="globus-job-run $job_dest /bin/sh -c '/bin/rm -f /$job_file'";
 		print "\n\nCleanup: $gsiCommand\n";
                 &RSVProbeBase::Run_Command ($gsiCommand, "backtick");
                 
