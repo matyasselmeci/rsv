@@ -261,7 +261,7 @@ def start_consumer(rsv, condor, consumer):
 
     rsv.echo("Starting consumer %s" % consumer.name)
 
-    if not condor.start_consumer(consumer):
+    if not condor.start_consumer(rsv, consumer):
         return 1
 
     return 0

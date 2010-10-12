@@ -127,14 +127,19 @@ class Condor:
         return self.submit_job(submit_file_contents, condor_id)
 
 
-    def start_consumer(self, consumer):
+    def start_consumer(self, rsv, consumer):
         """ Start a single consumer condor-cron job. """
         
         self.rsv.log("INFO", "Submitting consumer job to condor: consumer '%s'" % consumer)
 
         condor_id = consumer.get_unique_name()
 
-        # Check if the metric is already running in condor_cron
+        # Check if the consumer is enabled
+        if not rsv.is_consumer_enabled(consumer.name):
+            self.rsv.log("ERROR", "The consumer '%s' is not enabled." % consumer.name)
+            return False
+
+        # Check if the consumer is already running in condor_cron
         if self.is_job_running(condor_id):
             self.rsv.log("INFO", "Consumer '%s' is already running" % consumer.name)
             return True
