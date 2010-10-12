@@ -482,6 +482,8 @@ class RSV:
             self.log("INFO", "VDT PYTHONPATH = %s" % out)
             self.vdt_pythonpath = out
 
+        self.vdt_pythonpath = self.vdt_pythonpath.strip()
+
         return self.vdt_pythonpath
 
 
@@ -499,6 +501,8 @@ class RSV:
         else:
             self.log("INFO", "VDT PERL5LIB = %s" % out)
             self.vdt_perl5lib = out
+
+        self.vdt_perl5lib = self.vdt_perl5lib.strip()
 
         return self.vdt_perl5lib
 

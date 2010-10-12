@@ -129,8 +129,10 @@ class Consumer:
         try:
             env = self.config.get(self.name, "environment")
             env = re.sub("!!VDT_LOCATION!!", self.rsv.vdt_location, env)
-            env = re.sub("!!VDT_PYTHONPATH!!", self.rsv.get_vdt_pythonpath(), env)
-            env = re.sub("!!VDT_PERL5LIB!!", self.rsv.get_vdt_perl5lib(), env)
+            if re.search("!!VDT_PYTHONPATH!!", env):
+                env = re.sub("!!VDT_PYTHONPATH!!", self.rsv.get_vdt_pythonpath(), env)
+            if re.search("!!VDT_PERL5LIB!!", env):
+                env = re.sub("!!VDT_PERL5LIB!!", self.rsv.get_vdt_perl5lib(), env)
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
             return ""
 
