@@ -41,6 +41,7 @@ class InvalidRecordError(Exception):
 def main():
     initialize()
     load_state_file()
+    prune_old_records()
     process_files()
     get_job_info()
     generate_html_files()
@@ -103,7 +104,7 @@ def initialize():
     # This script will delete files from this directory, so it also needs write access.
     OPTIONS.records_dir = os.path.join(OPTIONS.rsv_location, "output", "html-consumer")
     if not os.access(OPTIONS.records_dir, os.F_OK):
-        die("ERROR: Records directory does not exist '%s'" % OPTIONS.records_dir)
+        die("WARNING: Records directory does not exist '%s' (This directory should be created when a metric runs.  Have any metrics run yet?)" % OPTIONS.records_dir)
     if not os.access(OPTIONS.records_dir, os.R_OK):
         die("ERROR: Cannot read records directory '%s'" % OPTIONS.records_dir)
     if not os.access(OPTIONS.records_dir, os.W_OK):
@@ -180,6 +181,10 @@ def write_state_file():
     state_fp.close()
 
     return
+
+
+def prune_old_records():
+    """ Remove any older records """
 
 
 def process_files():
@@ -308,6 +313,13 @@ def process_record(raw_record):
     # was generated.  I'm picking the easier approach for now of just keeping an absolute
     # number.
     trimmed_record = raw_record[:OPTIONS.record_trim_length]
+
+    # We want to swap the timestamp in the raw_record that we store so it's more readable
+    # on the history web page.
+    match = re.search("timestamp: (\d+)", trimmed_record)
+    if match:
+        pretty_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(STATE[host][metric]["time"]))
+        trimmed_record = re.sub("timestamp: \d+", "timestamp: %s" % pretty_time, trimmed_record)
 
     if "history" not in STATE[host][metric]:
         STATE[host][metric]["history"] = []
@@ -604,7 +616,7 @@ def system(command, timeout):
         ret = child.wait()
         signal.alarm(0)
     except TimeoutError:
-        log("ERROR", "Command timed out (timeout=%s): %s" % (timeout, command))
+        log("ERROR: Command timed out (timeout=%s): %s" % (timeout, command))
         os.kill(child.pid, signal.SIGKILL)
         raise TimeoutError("Command timed out (timeout=%s)" % timeout)
     
