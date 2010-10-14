@@ -297,11 +297,11 @@ def process_record(raw_record):
         STATE[host] = {}
 
     # Set the top-level metric info
-    STATE[host][metric] = {}
-    STATE[host][metric]["time"]        = record["timestamp"]
-    STATE[host][metric]["pretty_time"] = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(int(record["timestamp"])))
-    STATE[host][metric]["status"]      = record["metricStatus"]
-    STATE[host][metric]["next"]        = "UNKNOWN"
+    if metric not in STATE[host]:
+        STATE[host][metric] = {}
+    STATE[host][metric]["time"]   = float(record["timestamp"])
+    STATE[host][metric]["status"] = record["metricStatus"]
+    STATE[host][metric]["next"]   = "UNKNOWN"
 
     # Add an item to the history.  We could either do a history based on the number
     # of records kept (for each metric) or based on an expiration date since the record
@@ -389,12 +389,12 @@ def generate_html_files():
             host_table = re.sub("!!HOSTNAME!!", host, host_table)
             rows = []
             for metric in sorted(STATE[host]):
-                link = "%s.html#%s" % (host, metric)
-                id   = STATE[host][metric]["status"].lower()
+                link        = "%s.html#%s" % (host, metric)
+                id          = STATE[host][metric]["status"].lower()
+                pretty_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(STATE[host][metric]["time"]))
 
                 row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
-                       (id, link, metric, STATE[host][metric]["pretty_time"], STATE[host][metric]["next"],
-                        STATE[host][metric]["status"])
+                       (id, link, metric, pretty_time, STATE[host][metric]["next"], STATE[host][metric]["status"])
                 rows.append(row)
 
             table = '\n'.join(rows)
@@ -447,10 +447,12 @@ def generate_host_html(host, info):
         host_table = re.sub("!!HOSTNAME!!", host, host_table)
         rows = []
         for metric in sorted(info):
-            link = "#%s" % metric
-            id   = info[metric]["status"].lower()
+            link        = "#%s" % metric
+            id          = info[metric]["status"].lower()
+            pretty_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(info[metric]["time"]))
+            
             row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
-                   (id, link, metric, info[metric]["pretty_time"], info[metric]["next"], info[metric]["status"])
+                   (id, link, metric, pretty_time, info[metric]["next"], info[metric]["status"])
             rows.append(row)
 
             data += "<a name='%s'></a><h2>%s</h2>\n" % (metric, metric)
