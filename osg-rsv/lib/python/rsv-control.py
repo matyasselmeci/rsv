@@ -10,8 +10,6 @@ import RSV
 import actions
 import run_metric
 
-import pdb
-
 
 def process_options(arguments=None):
     usage = """usage: rsv-control [ --verbose <level> ]

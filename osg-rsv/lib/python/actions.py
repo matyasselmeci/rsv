@@ -9,8 +9,6 @@ import Condor
 import Metric
 import Consumer
 
-import pdb
-
 def new_table(header, options):
     """ Return a new table with default dimensions """
     table_ = Table.Table((58, 20))

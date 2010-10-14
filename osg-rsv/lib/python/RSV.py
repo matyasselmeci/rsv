@@ -14,8 +14,6 @@ import Results
 import Sysutils
 import Consumer
 
-import pdb
-
 OPENSSL_EXE = "/usr/bin/openssl"
 
 class RSV:

@@ -10,8 +10,6 @@ import tempfile
 import ConfigParser
 from time import localtime, strftime, strptime, gmtime
 
-import pdb
-
 UTC_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 LOCAL_TIME_FORMAT = "%Y-%m-%d %H:%M:%S %Z"
 
@@ -43,6 +41,14 @@ def utc_to_local(utc_timestamp):
     return strftime(LOCAL_TIME_FORMAT, local_time_struct)
 
 
+def utc_to_epoch(utc_timestamp):
+    """ Convert a UTC timestamp to seconds since the epoch.  For example:
+    2010-07-25T05:18:14Z -> 1280035094 """
+
+    time_struct = strptime(utc_timestamp, UTC_TIME_FORMAT)
+    return calendar.timegm(time_struct)
+
+
 class Results:
     """ A class containing code to handle publishing the result records """
     rsv = None
@@ -63,13 +69,20 @@ class Results:
             # TODO - trim detailsData
 
         # Create a record with a local timestamp.
-        local_output = record
-        match = re.search("timestamp: ([\w\:\-]+)", local_output)
+        local_record = record
+        match = re.search("timestamp: ([\w\:\-]+)", local_record)
         if match:
             local_timestamp = utc_to_local(match.group(1))
-            local_output = re.sub("timestamp: [\w\-\:]+", "timestamp: %s" % local_timestamp, local_output)
+            local_record = re.sub("timestamp: [\w\-\:]+", "timestamp: %s" % local_timestamp, local_record)
 
-        return self.create_records(metric, record, local_output, stderr)
+        # Create a record with the epoch timestamp
+        epoch_record = record
+        match = re.search("timestamp: ([\w\:\-]+)", epoch_record)
+        if match:
+            local_timestamp = utc_to_epoch(match.group(1))
+            epoch_record = re.sub("timestamp: [\w\-\:]+", "timestamp: %s" % local_timestamp, epoch_record)
+
+        return self.create_records(metric, record, local_record, epoch_record, stderr)
 
 
     def brief_result(self, metric, status, data, stderr):
@@ -92,24 +105,25 @@ class Results:
         #
         utc_timestamp   = timestamp()
         local_timestamp = timestamp(local=True)
+        epoch_timestamp = int(time.time())
 
         this_host = socket.getfqdn()
 
         utc_summary   = self.get_summary(metric, status, this_host, utc_timestamp,   data)
         local_summary = self.get_summary(metric, status, this_host, local_timestamp, data)
+        epoch_summary = self.get_summary(metric, status, this_host, epoch_timestamp, data)
 
-        return self.create_records(metric, utc_summary, local_summary, stderr)
+        return self.create_records(metric, utc_summary, local_summary, epoch_summary, stderr)
 
 
-
-    def create_records(self, metric, utc_summary, local_summary, stderr):
+    def create_records(self, metric, utc_summary, local_summary, epoch_summary, stderr):
         """ Generate a result record for each consumer, and print to the screen """
 
         #
         # Create a record for each consumer
         #
         for consumer in self.rsv.get_enabled_consumers():
-            self.create_consumer_record(metric, consumer, utc_summary, local_summary)
+            self.create_consumer_record(metric, consumer, utc_summary, local_summary, epoch_summary)
 
         # 
         # Print the local summary to the screen
@@ -154,7 +168,7 @@ class Results:
 
 
 
-    def create_consumer_record(self, metric, consumer, utc_summary, local_summary):
+    def create_consumer_record(self, metric, consumer, utc_summary, local_summary, epoch_summary):
         """ Make a file in the consumer records area """
 
         # Check/create the directory that we'll put record into
@@ -168,8 +182,11 @@ class Results:
 
             self.rsv.log("INFO", "Creating record for %s consumer at '%s'" % (consumer.name, file_path))
 
-            if consumer.wants_local_time():
+            time_format = consumer.requested_time_format()
+            if time_format == "local":
                 os.write(file_handle, local_summary)
+            elif time_format == "epoch":
+                os.write(file_handle, epoch_summary)
             else:
                 os.write(file_handle, utc_summary)
 

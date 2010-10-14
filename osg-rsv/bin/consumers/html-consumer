@@ -217,11 +217,12 @@ def process_files():
 
 
 def parse_wlcg_record(raw_record):
-    """ Parse a record in WLCG format and return a dict with values.  Example of WLCG record:
+    """ Parse a record in WLCG format and return a dict with values.  For the html-consumer
+    the timestamp will be in seconds since the epoch.  Example of WLCG record:
 
     metricName: org.osg.general.ping-host
     metricType: status
-    timestamp: 2010-08-21T17:47:08Z
+    timestamp: 1287068818
     metricStatus: OK
     serviceType: OSG-CE
     serviceURI: osg-edu
@@ -251,7 +252,10 @@ def parse_wlcg_record(raw_record):
                 raise InvalidRecordError("Invalid line:\n\t%s" % line)
         else:
             if re.match("EOT$", line):
-                record["serviceURI"] = re.sub(":", "_", record["serviceURI"])
+                if "serviceURI" in record:
+                    record["serviceURI"] = re.sub(":", "_", record["serviceURI"])
+                elif "hostName" in record:
+                    record["hostName"] = re.sub(":", "_", record["hostName"])
                 return record
             else:
                 record["detailsData"] += line
@@ -294,9 +298,10 @@ def process_record(raw_record):
 
     # Set the top-level metric info
     STATE[host][metric] = {}
-    STATE[host][metric]["time"]   = record["timestamp"]
-    STATE[host][metric]["status"] = record["metricStatus"]
-    STATE[host][metric]["next"]   = "UNKNOWN"
+    STATE[host][metric]["time"]        = record["timestamp"]
+    STATE[host][metric]["pretty_time"] = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(int(record["timestamp"])))
+    STATE[host][metric]["status"]      = record["metricStatus"]
+    STATE[host][metric]["next"]        = "UNKNOWN"
 
     # Add an item to the history.  We could either do a history based on the number
     # of records kept (for each metric) or based on an expiration date since the record
@@ -388,7 +393,7 @@ def generate_html_files():
                 id   = STATE[host][metric]["status"].lower()
 
                 row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
-                       (id, link, metric, STATE[host][metric]["time"], STATE[host][metric]["next"],
+                       (id, link, metric, STATE[host][metric]["pretty_time"], STATE[host][metric]["next"],
                         STATE[host][metric]["status"])
                 rows.append(row)
 
@@ -445,7 +450,7 @@ def generate_host_html(host, info):
             link = "#%s" % metric
             id   = info[metric]["status"].lower()
             row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
-                   (id, link, metric, info[metric]["time"], info[metric]["next"], info[metric]["status"])
+                   (id, link, metric, info[metric]["pretty_time"], info[metric]["next"], info[metric]["status"])
             rows.append(row)
 
             data += "<a name='%s'></a><h2>%s</h2>\n" % (metric, metric)

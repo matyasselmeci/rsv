@@ -108,18 +108,15 @@ class Consumer:
         return self.name
 
 
-    def wants_local_time(self):
-        """ Determine if the consumer should get a record with local time instead
-        of GMT """
+    def requested_time_format(self):
+        """ Determine what time format the consumer is requesting.  Options include
+        local, epoch, and GMT """
 
         try:
             value = self.config.get(self.name, "timestamp")
-            if value.lower() == "local":
-                return True
+            return value.lower()
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
-            return False
-
-        return False
+            return ""
 
 
     def get_environment(self):

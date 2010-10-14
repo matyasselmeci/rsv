@@ -6,8 +6,6 @@ import time
 import commands
 from time import strftime
 
-import pdb
-
 import Host
 
 class Condor:

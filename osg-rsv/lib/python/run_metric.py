@@ -193,10 +193,11 @@ def parse_job_output_brief(rsv, metric, stdout, stderr):
     else:
         rsv.log("ERROR", "Data returned from job not in 'brief' format.")
 
-        # We want to display the trimmed output, unless we're in full verbose mode
-        if not rsv.quiet and OPTIONS.verbose < 3:
+        # We want to display the trimmed output
+        # TODO - display non-trimmed output if we are in -v3 mode?
+        if not rsv.quiet:
             trim_length = rsv.config.get("rsv", "details-data-trim-length")
-            rsv.log("Displaying first %s bytes of output (use -v3 for full output)" %
+            rsv.echo("Displaying first %s bytes of output (use -v3 for full output)" %
                     trim_length, 1)
             stdout = stdout[:trim_length]
         else:
