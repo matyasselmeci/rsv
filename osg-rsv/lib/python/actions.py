@@ -200,6 +200,11 @@ def dispatcher(rsv, action, jobs=None, hostname=None):
         if write_config_file:
             host.write_config_file()
 
+            if action == "enable":
+                rsv.echo("\nOne or more metrics have been enabled and will be started the next time RSV is started.  To turn them on immediately run 'rsv-control --on'.")
+            elif action == "disable":
+                rsv.echo("\nOne or more metrics have been disabled and will not start the next time RSV is started.  You may still need to turn them off if they are currently running.")
+
         if num_errors > 0:
             actions = {"start" : "starting", "stop" : "stopping", "enable" : "enabling", "disable" : "disabling" }
             plural  = ""
