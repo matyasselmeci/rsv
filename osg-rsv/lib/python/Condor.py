@@ -364,6 +364,12 @@ class Condor:
                 running_metrics[host].append(metric)
                 hosts[host] += text
 
+            # Add in any hosts that have ALL their metric missing
+            for host in self.rsv.get_hosts():
+                if host not in hosts:
+                    hosts[host] = "Hostname: %s\n\tThis host has no running metrics.\n" % host
+                    running_metrics[host] = []
+
 
             self.rsv.echo("") # get a newline to separate output from command
             for host in hosts:
