@@ -285,8 +285,9 @@ def execute_job(rsv, metric):
     try:
         (ret, out, err) = rsv.run_command(job)
     except Sysutils.TimeoutError, err:
+        os.environ = original_environment
         rsv.results.job_timed_out(metric, job, err)
-
+        return
 
     #
     # Restore the environment
