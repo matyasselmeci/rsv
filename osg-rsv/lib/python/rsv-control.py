@@ -21,8 +21,8 @@ def process_options(arguments=None):
       --enable  --host <host-name> METRIC|CONSUMER [METRIC|CONSUMER ...]
       --disable --host <host-name> METRIC|CONSUMER [METRIC|CONSUMER ...]
       --verify
-      --help | -h 
-      --version
+
+      Other commands are available, run with --help to see full usage.
     """
 
     version = "rsv-control 0.14"
@@ -59,6 +59,8 @@ def process_options(arguments=None):
                       help="Run some basic tests to validate your RSV install.")
     parser.add_option("--parsable", action="store_true", dest="parsable", default=False,
                       help="Output the job list (-j) in an easy-to-parse format.")
+    parser.add_option("--show-config", action="store_true", dest="show_config", default=False,
+                      help="Show the configuration for specific metrics.")
 
     if arguments == None:
         (options, args) = parser.parse_args()
@@ -78,7 +80,8 @@ def process_options(arguments=None):
 
     # Check that we got exactly one command
     number_of_commands = len([i for i in [options.run, options.enable, options.disable, options.on,
-                                          options.off, options.list, options.job_list, options.verify] if i])
+                                          options.off, options.list, options.job_list, options.verify,
+                                          options.show_config] if i])
     
     if number_of_commands > 1:
         parser.error("You can use only one of run, list, job-list, enable, disable, on, off, or verify.")
@@ -128,6 +131,8 @@ def main_rsv_control():
         return actions.dispatcher(rsv, "enable", args, options.host)
     elif options.disable:
         return actions.dispatcher(rsv, "disable", args, options.host)
+    elif options.show_config:
+        return actions.dispatcher(rsv, "show-config", args, options.host)
     elif options.verify:
         actions.verify(rsv)
     

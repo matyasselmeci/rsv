@@ -143,6 +143,38 @@ class Consumer:
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
             return ""
 
+
+    def dump_config(self):
+        """ Print out all config information for this consumer """
+
+        self.rsv.echo("------------------------------------------------------")
+        self.rsv.echo("Configuration dump for consumer '%s'\n" % self.name)
+
+        # Metric settings
+        self.rsv.echo("Settings:")
+        try:
+            if len(self.config.options(self.name)) == 0:
+                self.rsv.echo("\t<none>")
+            else:
+                for key in sorted(self.config.options(self.name)):
+                    self.rsv.echo("\t%s = %s" % (key, self.config.get(self.name, key)))
+        except ConfigParser.NoSectionError:
+            self.rsv.echo("\t<none>")
+
+        # Command line switches
+        args = self.get_args_string() or "<none>"
+        self.rsv.echo("\nCommand line options passed to consumer:")
+        self.rsv.echo("\t" + args)
+
+        # Environment
+        environment = self.get_environment() or "<none>"
+        self.rsv.echo("\nCustom environment set for this consumer:")
+        self.rsv.echo("\t" + environment)
+
+        self.rsv.echo("") # newline for nicer formatting
+        return
+
+
 def get_consumer_defaults(consumer_name):
     """ Load consumer default values """
     defaults = {}

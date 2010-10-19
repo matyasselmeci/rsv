@@ -136,25 +136,31 @@ class Metric:
             section = self.name + " env"
             for var in self.config.options(section):
                 setting = self.config.get(section, var)
-                if setting.find("|") == -1:
-                    self.rsv.log("WARNING", "invalid environment config setting in section '%s'" +
-                                 "Invalid entry: %s = %s\n" +
-                                 "Format must be VAR = ACTION | VALUE\n" % (section, var, setting))
 
+                if setting.find("|") == -1:
+                    action = setting.strip()
+                    value = ""
                 else:
                     (action, value) = re.split("\s*\|\s*", setting, 1)
-                    valid_actions = ["SET", "UNSET", "APPEND", "PREPEND"]
-                    if action.upper() in ("SET", "UNSET", "APPEND", "PREPEND"):
-                        value = re.sub("!!VDT_LOCATION!!", self.rsv.vdt_location, value)
-                        value = re.sub("!!VDT_PYTHONPATH!!", self.rsv.get_vdt_pythonpath(), value)
-                        value = re.sub("!!VDT_PERL5LIB!!", self.rsv.get_vdt_perl5lib(), value)
-                        env[var] = [action, value]
-                    else:
-                        self.rsv.log("WARNING", "invalid environment config setting in section '%s'\n" +
-                                     "Invalid entry: %s = %s\n" +
-                                     "Format must be VAR = ACTION | VALUE\n" +
-                                     "ACTION must be one of: %s" %
-                                     (section, var, setting, " ".join(valid_actions)))
+                    action = action.upper().strip()
+
+                valid_actions = ["SET", "UNSET", "APPEND", "PREPEND"]
+                actions_without_value = ["UNSET"]
+                if action not in valid_actions:
+                    self.rsv.log("WARNING", "Invalid environment config setting in section '%s'" % section)
+                    self.rsv.log("WARNING", "Invalid entry: %s = %s" % (var, setting))
+                    self.rsv.log("WARNING", "Action '%s' must be one of (%s)" %
+                                 (action, " ".join(valid_actions)))
+                elif (not value and action not in actions_without_value):
+                    self.rsv.log("WARNING", "Invalid environment config setting in section '%s'" % section)
+                    self.rsv.log("WARNING", "Invalid entry: %s = %s" % (var, setting))
+                    self.rsv.log("WARNING", "Format must be VAR = ACTION | VALUE")
+                    self.rsv.log("WARNING", "\t(VALUE may be blank if ACTION is 'UNSET')")
+                else:
+                    value = re.sub("!!VDT_LOCATION!!", self.rsv.vdt_location, value)
+                    value = re.sub("!!VDT_PYTHONPATH!!", self.rsv.get_vdt_pythonpath(), value)
+                    value = re.sub("!!VDT_PERL5LIB!!", self.rsv.get_vdt_perl5lib(), value)
+                    env[var] = [action, value]
 
         except ConfigParser.NoSectionError:
             self.rsv.log("INFO", "No environment section in metric configuration", 4)
@@ -174,7 +180,6 @@ class Metric:
         except ConfigParser.NoSectionError:
             self.rsv.log("INFO", "No '%s' section found" % args_section, 4)
 
-
         # RSVv3 requires a few more arguments
         if self.config_val("probe-spec", "v3"):
             # We always need to tell RSVv3 about where the proxy is
@@ -182,8 +187,10 @@ class Metric:
             if proxy_file:
                 self.rsv.log("INFO", "Adding -x because probe version is v3", 4)
                 args += "-x %s " % proxy_file
-                self.rsv.log("INFO", "Adding --verbose because probe version is v3", 4)
-                args += "--verbose "
+
+            self.rsv.log("INFO", "Adding --verbose because probe version is v3", 4)
+            args += "--verbose "
+
 
         self.rsv.log("INFO", "Arguments: '%s'" % args, 4)
 
@@ -223,6 +230,44 @@ class Metric:
 
         return cron
 
+
+    def dump_config(self):
+        """ Print out all config information for this metric/host pair """
+
+        self.rsv.echo("------------------------------------------------------")
+        self.rsv.echo("Configuration dump for metric '%s' against host '%s'\n" % (self.name, self.host))
+
+        # Metric settings
+        self.rsv.echo("Settings:")
+        try:
+            if len(self.config.options(self.name)) == 0:
+                self.rsv.echo("\t<none>")
+            else:
+                for key in sorted(self.config.options(self.name)):
+                    self.rsv.echo("\t%s = %s" % (key, self.config.get(self.name, key)))
+        except ConfigParser.NoSectionError:
+            self.rsv.echo("\t<none>")
+
+        # Command line switches
+        args = self.get_args_string() or "<none>"
+        self.rsv.echo("\nCommand line options passed to metric:")
+        self.rsv.echo("\t" + args)
+
+        # Environment
+        self.rsv.echo("\nCustom environment set for this metric:")
+        environment = self.get_environment()
+        if len(environment) == 0:
+            self.rsv.echo("\t<none>")
+        else:
+            for var in sorted(environment.keys()):
+                self.rsv.echo("\t%s" % var)
+                self.rsv.echo("\t\tAction: %s" % environment[var][0])
+                if environment[var][1]:
+                    self.rsv.echo("\t\tValue: %s" % environment[var][1])
+
+        self.rsv.echo("") # newline for nicer formatting
+        return
+    
 
 def get_metric_defaults(metric_name):
     """ Load metric default values """

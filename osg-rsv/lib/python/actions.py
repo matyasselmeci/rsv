@@ -184,6 +184,8 @@ def dispatcher(rsv, action, jobs=None, hostname=None):
                     write_config_file |= enable_metric(rsv, metric, host)
                 elif action == "disable":
                     write_config_file |= disable_metric(rsv, metric, host)
+                elif action == "show-config":
+                    show_config_metric(rsv, metric)
 
             elif is_consumer:
                 consumer = Consumer.Consumer(job, rsv)
@@ -196,6 +198,8 @@ def dispatcher(rsv, action, jobs=None, hostname=None):
                     enable_consumer(rsv, consumer)
                 elif action == "disable":
                     disable_consumer(rsv, consumer)
+                elif action == "show-config":
+                    show_config_consumer(rsv, consumer)
 
         if write_config_file:
             host.write_config_file()
@@ -206,7 +210,8 @@ def dispatcher(rsv, action, jobs=None, hostname=None):
                 rsv.echo("\nOne or more metrics have been disabled and will not start the next time RSV is started.  You may still need to turn them off if they are currently running.")
 
         if num_errors > 0:
-            actions = {"start" : "starting", "stop" : "stopping", "enable" : "enabling", "disable" : "disabling" }
+            actions = {"start" : "starting", "stop" : "stopping", "enable" : "enabling",
+                       "disable" : "disabling", "show-config" : "displaying configuration for" }
             plural  = ""
             if len(jobs) > 1:
                 plural = "s"
@@ -351,6 +356,16 @@ def disable_consumer(rsv, consumer):
         rsv.echo("   Consumer already disabled")
     else:
         rsv.disable_consumer(consumer.name)
+
+
+def show_config_metric(rsv, metric):
+    """ Dump the configuration for this metric/host combo """
+    metric.dump_config()
+    
+
+def show_config_consumer(rsv, consumer):
+    """ Dump the configuration for this consumer """
+    consumer.dump_config()
 
 
 def verify(rsv):
