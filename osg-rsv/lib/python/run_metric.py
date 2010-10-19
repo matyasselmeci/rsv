@@ -210,11 +210,10 @@ def parse_job_output_brief(rsv, metric, stdout, stderr):
 def execute_job(rsv, metric):
     """ Execute the job """
 
-    jobmanager  = metric.config_get("jobmanager")
-    job_timeout = rsv.config.getint("rsv", "job-timeout")
+    jobmanager = metric.config_get("jobmanager")
 
-    if not jobmanager or not job_timeout:
-        rsv.log("CRITICAL", "ej1: jobmanager or job-timeout not defined in config")
+    if not jobmanager:
+        rsv.log("CRITICAL", "ej1: jobmanager not defined in config")
         sys.exit(1)
 
     #
@@ -280,10 +279,13 @@ def execute_job(rsv, metric):
         rsv.log("ERROR", "The execute type of the probe is unknown: '%s'" % execute_type)
         sys.exit(1)
 
-    rsv.log("INFO", "Running command '%s'" % job)
+    # A metric can define a custom timeout, otherwise we'll default to the RSV global
+    # settings for this value.  The custom timeout was added because the pigeon probe
+    # can take a long time to run (many times longer than the average metric)
+    job_timeout = metric.get_timeout()
 
     try:
-        (ret, out, err) = rsv.run_command(job)
+        (ret, out, err) = rsv.run_command(job, job_timeout)
     except Sysutils.TimeoutError, err:
         os.environ = original_environment
         rsv.results.job_timed_out(metric, job, err)

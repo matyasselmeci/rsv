@@ -231,6 +231,20 @@ class Metric:
         return cron
 
 
+    def get_timeout(self):
+        """ Return the jobs custom timeout setting, or None """
+        try:
+            timeout = self.config.getint(self.name, "timeout")
+            self.rsv.log("INFO", "Custom timeout (%s seconds) is set for metric '%s'" % (timeout, self.name))
+            return timeout
+        except ValueError:
+            self.rsv.log("WARNING", "A non-integer value is set for timeout for metric '%s'" % self.name)
+            return None
+        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+            # It's expected that this won't be defined most of the time
+            return None
+        
+
     def dump_config(self):
         """ Print out all config information for this metric/host pair """
 
