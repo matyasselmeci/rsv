@@ -478,7 +478,9 @@ def generate_html_files():
             table = '\n'.join(rows)
             host_table = re.sub("!!ROWS!!", table, host_table)
             tables += host_table
-        
+
+        tables = "<table id='links_table'>%s</table>" % tables
+
     main_page = re.sub("!!TABLES!!", tables, main_page)
 
     # There is no data for the main HTML page.  This section is only used for the
@@ -533,6 +535,7 @@ def generate_host_html(host, info):
                 for entry in info[metric]["history"]:
                     data += "<pre>%s</pre>\n" % entry
 
+        host_table = "<table id='links_table'>%s</table>" % host_table
         table = re.sub("!!ROWS!!", '\n'.join(rows), host_table)
         
     host_page = re.sub("!!TABLES!!", table, host_page)
@@ -591,7 +594,7 @@ def html_template():
          color: black;
          background-color: white;
       }
-      #links_table { border: 1px solid black; width: 100%; text-align: center; }
+      #links_table { border: 0px solid black; width: 100%; text-align: center; }
       a:link {background: none; color: #000000; text-decoration: underline}
       a:visited {background: none; color: #000000; text-decoration: underline}
       a:hover {background: #000000; color: #FFFFFF; text-decoration: underline}
@@ -641,8 +644,7 @@ def html_template():
 def html_table_template():
     """ Return the HTML table template """
     return """<p>
-      <table id='links_table'>
-         <tr colspan=4>!!HOSTNAME!!</tr>
+         <tr><td colspan=5 style='padding-top:15px;text-align:left;font-weight:bold;'>Hostname: !!HOSTNAME!!</td></tr>
          <tr>
             <th>Metric</th>
             <th>Last Executed</th>
@@ -651,7 +653,6 @@ def html_table_template():
             <th>Status</th>
          </tr>
          !!ROWS!!
-      </table>
       """
 
 
