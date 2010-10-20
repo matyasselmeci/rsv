@@ -25,10 +25,9 @@ def process_options(arguments=None):
       Other commands are available, run with --help to see full usage.
     """
 
-    version = "rsv-control 0.14"
     description = "This script is used to configure and run the RSV monitoring software."
 
-    parser = OptionParser(usage=usage, description=description, version=version)
+    parser = OptionParser(usage=usage, description=description)
     parser.add_option("--vdt-location", dest="vdt_location", default=None,
                       help="Root directory of the OSG installation", metavar="DIR")
     parser.add_option("-v", "--verbose", dest="verbose", default=1, type="int",
