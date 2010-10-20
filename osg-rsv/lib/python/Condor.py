@@ -343,7 +343,10 @@ class Condor:
         classads = self.get_classads("OSGRSV==\"metrics\"")
 
         if not classads:
-            self.rsv.echo("No metrics are running")
+            if parsable:
+                self.rsv.echo("ERROR: Condor-cron is running but no RSV metrics are running")
+            else:
+                self.rsv.echo("No metrics are running")
         else:
             for classad in classads:
                 host = "UNKNOWN?"

@@ -33,6 +33,7 @@ STATE = {}
 # in the state file
 CUR = {}
 
+JOB_INFO_ERROR = None
 ALERTS = []
 OPTIONS = None
 CONSUMER_DONE = 0
@@ -45,7 +46,6 @@ class InvalidRecordError(Exception):
 def main():
     initialize()
     load_state_file()
-    prune_old_records()
     process_files()
     get_job_info()
     generate_html_files()
@@ -184,11 +184,6 @@ def write_state_file():
     return
 
 
-def prune_old_records():
-    """ Remove any older records """
-    pass
-
-
 def process_files():
     """ Open the records directory and load each file """
 
@@ -239,7 +234,6 @@ def parse_wlcg_record(raw_record):
     EOT
 
     Note: for local probe serviceURI and gatheredAt are replaced by hostName
-
     """
 
     record = {}
@@ -332,6 +326,13 @@ def process_record(raw_record):
     return
 
 
+def set_job_info_error(msg):
+    """ Set the job info error global and make an alert """
+    global JOB_INFO_ERROR
+    JOB_INFO_ERROR = msg
+    ALERTS.append("Error trying to get job information: %s" % msg)
+    
+
 def get_job_info():
     """ Figure out if any jobs are missing """
 
@@ -339,29 +340,42 @@ def get_job_info():
     try:
         (ret, out, err) = system("%s -j --parsable" % rsv_control, 15)
     except TimeoutError:
-        log("ERROR: rsv-control timed out while trying to get job information")
+        set_job_info_error("rsv-control timed out while trying to get job information")
+        log("ERROR: " + JOB_INFO_ERROR)
         return
 
     if ret != 0:
-        log("ERROR: Could not get job information from rsv-control")
+        set_job_info_error("rsv-control returned a non-zero exit code while trying to get job information")
+        log("ERROR: " + JOB_INFO_ERROR)
         log("STDOUT:\n%s" % out)
         log("STDERR:\n%s" % err)
 
     host = ""
     for line in out.split("\n"):
+        match = re.match("ERROR: (.+)", line)
+        if match:
+            set_job_info_error(match.group(1))
+            break
+        
         match = re.match("Hostname: (\S+)", line)
         if match:
             host = re.sub(":", "_", match.group(1))
+            if host not in CUR:
+                CUR[host] = {}
             continue
-
-        if host not in CUR:
-            CUR[host] = {}
 
         match = re.match("MISSING: (.+)", line)
         if match:
             missing_metrics = match.group(1).split('|')
+            for metric in missing_metrics:
+                metric = metric.strip()
+                if metric not in CUR[host]:
+                    CUR[host][metric] = {}
+                CUR[host][metric]["enabled"] = 1
+
             ALERTS.append("On host %s there are %s metrics enabled that are not running: %s" %
                           (host, len(missing_metrics), " ".join(missing_metrics)))
+            continue
 
         arr = line.split('|')
         if len(arr) == 5:
@@ -369,8 +383,9 @@ def get_job_info():
             if metric not in CUR[host]:
                 CUR[host][metric] = {}
 
-            # Store the next run time
-            CUR[host][metric]["next"] = arr[3].strip()
+            # Store that the metric is enabled and its next run time
+            CUR[host][metric]["enabled"] = 1
+            CUR[host][metric]["next"]    = arr[3].strip()
 
 
 def get_next_run_time(host, metric):
@@ -383,6 +398,51 @@ def get_next_run_time(host, metric):
     return "NOT RUNNING"
 
 
+def form_metric_row(host, metric, top_level):
+    """ Form a table row for the supplied host/metric """
+
+    # The top level page links to the host-specific pages
+    if top_level:
+        link = "%s.html#%s" % (host, metric)
+    else:
+        link = "#%s" % metric
+
+    # If the metric is older than 24 hours:
+    #    If it is enabled, mark it as "old"
+    #    If it is disabled, remove it entirely
+    one_day_ago = int(time.time()) - 24*60*60
+    if STATE[host][metric]["time"] >= one_day_ago:
+        id = STATE[host][metric]["status"].lower()        
+    else:
+        try:
+            if CUR[host][metric]["enabled"] == 1:
+                id = "old"
+            else:
+                raise KeyError
+        except KeyError:
+            # This indicates that the record is not enabled, so purge it
+            del STATE[host][metric]
+            return ""
+        
+    pretty_time   = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(STATE[host][metric]["time"]))
+    next_run_time = get_next_run_time(host, metric)
+
+    try:
+        if JOB_INFO_ERROR:
+            enabled = "UNKNOWN"
+        elif CUR[host][metric]["enabled"] == 1:
+            enabled = "YES"
+        else:
+            enabled = "NO"
+    except KeyError:
+        enabled = "NO"
+    
+    row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
+           (id, link, metric, pretty_time, enabled, next_run_time, STATE[host][metric]["status"])
+
+    return row
+
+
 def generate_html_files():
     """ Write out the top-level HTML file and any host-specific files """
 
@@ -390,8 +450,8 @@ def generate_html_files():
 
     # Fill in the basics
     timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    title = "RSV Main Status - %s" % timestamp
-    header = "RSV Main Status :: %s" % timestamp
+    title = "RSV Status - %s" % timestamp
+    header = "RSV Status - %s" % timestamp
     main_page = re.sub("!!TITLE!!", title, main_page)
     main_page = re.sub("!!HEADER!!", header, main_page)
 
@@ -413,14 +473,7 @@ def generate_html_files():
             host_table = re.sub("!!HOSTNAME!!", host, host_table)
             rows = []
             for metric in sorted(STATE[host]):
-                link          = "%s.html#%s" % (host, metric)
-                id            = STATE[host][metric]["status"].lower()
-                pretty_time   = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(STATE[host][metric]["time"]))
-                next_run_time = get_next_run_time(host, metric)
-
-                row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
-                       (id, link, metric, pretty_time, next_run_time, STATE[host][metric]["status"])
-                rows.append(row)
+                rows.append(form_metric_row(host, metric, top_level=1))
 
             table = '\n'.join(rows)
             host_table = re.sub("!!ROWS!!", table, host_table)
@@ -451,7 +504,7 @@ def generate_host_html(host, info):
     # Fill in the basics
     timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     title = "RSV Status - %s - %s" % (host, timestamp)
-    header = "RSV Status :: %s :: %s" % (host, timestamp)
+    header = "RSV Status - %s - %s" % (host, timestamp)
     host_page = re.sub("!!TITLE!!", title, host_page)
     host_page = re.sub("!!HEADER!!", header, host_page)
 
@@ -472,18 +525,13 @@ def generate_host_html(host, info):
         host_table = re.sub("!!HOSTNAME!!", host, host_table)
         rows = []
         for metric in sorted(info):
-            link        = "#%s" % metric
-            id          = info[metric]["status"].lower()
-            pretty_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(info[metric]["time"]))
-            next_run_time = get_next_run_time(host, metric)
-            
-            row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
-                   (id, link, metric, pretty_time, next_run_time, info[metric]["status"])
-            rows.append(row)
+            row = form_metric_row(host, metric, top_level=0)
+            if row:
+                rows.append(row)
 
-            data += "<a name='%s'></a><h2>%s</h2>\n" % (metric, metric)
-            for entry in info[metric]["history"]:
-                data += "<pre>%s</pre>\n" % entry
+                data += "<a name='%s'></a><h2>%s</h2>\n" % (metric, metric)
+                for entry in info[metric]["history"]:
+                    data += "<pre>%s</pre>\n" % entry
 
         table = re.sub("!!ROWS!!", '\n'.join(rows), host_table)
         
@@ -552,6 +600,7 @@ def html_template():
       #warning { background-color: #fce94f; }
       #critical { background-color: #ef2929; }
       #unknown { background-color: #eeeeec; }
+      #old { background-color: #e0ae8b; }
 
       .question { cursor:pointer; text-decoration:underline; }
       .visible { display: block }
@@ -573,7 +622,7 @@ def html_template():
     </table>
     !!ALERTS!!
     <p><a href=\"#legend\">Explanation of colors</a>
-    <p>
+    <p>Metrics that are not enabled will be removed after 24 hours.
     !!TABLES!!
     !!DATA!!
 
@@ -583,6 +632,7 @@ def html_template():
      <tr id=\"warning\"><td>The metric produced some warnings</td></tr>
      <tr id=\"critical\"><td>The metric failed</td></tr>
      <tr id=\"unknown\"><td>The metric produced an unknown result</td></tr>
+     <tr id=\"old\"><td>The metric is enabled, but it has not run for 24 hours</td></tr>
    </table>
    </body>
 </html>
@@ -596,7 +646,8 @@ def html_table_template():
          <tr>
             <th>Metric</th>
             <th>Last Executed</th>
-            <th>Approximate Next Run Time</th>
+            <th>Enabled?</th>
+            <th>Next Run Time</th>
             <th>Status</th>
          </tr>
          !!ROWS!!
