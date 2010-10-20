@@ -13,8 +13,8 @@ import ConfigParser
 from time import strftime
 from optparse import OptionParser
 
-# Holds all the metric info.  This is a multi-level data structure with the following
-# format:
+# STATE holds all the metric info.  This is a multi-level data structure with the
+# following format:
 #   <Host> -> {}
 #             <Metric> -> {}
 #                         time   = Last time metric ran
@@ -28,6 +28,10 @@ from optparse import OptionParser
 #  <Host2> -> {}
 #             ...
 STATE = {}
+
+# CUR holds information that is only valid for this run, and should not be stored
+# in the state file
+CUR = {}
 
 ALERTS = []
 OPTIONS = None
@@ -173,18 +177,16 @@ def load_state_file():
 
 def write_state_file():
     """ Save the state back to disk """
-
     state_file = get_state_file_path()
-
     state_fp = open(state_file, 'w')
     pickle.dump(STATE, state_fp)
     state_fp.close()
-
     return
 
 
 def prune_old_records():
     """ Remove any older records """
+    pass
 
 
 def process_files():
@@ -306,7 +308,6 @@ def process_record(raw_record):
         STATE[host][metric] = {}
     STATE[host][metric]["time"]   = float(record["timestamp"])
     STATE[host][metric]["status"] = record["metricStatus"]
-    STATE[host][metric]["next"]   = "UNKNOWN"
 
     # Add an item to the history.  We could either do a history based on the number
     # of records kept (for each metric) or based on an expiration date since the record
@@ -350,12 +351,11 @@ def get_job_info():
     for line in out.split("\n"):
         match = re.match("Hostname: (\S+)", line)
         if match:
-            host = match.group(1)
+            host = re.sub(":", "_", match.group(1))
             continue
 
-        # For now we'll just drop any lines for hosts we don't know anything about
-        if host not in STATE:
-            continue
+        if host not in CUR:
+            CUR[host] = {}
 
         match = re.match("MISSING: (.+)", line)
         if match:
@@ -366,9 +366,21 @@ def get_job_info():
         arr = line.split('|')
         if len(arr) == 5:
             metric = arr[4].strip()
-            if metric in STATE[host]:
-                next_run_time = arr[3].strip()
-                STATE[host][metric]["next"] = next_run_time
+            if metric not in CUR[host]:
+                CUR[host][metric] = {}
+
+            # Store the next run time
+            CUR[host][metric]["next"] = arr[3].strip()
+
+
+def get_next_run_time(host, metric):
+    """ Return the next run time or something appropriate if it is not defined """
+    if host in CUR:
+        if metric in CUR[host]:
+            if "next" in CUR[host][metric]:
+                return CUR[host][metric]["next"]
+
+    return "NOT RUNNING"
 
 
 def generate_html_files():
@@ -401,12 +413,13 @@ def generate_html_files():
             host_table = re.sub("!!HOSTNAME!!", host, host_table)
             rows = []
             for metric in sorted(STATE[host]):
-                link        = "%s.html#%s" % (host, metric)
-                id          = STATE[host][metric]["status"].lower()
-                pretty_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(STATE[host][metric]["time"]))
+                link          = "%s.html#%s" % (host, metric)
+                id            = STATE[host][metric]["status"].lower()
+                pretty_time   = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(STATE[host][metric]["time"]))
+                next_run_time = get_next_run_time(host, metric)
 
                 row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
-                       (id, link, metric, pretty_time, STATE[host][metric]["next"], STATE[host][metric]["status"])
+                       (id, link, metric, pretty_time, next_run_time, STATE[host][metric]["status"])
                 rows.append(row)
 
             table = '\n'.join(rows)
@@ -462,9 +475,10 @@ def generate_host_html(host, info):
             link        = "#%s" % metric
             id          = info[metric]["status"].lower()
             pretty_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(info[metric]["time"]))
+            next_run_time = get_next_run_time(host, metric)
             
             row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
-                   (id, link, metric, pretty_time, info[metric]["next"], info[metric]["status"])
+                   (id, link, metric, pretty_time, next_run_time, info[metric]["status"])
             rows.append(row)
 
             data += "<a name='%s'></a><h2>%s</h2>\n" % (metric, metric)
