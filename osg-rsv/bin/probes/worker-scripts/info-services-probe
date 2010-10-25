@@ -238,7 +238,7 @@ def get_resource_doms(dom, service="CE", myhostname=None):
                 if shost == myhostname:
                     return resource_group_dom, resource_dom
     raise CriticalException("Unable to find a OIM resource matching " \
-        "hostname %s." % myhostname)
+        "hostname %s providing a service of type %s." % (myhostname, service))
 
 def get_resource_group_name(resource_group_dom):
     """
@@ -282,8 +282,8 @@ def se_consistency(config_ini, dom, sect, host):
     stdout += "\t- OIM name: %s" % resource_name
 
     if ci_resource_name != resource_name:
-        raise CriticalException("SE for SRM host %s has config.ini name %s" \
-            " which does not match the registered OIM name %s." % (host,
+        raise CriticalException("SE for SRM host '%s' has config.ini name " \
+            "'%s' which does not match the registered OIM name '%s'." % (host,
             ci_resource_name, resource_name))
 
     return stdout
@@ -345,8 +345,8 @@ def metric_consistency(config_ini):
             "match the OIM resource group name '%s'." % (ci_resource_group_name,
             resource_group_name))
     if resource_name != ci_resource_name:
-        raise CriticalException("Config.ini resource name does not match the" \
-            " OIM resource name.")
+        raise CriticalException("Config.ini resource name '%s' does not match" \
+            "the OIM resource name '%s'." % (ci_resource_name, resource_name))
 
     stdout += "\n" + all_se_consistency(config_ini, dom)
 
@@ -412,7 +412,7 @@ def metric_gip_lastrun():
 
     min_age, max_age = now, None
     for plugin_name in plugin_listing:
-        file = os.path.join(plugin_dir, plugin_file)
+        file = os.path.join(plugin_dir, plugin_name)
         hash = calculate_hash(file)
         file = os.path.join(temp_dir, plugin_name + ".ldif." + hash)
         try:
