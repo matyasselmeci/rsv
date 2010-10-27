@@ -149,6 +149,15 @@ sub Parse_Xml {
 
     ## Now process worker script output from $o{'cmdOut'}
     my $xml = new XML::Simple (KeyAttr=>[]);
+
+    # if data does not start with '<' XMLin will try to look for it as a file RT #6431
+    if($o{'cmdOut'} !~ /^\s*</) {
+        RSVProbeBase::Exit_Error(3, "$err_string\n" . 
+                                 "Output could not be parsed as XML because it does not start " .
+                                 "with a '<'.\nOutput:\n" . 
+                                 "$o{'cmdOut'}");
+    }
+
     %{$o{'cmdOutHash'}} = %{$xml->XMLin($o{'cmdOut'}, forcearray => [ 'probes' ])};
     &RSVProbeBase::Verbose (&Data::Dumper::Dumper($o{'cmdOutHash'}));
 
