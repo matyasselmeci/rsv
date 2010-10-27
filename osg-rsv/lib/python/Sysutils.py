@@ -44,6 +44,7 @@ class Sysutils:
             os.kill(child.pid, signal.SIGKILL)
             raise TimeoutError("Command timed out (timeout=%s)" % timeout)
 
+        self.rsv.log("INFO", "Exit code of job: %s" % ret)
         out = child.fromchild.read()
         err = child.childerr.read()
         return (ret, out, err)
