@@ -132,6 +132,11 @@ class Metric:
         """ Return the environment configuration """
 
         env = {}
+
+        # All grid type metrics need GLOBUS_LOCATION because we call globus-job-run
+        if self.config_val("execute", "grid"):
+            env["GLOBUS_LOCATION"] = ["SET", os.path.join(self.rsv.vdt_location, "globus")]
+
         try:
             section = self.name + " env"
             for var in self.config.options(section):
