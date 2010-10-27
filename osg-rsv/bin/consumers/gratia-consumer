@@ -36,6 +36,13 @@ def initialize():
     info = {}
 
     #
+    # We don't want people to accidently run this consumer as root because that may
+    # cause permissions problems on log files and directories for the regular RSV user.
+    #
+    if os.geteuid() == 0:
+        die("ERROR: The gratia-consumer cannot be run as root")
+
+    #
     # Validate VDT_LOCATION
     #
     if "VDT_LOCATION" not in os.environ:

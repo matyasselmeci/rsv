@@ -56,6 +56,14 @@ def main():
 def initialize():
     """ Check that environment is valid """
 
+    #
+    # We don't want people to accidently run this consumer as root because that may
+    # cause permissions problems on log files and directories for the regular RSV user.
+    #
+    if os.geteuid() == 0:
+        die("ERROR: The html-consumer cannot be run as root")
+
+
     usage = """usage: html-consumer
       --vdt-location <VDT directory>
       --output-dir <HTML directory>
@@ -557,8 +565,11 @@ def log(msg):
     timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     print "%s: %s" % (timestamp, msg)
 
-    if OPTIONS.log:
+    try:
         OPTIONS.log.write("%s: %s\n" % (timestamp, msg))
+    except AttributeError:
+        # In case OPTIONS.log is not yet set
+        pass
         
 
 def die(msg):

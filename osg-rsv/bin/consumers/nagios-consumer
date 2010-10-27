@@ -12,6 +12,16 @@ my $output_fh;
 my $conf_file;
 GetOptions("conf-file=s" => \$conf_file);
 
+
+#
+# We don't want people to accidently run this consumer as root because that may
+# cause permissions problems on log files and directories for the regular RSV user.
+#
+if($> == 0) {
+    die("ERROR: The nagios-consumer cannot be run as root");
+}
+
+
 ##
 ## Make sure we have VDT_LOCATION set in our environment
 ##
