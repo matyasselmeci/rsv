@@ -40,7 +40,7 @@ for consumer_file in glob.glob("osg-rsv/bin/consumers/*"):
     consumer = os.path.basename(consumer_file)
 
     #
-    # Check that if the consumer is a symlink if points to an existing file
+    # Check that if the consumer is a symlink it points to an existing file
     #
 
     # consumers aren't currently symlinks, but they could be in a future release
