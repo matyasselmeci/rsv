@@ -1674,7 +1674,7 @@ sub Globus_Job_Run_Error_Code {
     my $method     =   $_[1] ;  ## "system" or "backtick"
     my $error_code =   $_[2];   ## error code = 2 or 3
     my $extra_rsl  = "";
-    $extra_rsl = " -x $o{'extraGlobusRsl'} " if ( $o{'extraGlobusRsl'});
+    $extra_rsl = " -x \"$o{'extraGlobusRsl'}\" " if ( $o{'extraGlobusRsl'});
 
     $o{'globusjobCmd'} = "$o{'globusjobrunCmd'} $o{'hostName'}/jobmanager-fork $extra_rsl $cmd ";
     &Run_Command ($o{'globusjobCmd'}, "backtick");
@@ -1873,7 +1873,7 @@ sub Globus_Job_Submit_Error_Code {
     my $error_code        =   $_[2];   ## error code = 2 or 3
 
     my $extra_rsl  = "";
-    $extra_rsl = " -x $o{'extraGlobusRsl'} " if ( $o{'extraGlobusRsl'});
+    $extra_rsl = " -x \"$o{'extraGlobusRsl'}\" " if ( $o{'extraGlobusRsl'});
 
     $o{'globusjobCmd'} = "$o{'globusjobsubmitCmd'} $o{'hostName'}/$o{'jobManager'} $extra_rsl $cmd ";
     &Run_Command ($o{'globusjobCmd'}, "backtick");

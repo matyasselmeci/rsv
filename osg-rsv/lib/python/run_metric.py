@@ -271,6 +271,12 @@ def execute_job(rsv, metric):
     #
     execute_type = metric.config_get("execute").lower()
     if execute_type == "local":
+        # Anthony Tiradani uses extra RSL to get his jobs to run with priority at Fermi
+        # This is done for old style metrics by passing --extra-globus-rsl.  For direct
+        # globus-job-run calls we need to add the -x flag (see below in the 'grid' section)
+        if metric.config_val("probe-spec", "v3") and rsv.get_extra_globus_rsl():
+            args += " --extra-globus-rsl %s" % rsv.get_extra_globus_rsl()
+            
         job = "%s -m %s -u %s %s" % (metric.executable,
                                      metric.name,
                                      metric.host,
@@ -278,13 +284,21 @@ def execute_job(rsv, metric):
 
     elif execute_type == "grid":
         globus_job_run_exe = os.path.join(rsv.vdt_location, "globus", "bin", "globus-job-run")
-        job = "%s %s/jobmanager-%s -s %s -- -m %s -u %s %s" % (globus_job_run_exe,
-                                                               metric.host,
-                                                               jobmanager,
-                                                               metric.executable,
-                                                               metric.name,
-                                                               metric.host,
-                                                               args)
+
+        # Anthony Tiradani uses extra RSL to get his jobs to run with priority at Fermi
+        # This is done by passing -x to globus-job-run
+        extra_globus_rsl = ""
+        if rsv.get_extra_globus_rsl():
+            extra_globus_rsl = "-x %s" % rsv.get_extra_globus_rsl()
+            
+        job = "%s %s/jobmanager-%s %s -s %s -- -m %s -u %s %s" % (globus_job_run_exe,
+                                                                  metric.host,
+                                                                  jobmanager,
+                                                                  extra_globus_rsl,
+                                                                  metric.executable,
+                                                                  metric.name,
+                                                                  metric.host,
+                                                                  args)
 
     elif execute_type == "condor-grid":
         rsv.log("ERROR", "The condor-grid execute type is not yet implemented")

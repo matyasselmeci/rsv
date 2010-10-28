@@ -347,6 +347,13 @@ class RSV:
         config_fp.close()
 
 
+    def get_extra_globus_rsl(self):
+        """ Fetch the extra-globus-rsl value which is optional. """
+        try:
+            return self.config.get("rsv", "extra-globus-rsl")
+        except ConfigParser.NoOptionError:
+            return ""
+
 
     def get_wrapper(self):
         """ Return the wrapper script that will run the metrics """
