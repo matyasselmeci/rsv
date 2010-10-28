@@ -263,9 +263,6 @@ sub Init {
     ################################################
     ## Local environment type stuff -- get local CE/CE_Client install location
     ################################################
-    ## Local user name, UID, etc.
-    my @arr_tmp  = getpwnam($ENV{'USER'});
-    $o{'ENV_UID'} = $arr_tmp[2]; ## Element 2 is the UID
 
     ################################################
     ## Set probe name and version keys
@@ -279,7 +276,7 @@ sub Init {
     ## Default timeout for individual command executions. 
     ##  NOTE: Not for probe itself; though it should probably be, per intuition?
     $o{'timeout'}   = 300;
-    $o{'proxyFile'}   = "/tmp/x509up_u".$o{'ENV_UID'};
+    $o{'proxyFile'} = "/tmp/x509up_u$>";
 
     ## Grab local VDT location from %ENV hash
     $o{'VDT_LOCATION_LOCAL'} = $ENV{'VDT_LOCATION'};
