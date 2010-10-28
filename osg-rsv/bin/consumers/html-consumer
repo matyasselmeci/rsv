@@ -620,6 +620,9 @@ def html_template():
       .visible { display: block }
       .invisible { display: none }
 
+      li.q { padding-top: 10px; font-weight: bold; }
+      li.a { font-style: italic; list-style-type: none; padding-top: 4px; }
+
       p.alert { background-color: red }
       -->
       </style>
@@ -635,19 +638,34 @@ def html_template():
        </tr>
     </table>
     !!ALERTS!!
-    <p><a href=\"#legend\">Explanation of colors</a>
-    <p>Metrics that are not enabled will be removed after 24 hours.
+    <p><a href=\"#faq\">FAQ</a>
     !!TABLES!!
     !!DATA!!
 
-   <p>&nbsp;<p><a name=\"legend\">Legend:</a>
+   <p>&nbsp;
+   <p><a name=\"faq\" style='background:#ffffff;color:#000000;'>Frequently Asked Questions:</a>
+   <ul>
+
+   <li class='q'>How often does this page update?
+   <li class='a'>Approximately every 5 minutes.
+
+   <li class='q'>When do records get removed?
+   <li class='a'>Any record that is not enabled will be removed when it is 24 hours old.<br />
+      If a record is enabled but has not been updated for 24+ hours the line will be left in place but will be turned gray.
+
+   <li class='q'>How can I manually remove records?
+   <li class='a'>This can't be done yet - you'll need to wait until the records are 24 hours old.
+
+   <li class='q'>What do the colors indicate?</a>
+   <li class='a'>
    <table>
      <tr id=\"ok\"><td>The metric ran successfully</td></tr>
      <tr id=\"warning\"><td>The metric produced some warnings</td></tr>
      <tr id=\"critical\"><td>The metric failed</td></tr>
      <tr id=\"unknown\"><td>The metric produced an unknown result</td></tr>
-     <tr id=\"old\"><td>The metric is enabled, but it has not run for 24 hours</td></tr>
+     <tr id=\"old\"><td>The metric is enabled, but it has produced output for 24+ hours</td></tr>
    </table>
+   </ul>
    </body>
 </html>
 """
