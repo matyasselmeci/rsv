@@ -122,16 +122,22 @@ def validate_config(rsv, metric):
 
 
 
-def ping_test(rsv, metric, options):
+def ping_test(rsv, metric):
     """ Ping the remote host to make sure it's alive before we attempt
     to run jobs """
 
-    rsv.log("INFO", "Pinging host %s:" % options.uri)
+    uri = metric.host
+    if uri.find(":") > 0:
+        (host, port) = re.split(":", uri, 1)
+    else:
+        host = uri
+
+    rsv.log("INFO", "Pinging host %s:" % host)
 
     # Send a single ping, with a timeout.  We just want to know if we can reach
     # the remote host, we don't care about the latency unless it exceeds the timeout
     try:
-        cmd = "/bin/ping -W 3 -c 1 %s" % options.host
+        cmd = "/bin/ping -W 3 -c 1 %s" % host
         (ret, out, err) = rsv.run_command(cmd)
     except Sysutils.TimeoutError, err:
         rsv.results.ping_timeout(metric, cmd, err)
@@ -332,28 +338,34 @@ def clean_up(exit_code=0):
 def main(rsv, options, metrics):
     """ Main subroutine: directs program flow """
 
-    # Validate the host, and if necessary, split off the port
-    if options.uri.find(":") == -1:
-        options.host = options.uri
+    hosts = {}
+    total = 0
+
+    if options.all_enabled:
+        for host in rsv.get_host_info():
+            hosts[host.host] = host.get_enabled_metrics()
+            total += len(hosts[host.host])
     else:
-        (options.host, options.port) = re.split(":", options.uri, 1)
+        hosts[options.uri] = metrics
+        total = len(metrics)
 
     # Process the command line and initialize
     count = 0
-    for metric_name in metrics:
-        count += 1
-        metric = Metric.Metric(metric_name, rsv, options.uri)
-        validate_config(rsv, metric)
+    for host in hosts:
+        for metric_name in hosts[host]:
+            count += 1
+            metric = Metric.Metric(metric_name, rsv, host)
+            validate_config(rsv, metric)
 
-        # Check for some basic error conditions
-        rsv.check_proxy(metric)
-        ping_test(rsv, metric, options)
-    
-        # Run the job and parse the result
-        if len(metrics) > 1:
-            rsv.echo("\nRunning metric %s (%s of %s)\n" % (metric.name, count, len(metrics)))
-        else:
-            rsv.echo("\nRunning metric %s:\n" % metric.name)
-        execute_job(rsv, metric)
+            # Check for some basic error conditions
+            rsv.check_proxy(metric)
+            ping_test(rsv, metric)
+
+            # Run the job and parse the result
+            if total > 1:
+                rsv.echo("\nRunning metric %s (%s of %s)\n" % (metric.name, count, total))
+            else:
+                rsv.echo("\nRunning metric %s:\n" % metric.name)
+            execute_job(rsv, metric)
 
     return

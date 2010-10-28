@@ -13,7 +13,7 @@ import run_metric
 
 def process_options(arguments=None):
     usage = """usage: rsv-control [ --verbose <level> ]
-      --run --host <HOST> METRIC [METRIC ...]
+      --run [--all-enabled] --host <HOST> METRIC [METRIC ...]
       --list [ --wide ] [ --all ] [ <pattern> ]
       --job-list [ --host <host-name> ]
       --on      [METRIC|CONSUMER ...]
@@ -44,6 +44,8 @@ def process_options(arguments=None):
                       help="Display all metrics, including metrics not enabled on any host.")
     parser.add_option("-r", "--run", action="store_true", dest="run", default=False,
                       help="Run the supplied list of metrics against the specified host.")
+    parser.add_option("--all-enabled", action="store_true", dest="all_enabled", default=False,
+                      help="Run all enabled metrics serially.")
     parser.add_option("--on", action="store_true", dest="on", default=False,
                       help="Turn on all enabled metrics.  If a metric is specified, turn on only that metric.")
     parser.add_option("--off", action="store_true", dest="off", default=False,
@@ -89,14 +91,17 @@ def process_options(arguments=None):
 
     # Check other conditions
     if options.run:
-        if not options.host:
+        if options.all_enabled:
+            pass
+        elif not options.host:
             parser.error("You must provide a host to run metrics against.")
         else:
             # Set options.uri for run_metric.py code
             options.uri = options.host
 
-        if not args:
-            parser.error("You must provide metrics to run")
+        if not args and not options.all_enabled:
+            parser.error("You must provide a list of metrics to run or else pass the " +
+                         "--all-enabled flag to run all enabled metrics")
 
 
     return options, args
