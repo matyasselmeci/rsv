@@ -4,6 +4,7 @@
 import re
 import os
 import sys
+import copy
 import ConfigParser
 from pwd import getpwnam
 from optparse import OptionParser
@@ -233,7 +234,7 @@ def execute_job(rsv, metric):
     # Set the environment for the job
     #
     rsv.log("INFO", "Setting up job environment:")
-    original_environment = os.environ.copy()
+    original_environment = copy.copy(os.environ)
 
     env = metric.get_environment()
     for var in env.keys():
