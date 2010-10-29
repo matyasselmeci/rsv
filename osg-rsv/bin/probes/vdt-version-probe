@@ -6,7 +6,7 @@ use warnings;
 # We assume we have the normal environment for a fork job here. It has
 # $OSG_LOCATION but not $VDT_LOCATION
 
-print "JOB RESULTS:\n";
+print "RSV BRIEF RESULTS:\n";
 
 my $vdt_location = $ENV{OSG_LOCATION};
 my $vdt_version = "$vdt_location/vdt/bin/vdt-version";

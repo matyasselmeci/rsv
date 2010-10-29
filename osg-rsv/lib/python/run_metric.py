@@ -188,7 +188,7 @@ def parse_job_output_multiple_wlcg(rsv, metric, stdout, stderr):
 def parse_job_output_brief(rsv, metric, stdout, stderr):
     """ Parse the "brief" job output.  This format consists of just a keyword, status
     and details.  Here is an example:
-    JOB RESULTS:
+    RSV BRIEF RESULTS:
     OK
     More information, which can
     be on multiple lines.
@@ -199,7 +199,7 @@ def parse_job_output_brief(rsv, metric, stdout, stderr):
 
     lines = stdout.split("\n")
 
-    if lines[0] == "JOB RESULTS:":
+    if lines[0] == "RSV BRIEF RESULTS:":
         status = lines[1].strip()
         details = "\n".join(lines[2:])
 
