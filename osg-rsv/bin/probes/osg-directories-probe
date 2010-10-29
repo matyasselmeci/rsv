@@ -1,0 +1,111 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+# JOB RESULTS: is the header for the brief results format
+print "RSV BRIEF RESULTS:\n";
+
+# We assume we have the normal environment for a fork job here. It has
+# $OSG_LOCATION but not $VDT_LOCATION
+my $vdt_location = $ENV{OSG_LOCATION} or "";
+
+if(!$vdt_location) {
+    status("CRITICAL", "OSG_LOCATION is not set in the environment");
+    exit 0;
+}
+elsif(!-d $vdt_location) {
+    status("CRITICAL", "OSG_LOCATION does not exist");
+    exit 0;
+}
+
+
+# Define the directories we will examine
+my %dirs;
+
+# OSG_LOCATION is obviously required and critical
+$dirs{OSG_LOCATION}{isCritical} = 1;
+$dirs{OSG_LOCATION}{isRequired} = 1;
+$dirs{OSG_LOCATION}{permission} = qr/[012467]?7[75]5/;
+
+# OSG_APP is required, but we'll just give a warning if something is wrong
+$dirs{OSG_APP}{isCritical} = 0;
+$dirs{OSG_APP}{isRequired} = 1;
+$dirs{OSG_APP}{permission} = qr/[012]?7[75][75]/;
+
+# OSG_DATA is optional
+$dirs{OSG_DATA}{isCritical} = 0;
+$dirs{OSG_DATA}{isRequired} = 0;
+$dirs{OSG_DATA}{permission} = qr/[012]?77[75]/;
+
+# Examine each directory in turn
+my $critical = 0;
+my $warning = 0;
+my $details = "";
+foreach my $dir (keys %dirs) {
+    my $path = $ENV{$dir};
+    
+    if(!$path or ($path eq "UNAVAILABLE") or (!-d $path)) {
+        if($dirs{$dir}{isRequired}) {
+            if($dirs{$dir}{isCritical}) {
+                $critical++;
+                $details .= "Required and critical directory is not set or non-existent ($dir=$path)\n\n";
+            }
+            else {
+                $warning++;
+                $details .= "Required directory is not set or non-existent ($dir=$path)\n\n";
+            }
+        }
+        else {
+            $details .= "Non-required directory is not set or non-existent ($dir=$path)\n\n";
+        }
+        next;
+    }
+
+    # This semi-complicated line gets the stat in a form like: "0755"
+    my $mode = sprintf("%04o", (stat($path))[2] & 07777);
+
+    if($mode !~ $dirs{$dir}{permission}) {
+        $details .= "The $dir directory ($path) has INCORRECT permissions.\n";
+        if($dirs{$dir}{isCritical}) {
+            $critical++;
+        }
+        else {
+            $warning++;
+        }
+    }
+    else {
+        $details .= "The $dir directory ($path) has correct permissions.\n";
+    }
+
+    $details .= "Found: $mode\n";
+    $details .= "Required: " . $dirs{$dir}{permission} . "\n\n";
+}
+
+
+my $status = "OK";
+my $header = "";
+if($critical) {
+    $status = "CRITICAL";
+    $header .= "Found $critical CRITICAL errors.\n";
+}
+
+if($warning) {
+    $status = "WARNING" unless($critical);
+    $header .= "Found $warning WARNINGs.\n";
+}
+    
+status($status, "\n$header\n$details");
+exit 0;
+
+
+sub status {
+    my ($status, $message) = @_;
+    print "$status\n";
+    print "$message\n";
+
+    # We'll always dump the environment to STDERR to help debug the metric.  This won't
+    # be put into the metric record but it will be available in the job's .err file.
+    print STDERR "vdt_location = $vdt_location\n";
+    print STDERR `/usr/bin/env`;
+}
