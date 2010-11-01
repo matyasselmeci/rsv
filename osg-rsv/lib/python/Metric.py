@@ -17,7 +17,7 @@ class Metric:
     executable = None
 
 
-    def __init__(self, metric, rsv, host=None):
+    def __init__(self, metric, rsv, host=None, options=None):
         # Initialize vars
         self.name = metric
         self.rsv  = rsv
@@ -40,10 +40,10 @@ class Metric:
         defaults = get_metric_defaults(metric)
         self.config = ConfigParser.RawConfigParser()
         self.config.optionxform = str
-        self.load_config(defaults)
+        self.load_config(defaults, options)
 
 
-    def load_config(self, defaults):
+    def load_config(self, defaults, options=None):
         """ Load metric configuration files """
         if defaults:
             for section in defaults.keys():
@@ -59,6 +59,7 @@ class Metric:
             self.rsv.log("ERROR", "Metric meta file '%s' does not exist" % meta_file)
             return
         else:
+            self.rsv.log("INFO", "Loading metric meta file '%s'" % meta_file)
             try:
                 self.config.read(meta_file)
             except ConfigParser.ParsingError, err:
@@ -72,6 +73,7 @@ class Metric:
             self.rsv.log("INFO", "Metric config file '%s' does not exist" % config_file)
             return
         else:
+            self.rsv.log("INFO", "Loading metric global config file '%s'" % config_file)
             try:
                 self.config.read(config_file)
             except ConfigParser.ParsingError, err:
@@ -85,12 +87,27 @@ class Metric:
             if not os.path.exists(config_file):
                 self.rsv.log("INFO", "Metric/host config file '%s' does not exist" % config_file)
             else:
+                self.rsv.log("INFO", "Loading metric host-specific config file '%s'" % config_file)
                 try:
                     self.config.read(config_file)
                 except ConfigParser.ParsingError, err:
                     self.rsv.log("CRITICAL", err)
                     sys.exit(1)
 
+        # If we were given a file on the command line load it now
+        if options and options.extra_config_file:
+            if not os.path.exists(options.extra_config_file):
+                self.rsv.log("ERROR", "Extra config file (%s) does not exist" % options.extra_config_file)
+                return
+            else:
+                self.rsv.log("INFO", "Loading extra config file '%s'" % options.extra_config_file)
+                try:
+                    self.config.read(options.extra_config_file)
+                except ConfigParser.ParsingError, err:
+                    self.rsv.log("CRITICAL", "Error parsing extra config file %s" % options.extra_config_file)
+                    self.rsv.log("CRITICAL", err)
+                    sys.exit(1)
+                    
         
 
     def get_type(self):

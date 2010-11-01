@@ -62,6 +62,8 @@ def process_options(arguments=None):
                       help="Output the job list (-j) in an easy-to-parse format.")
     parser.add_option("--show-config", action="store_true", dest="show_config", default=False,
                       help="Show the configuration for specific metrics.")
+    parser.add_option("--extra-config-file", dest="extra_config_file", default=None,
+                      help="Path to another INI-format file containing metric configuration (used with --run)")
 
     if arguments == None:
         (options, args) = parser.parse_args()

@@ -368,7 +368,7 @@ def main(rsv, options, metrics):
     for host in hosts:
         for metric_name in hosts[host]:
             count += 1
-            metric = Metric.Metric(metric_name, rsv, host)
+            metric = Metric.Metric(metric_name, rsv, host, options)
             validate_config(rsv, metric)
 
             # Check for some basic error conditions
