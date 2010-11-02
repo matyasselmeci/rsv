@@ -139,7 +139,9 @@ class Consumer:
         """ Return the arguments string as defined in the configuration file """
 
         try:
-            return self.config.get(self.name, "args")
+            args = self.config.get(self.name, "args")
+            args = re.sub("!!VDT_LOCATION!!", self.rsv.vdt_location, args)
+            return args
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
             return ""
 
