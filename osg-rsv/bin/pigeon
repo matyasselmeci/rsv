@@ -105,7 +105,8 @@ def query_bdii(options, sUrl=0, tUrl=0):
             srm_dest = fields[1].strip()
             srm_dest = re.sub("TESTFILE", "TESTFILE-RSV", srm_dest)
 
-            # TODO: Preserving this from the original pigeon probe, I'm not sure why it is needed
+            # TODO: Preserving this from the original pigeon probe, I'm not sure why it is needed, there
+            # was no comment. -swk
             if tUrl == 1:
                 srm_dest += str(random.randint(0, 10000))
 
@@ -123,7 +124,10 @@ def query_bdii(options, sUrl=0, tUrl=0):
             name = re.sub("\s+.*$", "", name)
 
             print "%s %s %s" % (name, srm_id, srm_dest)
-            match = re.match("srm://([^/]+)/(.+)\?SFN=(.+)$", srm_dest) # TODO - did I parse this right?  SFN= in particular?
+            # TODO - is this parsing correct for surls?
+            # TODO - the parsing for turls is obviously different but I don't understand which part
+            #        is the srm-webservice-path (I suspect it is implicit)
+            match = re.match("srm://([^/]+)/(.+)\?SFN=(.+)$", srm_dest)
             if match:
                 se_list[name] = { "host" : srm_id }
                 se_list[name]["host-with-port"]  = match.group(1)
@@ -155,18 +159,12 @@ def make_ini_file(metrics, srm_dir, srm_webservice_path):
     return handle
           
 
-def probe_surls(se_list, options):
+def probe(se_list, metrics, options):
     """ Run RSV metrics against the SEs we discovered """
 
     for name in se_list.keys():
         se = se_list[name]
         print "Monitoring SE %s (%s)" % (name, se["host"])
-
-        # Note: only SRM metrics should be used because we pass the host-with-port below
-        # which means that a metric such as org.osg.general.ping-host would fail unless
-        # the ping succeeded against the specific port (if specificed in BDII)
-        # TODO - list metrics here
-        metrics = ["org.osg.srm.srmclient-ping"]
 
         # Write an INI file
         config_file = make_ini_file(metrics, se["dir"], se["webservice-path"])
@@ -186,9 +184,6 @@ def probe_surls(se_list, options):
             print out
 
 
-def probe_turls():
-    # TODO - this should look like probe_surls
-    pass
 
 
 random.seed()
@@ -197,5 +192,13 @@ surl_list = query_bdii(options, sUrl=1)
 #turl_list = query_bdii(options, tUrl=1)
 
 # Probe
-probe_surls(surl_list, options)
-#probe_turls(turl_list, options)
+
+# Note: only SRM metrics should be used because we pass the host-with-port below
+# which means that a metric such as org.osg.general.ping-host would fail unless
+# the ping succeeded against the specific port (if specificed in BDII)
+# TODO - list metrics here
+surl_metrics = ["org.osg.srm.srmclient-ping"]
+probe(surl_list, surl_metrics, options)
+
+turl_metrics = ["org.osg.srm.srmclient-ping"]
+#probe(turl_list, turl_metrics, options)
