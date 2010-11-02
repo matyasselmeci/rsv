@@ -10,7 +10,10 @@ $|=1;
 # The file we will write all output to
 my $output_fh;
 my $conf_file;
-GetOptions("conf-file=s" => \$conf_file);
+my $send_ncsa;
+GetOptions("conf-file=s" => \$conf_file,
+           "send-ncsa"   => \$send_ncsa,
+           );
 
 
 #
@@ -127,8 +130,9 @@ sub write_data {
     ########################
     # Do nagios calls here #
     ########################
-    my $rsvnagios_cmd = "$ENV{VDT_LOCATION}/osg-rsv/bin/misc/rsv2nagios.py $conf_file $info{metricName} <$file >>$ENV{VDT_LOCATION}/osg-rsv/logs/consumers/rsv2nagios.log";
-    debug_print("RSV 2 NAGIOS Cmd: $rsvnagios_cmd");
+    my $exe = ($send_ncsa) ? "rsv2nsca.py" : "rsv2nagios.py";
+    my $rsvnagios_cmd = "$ENV{VDT_LOCATION}/osg-rsv/bin/misc/$exe $conf_file $info{metricName} <$file >>$ENV{VDT_LOCATION}/osg-rsv/logs/consumers/rsv2nagios.log";
+    debug_print("Cmd: $rsvnagios_cmd");
     system("$rsvnagios_cmd");
 }
 
