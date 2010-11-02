@@ -10,28 +10,42 @@ import tempfile
 import ConfigParser
 from optparse import OptionParser
 
+# Hold the command line options
+OPTIONS = None
+
+def verbose_print(msg):
+    """ Print a message if the verbose flag was passed """
+    if OPTIONS and OPTIONS.verbose:
+        print msg
+        
+
 def process_options(arguments=None):
-    """ Handle the command line options """
+    """ Handle the command line OPTIONS """
 
     usage = """usage: pigeon
-    --vo
-    TODO - fill this in
+    --vo <VO NAME>  - the Virtual Organization
+    -v --verbose    - print extra information
     """
     
     description = "TODO - Fill in the description here"
 
     parser = OptionParser(usage=usage, description=description)
-    parser.add_option("--vo", dest="vo", default="Engage", # TODO - default should not be Engage?
+    parser.add_option("--vo", dest="vo", default=None,
                       help="The VO to get SEs for")
-    parser.add_option("--verbose", dest="verbose", default=False,
-                       help="Enable verbose output")
+    parser.add_option("-v", "--verbose", action="store_true", dest="verbose",
+                      default=False, help="Enable verbose output")
 
+    global OPTIONS
     if arguments == None:
-        (options, args) = parser.parse_args()
+        (OPTIONS, args) = parser.parse_args()
     else:
-        (options, args) = parser.parse_args(arguments)
+        (OPTIONS, args) = parser.parse_args(arguments)
 
-    return options, args
+    if not OPTIONS.vo:
+        print "ERROR: You must specify a VO with --vo"
+        sys.exit(1)
+
+    return args
 
 
 class TimeoutError(Exception):
@@ -68,19 +82,17 @@ def system(command, timeout=300):
     return (ret, out, err)
 
 
-def query_bdii(options, sUrl=0, tUrl=0):
+def query_bdii(sUrl=0, tUrl=0):
     """ Use the storage discovery tools to find SEs """
 
     se_list = {}
 
-
     if sUrl == 1:
-        print "Querying BDII for SEs for VO %s..." % options.vo
-        command = "get_surl --vo %s --show_storage_element_id" % options.vo
+        print "Querying BDII for SEs for VO %s..." % OPTIONS.vo
+        command = "get_surl --vo %s --show_storage_element_id" % OPTIONS.vo
     elif tUrl == 1:
-        # TODO - Clarify this comment.  What's a "classic" SE vs an SE?
-        print "Querying BDII for classic SEs for VO %s..." % options.vo
-        command = "get_gridftp_url --vo %s --show_storage_element_id" % options.vo
+        print "Querying BDII for GridFTP servers for VO %s..." % OPTIONS.vo
+        command = "get_gridftp_url --vo %s --show_storage_element_id" % OPTIONS.vo
         
     (ret, out, err) = system(command)
 
@@ -123,25 +135,38 @@ def query_bdii(options, sUrl=0, tUrl=0):
             # then only take the first one.  
             name = re.sub("\s+.*$", "", name)
 
-            print "%s %s %s" % (name, srm_id, srm_dest)
+            verbose_print("%s %s %s" % (name, srm_id, srm_dest))
             # TODO - is this parsing correct for surls?
-            # TODO - the parsing for turls is obviously different but I don't understand which part
-            #        is the srm-webservice-path (I suspect it is implicit)
-            match = re.match("srm://([^/]+)/(.+)\?SFN=(.+)$", srm_dest)
-            if match:
-                se_list[name] = { "host" : srm_id }
-                se_list[name]["host-with-port"]  = match.group(1)
-                se_list[name]["webservice-path"] = match.group(2)
-                se_list[name]["dir"]             = match.group(3)
-            else:
-                print "ERROR: Could not parse srm destination '%s'" % srm_dest
-                continue
+
+            if sUrl == 1:
+                match = re.match("srm://([^/]+)/(.+)\?SFN=(.+)$", srm_dest)
+                if match:
+                    se_list[name] = { "host"            : srm_id,
+                                      "host-with-port"  : match.group(1),
+                                      "webservice-path" : match.group(2),
+                                      "dir"             : match.group(3),
+                                      }
+                else:
+                    print "WARNING: Could not parse srm destination '%s'" % srm_dest
+                    continue
+            elif tUrl == 1:
+                # The URI should look similar to this:
+                # gsiftp://atlas.beocat:2811/mnt/osg_data/TESTFILE-RSV9461
+                match = re.match("gsiftp://([^/]+)/(.+)$", srm_dest)
+                if match:
+                    se_list[name] = { "host-with-port" : match.group(1),
+                                      "path" : match.group(2),
+                                      }
+
+                    # Remove the port in case it is present
+                    se_list[name]["host"] = re.sub(":.+$", "", se_list[name]["host-with-port"])
+                    
 
     print "Found %s SEs" % len(se_list.keys())
     return se_list
 
 
-def make_ini_file(metrics, srm_dir, srm_webservice_path):
+def make_ini_file(metrics, params):
     """ Generate a temporary INI file to be used with rsv-control """
 
     config = ConfigParser.RawConfigParser()
@@ -149,17 +174,19 @@ def make_ini_file(metrics, srm_dir, srm_webservice_path):
     for metric in metrics:
         section = "%s args" % metric
         config.add_section(section)
-        config.set(section, "srm-dir", srm_dir)
-        config.set(section, "srm-webservice-path", srm_webservice_path)
+        for key in params.keys():
+            config.set(section, key, params[key])
 
     # Write out to a temporary INI file that is on the filesystem
     handle = tempfile.NamedTemporaryFile(prefix="pigeon.", suffix=".ini")
     config.write(handle)
+    # On my test system the file won't get written to disk unless we explicitly
+    # call flush here.
     handle.file.flush()
     return handle
           
 
-def probe(se_list, metrics, options):
+def probe(se_list, metrics, sUrl=0, tUrl=0):
     """ Run RSV metrics against the SEs we discovered """
 
     for name in se_list.keys():
@@ -167,7 +194,12 @@ def probe(se_list, metrics, options):
         print "Monitoring SE %s (%s)" % (name, se["host"])
 
         # Write an INI file
-        config_file = make_ini_file(metrics, se["dir"], se["webservice-path"])
+        if sUrl == 1:
+            params = { "srm-dir" : se["dir"], "srm-webservice-path" : se["webservice-path"] }
+        elif tUrl == 1:
+            params = { "gridftp-destination-dir" : se["path"] }
+            
+        config_file = make_ini_file(metrics, params)
 
         command = "rsv-control -r -u %s --extra-config-file %s %s" %\
                   (se["host-with-port"], config_file.name, " ".join(metrics))
@@ -187,9 +219,9 @@ def probe(se_list, metrics, options):
 
 
 random.seed()
-options, args = process_options()
-surl_list = query_bdii(options, sUrl=1)
-#turl_list = query_bdii(options, tUrl=1)
+args = process_options()
+surl_list = query_bdii(sUrl=1)
+turl_list = query_bdii(tUrl=1)
 
 # Probe
 
@@ -198,7 +230,7 @@ surl_list = query_bdii(options, sUrl=1)
 # the ping succeeded against the specific port (if specificed in BDII)
 # TODO - list metrics here
 surl_metrics = ["org.osg.srm.srmclient-ping"]
-probe(surl_list, surl_metrics, options)
+probe(surl_list, surl_metrics, sUrl=1)
 
-turl_metrics = ["org.osg.srm.srmclient-ping"]
-#probe(turl_list, turl_metrics, options)
+turl_metrics = ["org.osg.globus.gridftp-simple"]
+probe(turl_list, turl_metrics, tUrl=1)
