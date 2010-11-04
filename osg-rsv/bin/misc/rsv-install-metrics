@@ -1,0 +1,69 @@
+#!/usr/bin/env python
+
+import sys, os, traceback, optparse
+import re
+import random
+
+def main (options, args):
+
+    if not options.probe:
+        print "ERROR: Required argument --probe is missing"
+        sys.exit(1)
+    elif not os.path.exists(options.probe):
+        print "ERROR: Probe file does not exist at '%s'" % options.probe
+        sys.exit(1)
+
+    # Get the RSV base folder, which is 3 directories up from where this script lives
+    rsv_base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(sys.argv[0]))))
+
+    for metric in args:
+        # Install the symlink
+        os.symlink(options.probe, os.path.join(rsv_base, "bin", "metrics", metric))
+
+        # Make a meta file
+        fh = open(os.path.join(rsv_base, "meta", "metrics", metric + ".meta"), 'w')
+        fh.write("[%s]\n" % metric)
+        cron_interval = "%s * * * *" % random.randint(0, 59)
+        print "Setting default-cron-interval to %s.  Change if desired." % cron_interval
+        fh.write("default-cron-interval = %s\n" % cron_interval)
+        fh.write("\n")
+        fh.write("execute = \n")
+        fh.write("service-type = \n")
+        fh.write("output-format = \n")
+        fh.write("probe-spec = \n")
+        fh.write("enable-by-default = \n")
+        fh.write("\n")
+        fh.write("[%s env]\n" % metric)
+        fh.write("PERL5LIB = PREPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes:!!VDT_PERL5LIB!!\n")
+        fh.write("LD_LIBRARY_PATH = APPEND | !!VDT_LOCATION!!/globus/lib\n")
+        fh.write("GLOBUS_LOCATION = SET | !!VDT_LOCATION!!/globus\n")
+        fh.write("X509_CERT_DIR = SET | !!VDT_LOCATION!!/globus/TRUSTED_CA\n")
+        fh.close()
+
+        # Make a conf file
+        fh = open(os.path.join(rsv_base, "etc", "metrics", metric + ".conf"), 'w')
+        fh.write("[%s]\n" % metric)
+        fh.write("#cron-interval = \n")
+        fh.write("\n")
+        fh.write("[%s args]\n" % metric)
+        fh.close()
+    
+if __name__ == '__main__':
+    try:
+        parser = optparse.OptionParser(formatter=optparse.TitledHelpFormatter(),
+                                       usage=globals()['__doc__'])
+        parser.add_option('-p', '--probe', dest="probe", default=None, help='Path to probe')
+        (options, args) = parser.parse_args()
+        if len(args) < 1:
+            parser.error('Missing list of metrics')
+        main(options, args)
+        sys.exit(0)
+    except KeyboardInterrupt, e: # Ctrl-C
+        raise e
+    except SystemExit, e: # sys.exit()
+        raise e
+    except Exception, e:
+        print 'ERROR, UNEXPECTED EXCEPTION'
+        print str(e)
+        traceback.print_exc()
+        os._exit(1)
