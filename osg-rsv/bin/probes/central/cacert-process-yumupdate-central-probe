@@ -1,0 +1,118 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, NCSA, The Trustees of Indiana University.
+##
+## Original Author: Anand Padmanabhan
+##
+## This Perl script tests the yum update process
+## Type ./cacert-process-yumupdate-central-probe -h for more information
+##
+##
+## REQUIRES
+##  'RSVProbeBase
+##  'RSVProbeCACert
+##
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+use RSVProbeCACert;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+################## Local Variables for this probe #####################
+my %local; ## Local probe specific hash
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.central.cacert.process.yum-update");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-Central-Monitor");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CA 1.1 / VDT CA v40");
+    &RSVProbeBase::Set_ProbeType ("OSG-Central-CA-Install");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("20 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("IMPORTANT NOTE: This is a local probe that will work on the system it's run on."
+	 ."\n\nThis probe invokes vdt-update-certs and forces it to download certificates.".
+	 "\nIt then checks to make sure that the download completed successfully.".
+	 "\nAs an additional check it also checks the last time vdt-update-certs ".
+	 "\nsuccessfully updated its certs.");
+
+    ## Flag this as a local probe
+    ## &RSVProbeBase::Set_LocalProbe();
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+	(" [--ca-install-base-dir <dir> ]    Root location of the local yum install to be\n".
+	 "                                    used for RSV Yum update test\n".
+	 "                                    (Required parameter No Defaults)\n");
+
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("ca-install-base-dir=s","caInstallBaseDir");
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ## Initialize local variables
+    &Initialize_Local();
+
+    ## Real tests begin now - check for expired certs now 
+    &RSVProbeCACert::Check_Download_Certs_YumUpdate();
+
+    ## Print metric, and we're all done!
+    &RSVProbeBase::Print_Metric ();
+}
+
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+###### Local Sub routines begin ###########
+################################################################################
+
+## Initialize local variables
+sub Initialize_Local{
+    if (! $o{'caInstallBaseDir'}){
+        my $status_out="The location of the local YUM installation directory (--ca-install-base-dir) is a required parameter. Please check your RSV invokation.\n";
+        my $status_code=3;
+	&RSVProbeBase::Exit_Error ($status_code,$status_out);
+    }
+}

@@ -1,0 +1,139 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+## Maintained By: Soichi Hayashi
+##
+## This Perl script tests if a BDII server is up and running (returning 
+##  results on LDAP searches
+## Try ./bdii-available-probe -h for information
+##
+## REQUIRES
+##  'RSV::Probe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+use Date::Manip  qw(ParseDate UnixDate Date_Cmp);
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.bdii.available");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("BDII");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG BDII 1.5.2");
+    &RSVProbeBase::Set_ProbeType ("OSG-BDII");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("1,21,41 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro ("Probe to report if BDII is functional.");
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions (" [--bdii-type <value>]            Optional BDII Type (Value: \"osg\" or \"wlcg\")\n".
+					 "                                    Default: osg".
+					 " [--data-age-threshold <integer>] Optional Data Age Threshold in Minutes - at least\n".
+					 "                                   one resource_group will be expected to have data\n".
+					 "                                   within age threshold (Default: 60 minutes)"
+					 );
+
+    ## Uncomment if you want additional command line options
+    ## Optional second argument defines non-default %o hash key
+    &RSVProbeBase::Extra_CLI_Option ("bdii-type=s","bdiiType");
+    &RSVProbeBase::Extra_CLI_Option ("data-age-threshold=i","bdiiDataAgeThresholdMinutes");
+}
+
+
+sub Run {
+
+    ## User different metric name if provided
+    &RSVProbeBase::Set_MetricName ("org.".$o{'bdiiType'}.".bdii.available") 
+	if ($o{'bdiiType'});
+    $o{'bdiiDataAgeThresholdMinutes'} = 60 if (!defined($o{'bdiiDataAgeThresholdMinutes'}));
+
+    ## Find latest timestamp by querying for GlueLocationPath timestamp, then sorting, and picking up the last (newest) entry
+    $o{'cmd'} = "ldapsearch -xLLL -h $o{'hostName'} -p $o{'portNumber'}  -l $o{'timeout'} ".
+     	        " -b \"o=grid\" '(GlueLocationLocalID=TIMESTAMP)' GlueLocationPath 2>&1 | ". 
+		" grep GlueLocationPath 2>&1 |  cut -f2,3,4 -d: 2>&1 | sort -k2,2M -k3,3n -k6,6n 2>&1 | tail -1 2>&1";
+    &RSVProbeBase::Run_Command ($o{'cmd'}, "backtick");
+
+    if ($o{'cmdExitValue'} != 0){
+	my $ldapsearch_error = "LDAP search [$o{'cmd'}] failed; exit code $o{'cmdExitValue'}; error: [$o{'cmdOut'}]";
+	&RSVProbeBase::Ping_Host();
+	&RSVProbeBase::Exit_Error (2, "$ldapsearch_error. Host responding to pings.")    if (($o{'cmdExitValue'} == 0) || ($o{'cmdExitValue'} == 1));
+	&RSVProbeBase::Exit_Error (2, "$ldapsearch_error. Host not responding to pings") if (($o{'cmdExitValue'} == 2) || ($o{'cmdExitValue'} == 3));
+    }
+    ## Parse timestamp, and compare with threshold
+
+    $o{'cmdOut'} =~ /\s*\w+\s+(.*)/;
+    my $latest_rg_timestamp = $1;
+    my $latest_rg_timestamp_parsed = ParseDate($latest_rg_timestamp);    ## Convert to seconds (since 1970...)
+
+    if (!$latest_rg_timestamp_parsed) {
+	## To do further diagnostic if we so wish -ag
+	#$o{'cmd'} = "ldapsearch -xLLL -h $o{'hostName'} -p $o{'portNumber'} -l $o{'timeout'} ".
+	#    " -b \"o=grid\" \"Mds-vo-name=*\" dn 2>&1";
+	&RSVProbeBase::Exit_Error (2,"Expected one (latest found) timestamp in format \"Feb 26 15:21:02 UTC 2010\" but got \"$latest_rg_timestamp\"");
+    }
+    my $latest_rg_timestamp_seconds =  UnixDate($latest_rg_timestamp_parsed,"%s");
+    my $date_cmp = (($o{'bdiiDataAgeThresholdMinutes'}*60) - ($o{'timestampUnixSeconds'} - $latest_rg_timestamp_seconds));
+    ## $date_cmp -= 3600; ## for testing expired cert elsif clause 
+
+    &RSVProbeBase::Exit_Error (2,"Most recent timestamp found: \"$latest_rg_timestamp\", older than threshold $o{'bdiiDataAgeThresholdMinutes'} minutes.")
+	if ($date_cmp < 0); # if ($#dn_strings <= 1);
+    &RSVProbeBase::Exit_Error (0, "Recent enough timestamp found for at least one resource_group."); ## else
+}
+
+
+# use Net::LDAP;
+#    my $ldap = Net::LDAP->new("$o{'hostName'}", port=>2170, timeout=>$o{'timeout'});
+#    if (!$ldap) {
+#	print "LDAP Connection failed\n";
+#	exit 1 ;
+#    }
+#    $ldap->bind;
+#    &Data::Dumper::Dumper($bind_out);
+#    my $ldap_search_result = $ldap->search(base=>"Mds-vo-name=local,o=grid");#,filter=>"Mds-Vo-Name"); 
+#    print "LDAP SEARCH: $ldap_search_result ; ".$ldap_search_result->count."\n";
+#    my @entries = $ldap_search_result->entries;
+#    foreach my $entry (@entries) {
+#        $entry->dump;
+#    }
+#    &Data::Dumper::Dumper($ldap_search_result->entries);
+#	
+#    $ldap->unbind;
+#    exit 0;

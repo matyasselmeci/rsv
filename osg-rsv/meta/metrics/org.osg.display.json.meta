@@ -1,0 +1,14 @@
+[org.osg.display.json]
+default-cron-interval = 1,21,41 * * * *
+
+execute = local
+service-type = OSG-Display
+output-format = wlcg
+probe-spec = v3
+enable-by-default = true
+
+[org.osg.display.json env]
+PERL5LIB = PREPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes:!!VDT_PERL5LIB!!
+LD_LIBRARY_PATH = APPEND | !!VDT_LOCATION!!/globus/lib
+GLOBUS_LOCATION = SET | !!VDT_LOCATION!!/globus
+X509_CERT_DIR = SET | !!VDT_LOCATION!!/globus/TRUSTED_CA

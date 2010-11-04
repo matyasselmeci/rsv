@@ -1,0 +1,15 @@
+[org.osg.central.crl.process.fetchcrl]
+default-cron-interval = 20 * * * *
+
+execute = local
+service-type = OSG-Central-Monitor
+probe-type = OSG-Central-CA-Install
+output-format = wlcg
+probe-spec = v3
+enable-by-default = true
+
+[org.osg.central.crl.process.fetchcrl env]
+PERL5LIB = PREPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes:!!VDT_PERL5LIB!!
+LD_LIBRARY_PATH = APPEND | !!VDT_LOCATION!!/globus/lib
+GLOBUS_LOCATION = SET | !!VDT_LOCATION!!/globus
+X509_CERT_DIR = SET | !!VDT_LOCATION!!/globus/TRUSTED_CA
