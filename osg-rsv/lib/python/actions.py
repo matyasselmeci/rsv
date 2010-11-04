@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os
 import re
 import sys
 
@@ -8,6 +9,7 @@ import Table
 import Condor
 import Metric
 import Consumer
+import Sysutils
 
 def new_table(header, options):
     """ Return a new table with default dimensions """
@@ -111,6 +113,23 @@ def job_list(rsv, parsable=False, hostname=None):
     if condor.display_jobs(parsable, hostname):
         return True
     else:
+        return False
+
+
+def profile(rsv):
+    """ Run the rsv-profiler """
+    profiler = os.path.join(rsv.rsv_location, "bin", "misc", "rsv-profiler")
+    sysutils = Sysutils.Sysutils(rsv)
+    (ret, out, err) = sysutils.system(profiler, timeout=100)
+
+    if ret == 0:
+        print out
+        return True
+    else:
+        print "ERROR running rsv-profiler"
+        print out
+        print
+        print err
         return False
 
 

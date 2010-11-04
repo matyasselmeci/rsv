@@ -64,6 +64,8 @@ def process_options(arguments=None):
                       help="Show the configuration for specific metrics.")
     parser.add_option("--extra-config-file", dest="extra_config_file", default=None,
                       help="Path to another INI-format file containing metric configuration (used with --run)")
+    parser.add_option("--profile", action="store_true", dest="profile", default=None,
+                      help="Run the RSV profiler")
 
     if arguments == None:
         (options, args) = parser.parse_args()
@@ -84,10 +86,10 @@ def process_options(arguments=None):
     # Check that we got exactly one command
     number_of_commands = len([i for i in [options.run, options.enable, options.disable, options.on,
                                           options.off, options.list, options.job_list, options.verify,
-                                          options.show_config] if i])
+                                          options.show_config, options.profile] if i])
     
     if number_of_commands > 1:
-        parser.error("You can use only one of run, list, job-list, enable, disable, on, off, or verify.")
+        parser.error("You can use only one command.")
     if number_of_commands == 0:
         parser.error("You must specify one command.")
 
@@ -139,6 +141,8 @@ def main_rsv_control():
         return actions.dispatcher(rsv, "disable", args, options.host)
     elif options.show_config:
         return actions.dispatcher(rsv, "show-config", args, options.host)
+    elif options.profile:
+        return actions.profile(rsv)
     elif options.verify:
         actions.verify(rsv)
     
