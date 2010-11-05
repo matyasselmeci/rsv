@@ -3,7 +3,7 @@
 # System libraries
 import os 
 import sys
-from optparse import OptionParser
+from optparse import OptionParser, OptionGroup
 
 # Custom RSV libraries
 import RSV
@@ -12,17 +12,29 @@ import run_metric
 
 
 def process_options(arguments=None):
-    usage = """usage: rsv-control [ --verbose <level> ]
-      --run [--all-enabled] --host <HOST> METRIC [METRIC ...]
-      --list [ --wide ] [ --all ] [ <pattern> ]
-      --job-list [ --host <host-name> ]
-      --on      [METRIC|CONSUMER ...]
-      --off     [METRIC|CONSUMER ...]
-      --enable  --host <host-name> METRIC|CONSUMER [METRIC|CONSUMER ...]
-      --disable --host <host-name> METRIC|CONSUMER [METRIC|CONSUMER ...]
-      --verify
+    usage = """usage: rsv-control
 
-      Other commands are available, run with --help to see full usage.
+    Get more information: 0=print nothing, 1=normal, 2=info, 3=debug
+    [ --verbose <level> ]
+
+    Run a one-time test:
+    --run [--all-enabled] --host <HOST> METRIC [METRIC ...]
+    
+    Show information about enabled and installed metrics:
+    --list [ --wide ] [ --all ] [ <pattern> ]
+
+    Show information about running metrics:
+    --job-list [ --host <host-name> ]
+    
+    Configure desired state of metrics and consumers:
+    --enable  --host <host-name> METRIC|CONSUMER [METRIC|CONSUMER ...]
+    --disable --host <host-name> METRIC|CONSUMER [METRIC|CONSUMER ...]
+
+    Start and stop metrics and consumers:
+    --on  [--host <host-name> METRIC|CONSUMER ...]
+    --off [--host <host-name> METRIC|CONSUMER ...]
+
+    Other commands are available, run with --help to see full usage.
     """
 
     description = "This script is used to configure and run the RSV monitoring software."
@@ -31,41 +43,57 @@ def process_options(arguments=None):
     parser.add_option("--vdt-location", dest="vdt_location", default=None,
                       help="Root directory of the OSG installation", metavar="DIR")
     parser.add_option("-v", "--verbose", dest="verbose", default=1, type="int",
-                      help="Verbosity level (0-3). [Default=%default]")
-    parser.add_option("-l", "--list", action="store_true", dest="list", default=False,
-                      help="List metric information.  If <pattern> is supplied, only metrics " +
-                      "matching the regular expression pattern will be displayed")
-    parser.add_option("-j", "--job-list", action="store_true", dest="job_list", default=False,
-                      help="List metrics/consumers running in condor-cron.  If host is specified " +
-                      "then only metrics from that host are displayed")
-    parser.add_option("-w", "--wide", action="store_true", dest="list_wide", default=False,
-                      help="Wide list display to avoid truncation in metric listing")
-    parser.add_option("-a", "--all", action="store_true", dest="list_all", default=False,
-                      help="Display all metrics, including metrics not enabled on any host.")
-    parser.add_option("-r", "--run", action="store_true", dest="run", default=False,
-                      help="Run the supplied list of metrics against the specified host.")
-    parser.add_option("--all-enabled", action="store_true", dest="all_enabled", default=False,
-                      help="Run all enabled metrics serially.")
-    parser.add_option("--on", action="store_true", dest="on", default=False,
-                      help="Turn on all enabled metrics.  If a metric is specified, turn on only that metric.")
-    parser.add_option("--off", action="store_true", dest="off", default=False,
-                      help="Turn off all running metrics.  If a metric is specified, turn off only that metric.")
-    parser.add_option("--enable", action="store_true", dest="enable", default=False,
-                      help="Enable metric. May be specified multiple times.")
-    parser.add_option("--disable", action="store_true", dest="disable", default=False,
-                      help="Disable metric. May be specified multiple times.")
+                      help="Verbosity level (0-3) 0=no output, 1=normal, 2=info, 3=debug. [Default=%default]")
     parser.add_option("-u", "--host", dest="host", default=None,
                       help="Specify the host [and port] to be used by the metric (e.g. host or host:port)")
-    parser.add_option("--verify", action="store_true", dest="verify", default=False,
-                      help="Run some basic tests to validate your RSV install.")
-    parser.add_option("--parsable", action="store_true", dest="parsable", default=False,
-                      help="Output the job list (-j) in an easy-to-parse format.")
-    parser.add_option("--show-config", action="store_true", dest="show_config", default=False,
-                      help="Show the configuration for specific metrics.")
-    parser.add_option("--extra-config-file", dest="extra_config_file", default=None,
-                      help="Path to another INI-format file containing metric configuration (used with --run)")
-    parser.add_option("--profile", action="store_true", dest="profile", default=None,
-                      help="Run the RSV profiler")
+
+    group = OptionGroup(parser, "Testing Options", "Run a one-time test of one or metrics against a "
+                        "specified host (even for metrics that are not enabled for that host).")
+    group.add_option("-r", "--run", action="store_true", dest="run", default=False,
+                     help="Run the supplied list of metrics against the specified host.")
+    group.add_option("--all-enabled", action="store_true", dest="all_enabled", default=False,
+                     help="Run all enabled metrics serially.")
+    group.add_option("--extra-config-file", dest="extra_config_file", default=None,
+                     help="Path to another INI-format file containing metric configuration (with --run)")
+    parser.add_option_group(group)
+
+    group = OptionGroup(parser, "Information Display Options", "Show enabled metrics and metrics "
+                        "that are running in Condor-Cron.")
+    group.add_option("-l", "--list", action="store_true", dest="list", default=False,
+                     help="List enabled metrics.  If <pattern> is supplied, only metrics " +
+                     "matching the regular expression pattern will be displayed.")
+    group.add_option("-j", "--job-list", action="store_true", dest="job_list", default=False,
+                     help="List metrics/consumers running in condor-cron.  If a host is specified " +
+                     "then only metrics from that host are displayed.")
+    group.add_option("-w", "--wide", action="store_true", dest="list_wide", default=False,
+                     help="No truncation in metric listing")
+    group.add_option("-a", "--all", action="store_true", dest="list_all", default=False,
+                     help="Also display metrics not enabled on any host.")
+    group.add_option("--parsable", action="store_true", dest="parsable", default=False,
+                     help="Output the job list (-j) in an easy-to-parse format.")
+    parser.add_option_group(group)
+
+    group = OptionGroup(parser, "Configuration Options", "Set the desired state of metrics (enable/disable) "
+                        "or turn them on and off.  Note that after enabling a metric you must still turn "
+                        "it on (similar to vdt-control).")
+    group.add_option("--enable", action="store_true", dest="enable", default=False,
+                      help="Set the desired state of the metric(s) to enabled.")
+    group.add_option("--disable", action="store_true", dest="disable", default=False,
+                      help="Set the desired state of the metric(s) to disabled.")
+    group.add_option("--on", action="store_true", dest="on", default=False,
+                      help="Turn on all enabled metrics.  If a metric is specified, turn on only that metric.")
+    group.add_option("--off", action="store_true", dest="off", default=False,
+                      help="Turn off all running metrics.  If a metric is specified, turn off only that metric.")
+    parser.add_option_group(group)
+
+    group = OptionGroup(parser, "Other Options")
+    group.add_option("--verify", action="store_true", dest="verify", default=False,
+                     help="Run some basic tests to validate your RSV install.")
+    group.add_option("--show-config", action="store_true", dest="show_config", default=False,
+                     help="Show the configuration for specific metrics.")
+    group.add_option("--profile", action="store_true", dest="profile", default=None,
+                     help="Run the RSV profiler")
+    parser.add_option_group(group)
 
     if arguments == None:
         (options, args) = parser.parse_args()
