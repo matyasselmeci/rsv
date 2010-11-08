@@ -8,7 +8,7 @@ print "RSV BRIEF RESULTS:\n";
 
 # We assume we have the normal environment for a fork job here. It has
 # $OSG_LOCATION but not $VDT_LOCATION
-my $vdt_location = $ENV{OSG_LOCATION} or "";
+my $vdt_location = $ENV{OSG_LOCATION} || "";
 
 if(!$vdt_location) {
     status("CRITICAL", "OSG_LOCATION is not set in the environment");
@@ -26,17 +26,17 @@ my %dirs;
 # OSG_LOCATION is obviously required and critical
 $dirs{OSG_LOCATION}{isCritical} = 1;
 $dirs{OSG_LOCATION}{isRequired} = 1;
-$dirs{OSG_LOCATION}{permission} = qr/[012467]?7[75]5/;
+$dirs{OSG_LOCATION}{permission} = "7[75]5";
 
 # OSG_APP is required, but we'll just give a warning if something is wrong
 $dirs{OSG_APP}{isCritical} = 0;
 $dirs{OSG_APP}{isRequired} = 1;
-$dirs{OSG_APP}{permission} = qr/[012]?7[75][75]/;
+$dirs{OSG_APP}{permission} = "7[75][75]";
 
 # OSG_DATA is optional
 $dirs{OSG_DATA}{isCritical} = 0;
 $dirs{OSG_DATA}{isRequired} = 0;
-$dirs{OSG_DATA}{permission} = qr/[012]?77[75]/;
+$dirs{OSG_DATA}{permission} = "77[75]";
 
 # Examine each directory in turn
 my $critical = 0;
@@ -65,7 +65,9 @@ foreach my $dir (keys %dirs) {
     # This semi-complicated line gets the stat in a form like: "0755"
     my $mode = sprintf("%04o", (stat($path))[2] & 07777);
 
-    if($mode !~ $dirs{$dir}{permission}) {
+    # All directories can have the first bit (sticky, sgid, suid) set to anything
+    # so we just ignore it if it is present.
+    if($mode !~ /\d?$dirs{$dir}{permission}/) {
         $details .= "The $dir directory ($path) has INCORRECT permissions.\n";
         if($dirs{$dir}{isCritical}) {
             $critical++;
@@ -79,7 +81,7 @@ foreach my $dir (keys %dirs) {
     }
 
     $details .= "Found: $mode\n";
-    $details .= "Required: " . $dirs{$dir}{permission} . "\n\n";
+    $details .= "Required: " . $dirs{$dir}{permission} . " (this is a regular expression)\n\n";
 }
 
 
