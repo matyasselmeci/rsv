@@ -12,7 +12,7 @@ import run_metric
 
 
 def process_options(arguments=None):
-    usage = """usage: rsv-control
+    usage = """rsv-control:
 
     Get more information: 0=print nothing, 1=normal, 2=info, 3=debug
     [ --verbose <level> ]
@@ -38,17 +38,19 @@ def process_options(arguments=None):
     """
 
     description = "This script is used to configure and run the RSV monitoring software."
+    version = "@@VERSION@@"
 
-    parser = OptionParser(usage=usage, description=description)
+    parser = OptionParser(usage=usage, description=description, version=version)
     parser.add_option("--vdt-location", dest="vdt_location", default=None,
                       help="Root directory of the OSG installation", metavar="DIR")
-    parser.add_option("-v", "--verbose", dest="verbose", default=1, type="int",
+    parser.add_option("-v", "--verbose", dest="verbose", default=1, type="int", metavar="LEVEL",
                       help="Verbosity level (0-3) 0=no output, 1=normal, 2=info, 3=debug. [Default=%default]")
     parser.add_option("-u", "--host", dest="host", default=None,
                       help="Specify the host [and port] to be used by the metric (e.g. host or host:port)")
 
-    group = OptionGroup(parser, "Testing Options", "Run a one-time test of one or metrics against a "
-                        "specified host (even for metrics that are not enabled for that host).")
+    group = OptionGroup(parser, "Run a Metric", "Run one or metrics a single time against a "
+                        "specified host (even for metrics that are not enabled for that host). "
+                        "Example: rsv-control -r --host foo.example.com org.osg.general.osg-version")
     group.add_option("-r", "--run", action="store_true", dest="run", default=False,
                      help="Run the supplied list of metrics against the specified host.")
     group.add_option("--all-enabled", action="store_true", dest="all_enabled", default=False,
@@ -75,7 +77,8 @@ def process_options(arguments=None):
 
     group = OptionGroup(parser, "Configuration Options", "Set the desired state of metrics (enable/disable) "
                         "or turn them on and off.  Note that after enabling a metric you must still turn "
-                        "it on (similar to vdt-control).")
+                        "it on (similar to vdt-control).  Example: "
+                        "rsv-control --enable --host foo.example.com org.osg.general.osg-version")
     group.add_option("--enable", action="store_true", dest="enable", default=False,
                       help="Set the desired state of the metric(s) to enabled.")
     group.add_option("--disable", action="store_true", dest="disable", default=False,
