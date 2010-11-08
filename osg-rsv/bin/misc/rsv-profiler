@@ -102,6 +102,8 @@ else
 fi
 
 
+
+
 ##
 ## RSV stuff
 ##
@@ -160,6 +162,15 @@ if [ ${id} == "0" ]; then
   su -c 'globus/bin/grid-proxy-info' $user >> $rsvlog 2>&1
 else
   echo "Not root, cannot get grid-proxy-info info" >> $rsvlog
+fi
+echo "" >> $rsvlog
+
+# Get config.ini
+if [ -e osg/etc/config.ini ]; then
+  cp osg/etc/config.ini $rsvfiledir
+  echo "copying config.ini" >> $rsvlog
+else:
+  echo "could not find config.ini" >> $rsvlog
 fi
 echo "" >> $rsvlog
 
