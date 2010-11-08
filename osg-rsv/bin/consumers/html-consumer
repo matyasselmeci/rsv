@@ -476,9 +476,12 @@ def generate_html_files():
         tables = "<p>There is no data to display.</p>"
     else:
         for host in sorted(STATE.keys()):
+            # Turn the _ back into a : when displaying
+            pretty_host = re.sub("_(\d+)$", ":\g<1>", host)
+            
             generate_host_html(host, STATE[host])
             host_table = html_table_template()
-            host_table = re.sub("!!HOSTNAME!!", host, host_table)
+            host_table = re.sub("!!HOSTNAME!!", pretty_host, host_table)
             rows = []
             for metric in sorted(STATE[host]):
                 rows.append(form_metric_row(host, metric, top_level=1))
@@ -509,12 +512,15 @@ def generate_html_files():
 def generate_host_html(host, info):
     """ Create the host-specific HTML file """
 
+    # Turn the _ back into a : when displaying
+    pretty_host = re.sub("_(\d+)$", ":\g<1>", host)
+
     host_page = html_template()
 
     # Fill in the basics
     timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    title = "RSV Status - %s - %s" % (host, timestamp)
-    header = "RSV Status - %s - %s" % (host, timestamp)
+    title = "RSV Status - %s - %s" % (pretty_host, timestamp)
+    header = "RSV Status - %s - %s" % (pretty_host, timestamp)
     host_page = re.sub("!!TITLE!!", title, host_page)
     host_page = re.sub("!!HEADER!!", header, host_page)
 
@@ -532,7 +538,7 @@ def generate_host_html(host, info):
         table = "<p>There is no data to display.</p>"
     else:
         host_table = html_table_template()
-        host_table = re.sub("!!HOSTNAME!!", host, host_table)
+        host_table = re.sub("!!HOSTNAME!!", pretty_host, host_table)
         rows = []
         for metric in sorted(info):
             row = form_metric_row(host, metric, top_level=0)
