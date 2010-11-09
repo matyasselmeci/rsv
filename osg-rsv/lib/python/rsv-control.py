@@ -80,9 +80,9 @@ def process_options(arguments=None):
                         "it on (similar to vdt-control).  Example: "
                         "rsv-control --enable --host foo.example.com org.osg.general.osg-version")
     group.add_option("--enable", action="store_true", dest="enable", default=False,
-                      help="Set the desired state of the metric(s) to enabled.")
+                      help="Set the desired state of the metric(s) and/or consumer(s) to enabled.")
     group.add_option("--disable", action="store_true", dest="disable", default=False,
-                      help="Set the desired state of the metric(s) to disabled.")
+                      help="Set the desired state of the metric(s) and/or consumer(s) to disabled.")
     group.add_option("--on", action="store_true", dest="on", default=False,
                       help="Turn on all enabled metrics.  If a metric is specified, turn on only that metric.")
     group.add_option("--off", action="store_true", dest="off", default=False,

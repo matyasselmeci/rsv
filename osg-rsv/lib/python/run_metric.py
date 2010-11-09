@@ -172,6 +172,9 @@ def parse_job_output_wlcg(rsv, metric, stdout, stderr):
 
 def parse_job_output_multiple_wlcg(rsv, metric, stdout, stderr):
     """ Parse multiple WLCG formatted records separated by EOT. """
+
+    rsv.log("CRITICAL", "wlcg-multiple implementation may not be fully functional")
+
     records = stdout.split("\nEOT\n")
     rsv.echo("Parsing wlcg-multiple style record.  Found %s records" % len(records))
     num = 1

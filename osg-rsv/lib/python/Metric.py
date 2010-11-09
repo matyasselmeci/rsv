@@ -71,7 +71,6 @@ class Metric:
         config_file = os.path.join(self.conf_dir, self.name + ".conf")
         if not os.path.exists(config_file):
             self.rsv.log("INFO", "Metric config file '%s' does not exist" % config_file)
-            return
         else:
             self.rsv.log("INFO", "Loading metric global config file '%s'" % config_file)
             try:
