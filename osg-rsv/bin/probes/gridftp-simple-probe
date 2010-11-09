@@ -328,11 +328,9 @@ sub Cleanup {
     my $cleanup_local_cmd = "$o{'rmCmd'} $o{'globusurlcopyBackTestfile'} 2>&1";
     &RSVProbeBase::Run_Command ($cleanup_local_cmd, "backtick");
     my $cleanup_remote_cmd = "$o{'rmCmd'} $o{'globusurlcopyRemoteTestfile'} 2>&1";
-    &RSVProbeBase::Globus_Job_Run($cleanup_remote_cmd, "backtick");
+    my $uberftp_cmd=$o{'VDT_LOCATION_LOCAL'}."/globus/bin/uberftp -rm ".$o{'globusurlcopyRemoteTestfileUri'};
+    &RSVProbeBase::Run_Command ($uberftp_cmd, "backtick");
 }
-
-
-
 
 
 
