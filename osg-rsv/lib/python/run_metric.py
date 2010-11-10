@@ -141,10 +141,12 @@ def ping_test(rsv, metric):
         (ret, out, err) = rsv.run_command(cmd)
     except Sysutils.TimeoutError, err:
         rsv.results.ping_timeout(metric, cmd, err)
+        sys.exit(1)
 
     # If we can't ping the host, don't bother doing anything else
     if ret:
         rsv.results.ping_failure(metric, out, err)
+        sys.exit(1)
         
     rsv.log("INFO", "Ping successful", 4)
     return
