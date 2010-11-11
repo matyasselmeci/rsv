@@ -43,6 +43,33 @@ class Metric:
         self.load_config(defaults, options)
 
 
+    def load_config_file(self, file, required=0):
+        """ Load a single configuration file """
+        log_level = "INFO"
+        if required:
+            log_level = "ERROR"
+        
+        if not os.path.exists(file):
+            self.rsv.log(log_level, "Config file '%s' does not exist" % file)
+        elif not os.access(file, os.R_OK):
+            self.rsv.log(log_level, "Config file '%s' is not readable by RSV user" % file)
+        else:
+            self.rsv.log("INFO", "Loading config file '%s'" % file)
+            try:
+                ret = self.config.read(file)
+                # Python 2.3 (RHEL-4) does not return anything so we can only do this check
+                # if we get an array back.
+                if ret != None:
+                    if file not in ret:
+                        self.rsv.log("ERROR", "An unknown error occurred while trying to load config file '%s'" %
+                                     file)
+            except ConfigParser.ParsingError, err:
+                self.rsv.log("CRITICAL", err)
+                sys.exit(1)
+
+        return
+                
+
     def load_config(self, defaults, options=None):
         """ Load metric configuration files """
         if defaults:
@@ -55,59 +82,25 @@ class Metric:
 
         # Load the metric's meta information file
         meta_file = os.path.join(self.meta_dir, self.name + ".meta")
-        if not os.path.exists(meta_file):
-            self.rsv.log("ERROR", "Metric meta file '%s' does not exist" % meta_file)
-            return
-        else:
-            self.rsv.log("INFO", "Loading metric meta file '%s'" % meta_file)
-            try:
-                self.config.read(meta_file)
-            except ConfigParser.ParsingError, err:
-                self.rsv.log("CRITICAL", err)
-                sys.exit(1)
-
+        self.load_config_file(meta_file, required=1)
 
         # Load the metric's general configuration file
         config_file = os.path.join(self.conf_dir, self.name + ".conf")
-        if not os.path.exists(config_file):
-            self.rsv.log("INFO", "Metric config file '%s' does not exist" % config_file)
-        else:
-            self.rsv.log("INFO", "Loading metric global config file '%s'" % config_file)
-            try:
-                self.config.read(config_file)
-            except ConfigParser.ParsingError, err:
-                self.rsv.log("CRITICAL", err)
-                sys.exit(1)
-
+        self.load_config_file(config_file, required=0)
 
         # If this is for a specified host, load the metric/host config file
         if self.host:
             config_file = os.path.join(self.conf_dir, self.host, self.name + ".conf")
-            if not os.path.exists(config_file):
-                self.rsv.log("INFO", "Metric/host config file '%s' does not exist" % config_file)
-            else:
-                self.rsv.log("INFO", "Loading metric host-specific config file '%s'" % config_file)
-                try:
-                    self.config.read(config_file)
-                except ConfigParser.ParsingError, err:
-                    self.rsv.log("CRITICAL", err)
-                    sys.exit(1)
+            self.load_config_file(config_file, required=0)
 
         # If we were given a file on the command line load it now
         if options and options.extra_config_file:
-            if not os.path.exists(options.extra_config_file):
-                self.rsv.log("ERROR", "Extra config file (%s) does not exist" % options.extra_config_file)
-                return
-            else:
-                self.rsv.log("INFO", "Loading extra config file '%s'" % options.extra_config_file)
-                try:
-                    self.config.read(options.extra_config_file)
-                except ConfigParser.ParsingError, err:
-                    self.rsv.log("CRITICAL", "Error parsing extra config file %s" % options.extra_config_file)
-                    self.rsv.log("CRITICAL", err)
-                    sys.exit(1)
-                    
-        
+            # If the user specified this on the command line then it should be required (so it procudes
+            # ERROR messages if anything goes wrong)
+            self.load_config_file(options.extra_config_file, required=1)
+
+        return
+    
 
     def get_type(self):
         """ Return the serviceType """
