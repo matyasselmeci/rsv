@@ -16,13 +16,7 @@ import Results
 import Sysutils
 
 
-#
-# Globals
-#
-VALID_OUTPUT_FORMATS = ["wlcg", "wlcg-multiple", "brief"]
-
-
-def validate_config(rsv, metric):
+def validate_rsv_config(rsv):
     """ Perform validation on config values """
 
     rsv.log("INFO", "Validating configuration:")
@@ -89,34 +83,6 @@ def validate_config(rsv, metric):
         rsv.log("WARNING", "no consumers are registered in consumers.conf.  This " +
                 "means that records will not be sent to a central collector for " +
                 "availability statistics.")
-
-
-    #
-    # check vital configuration for the job
-    #
-    if not metric.config_get("service-type") or not metric.config_get("execute"):
-        rsv.log("ERROR", "metric configuration is missing 'service-type' or 'execute' " +
-                "declaration.  This is likely caused by a missing or corrupt metric " +
-                "configuration file")
-        clean_up(1)
-
-
-    # 
-    # Check the desired output format
-    #
-    try:
-        output_format = metric.config_get("output-format").lower()
-        if output_format not in VALID_OUTPUT_FORMATS:
-            valid_formats = " ".join(VALID_OUTPUT_FORMATS)
-            rsv.log("ERROR", "output-format '%s' is not supported.  Valid formats: %s\n" %
-                    (output_format, valid_formats))
-            clean_up(1)
-                    
-    except ConfigParser.NoOptionError:
-        rsv.log("ERROR", "desired output-format is missing.\n" +
-                "This is likely caused by a missing or corrupt metric configuration file")
-        clean_up(1)
-
 
     return
 
@@ -368,13 +334,14 @@ def main(rsv, options, metrics):
         hosts[options.uri] = metrics
         total = len(metrics)
 
+    validate_rsv_config(rsv)
+
     # Process the command line and initialize
     count = 0
     for host in hosts:
         for metric_name in hosts[host]:
             count += 1
             metric = Metric.Metric(metric_name, rsv, host, options)
-            validate_config(rsv, metric)
 
             # Check for some basic error conditions
             rsv.check_proxy(metric)

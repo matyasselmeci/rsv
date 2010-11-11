@@ -5,6 +5,8 @@ import re
 import sys
 import ConfigParser
 
+VALID_OUTPUT_FORMATS = ["wlcg", "wlcg-multiple", "brief"]
+
 class Metric:
     """ Instantiable class to read and store configuration for a single metric """
 
@@ -41,7 +43,9 @@ class Metric:
         self.config = ConfigParser.RawConfigParser()
         self.config.optionxform = str
         self.load_config(defaults, options)
-
+        self.validate_config()
+        return
+    
 
     def load_config_file(self, file, required=0):
         """ Load a single configuration file """
@@ -100,6 +104,31 @@ class Metric:
             self.load_config_file(options.extra_config_file, required=1)
 
         return
+
+
+    def validate_config(self):
+        """ Validate metric-specific configuration """
+
+        if not self.config_get("service-type") or not self.config_get("execute"):
+            rsv.log("ERROR", "metric configuration is missing 'service-type' or 'execute' " +
+                    "declaration.  This is likely caused by a missing or corrupt metric " +
+                    "configuration file")
+            return False
+
+        try:
+            output_format = self.config_get("output-format").lower()
+            if output_format not in VALID_OUTPUT_FORMATS:
+                valid_formats = " ".join(VALID_OUTPUT_FORMATS)
+                rsv.log("ERROR", "output-format '%s' is not supported.  Valid formats: %s\n" %
+                        (output_format, valid_formats))
+                return False
+
+        except ConfigParser.NoOptionError:
+            rsv.log("ERROR", "Metric output-format is missing.\n" +
+                    "This is likely caused by a missing or corrupt metric configuration file")
+            return False
+
+        return True
     
 
     def get_type(self):
