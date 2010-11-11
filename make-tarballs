@@ -1,10 +1,13 @@
 #!/bin/sh
 
-export RSV_VERSION=3.3.0beta15
+export RSV_VERSION=3.3.0beta18
 
 perl -pi -e's/\@\@VERSION\@\@/$ENV{RSV_VERSION}/' osg-rsv/lib/python/rsv-control.py
 
 # Form the two tarballs
 tar zcf osg-rsv-metrics-$RSV_VERSION.tar.gz `find osg-rsv/bin/probes osg-rsv/bin/metrics osg-rsv/CHANGELOG.metrics osg-rsv/etc/metrics osg-rsv/meta/metrics ! -name \*~ ! -name .#\* ! -type d | grep -v '\.svn'`
 
-tar zcf  osg-rsv-core-$RSV_VERSION.tar.gz `find osg-rsv/bin/rsv-control osg-rsv/bin/consumers osg-rsv/bin/misc osg-rsv/config osg-rsv/lib osg-rsv/logs osg-rsv/logs/probes osg-rsv/logs/consumers osg-rsv/meta/consumers osg-rsv/etc/*.conf osg-rsv/CHANGELOG.core ! -name \*~ ! -name .#\* ! -type d | grep -v '\.svn'` osg-rsv/etc/consumers osg-rsv/output
+tar zcf  osg-rsv-core-$RSV_VERSION.tar.gz `find osg-rsv/bin/rsv-control osg-rsv/bin/consumers osg-rsv/bin/misc osg-rsv/config osg-rsv/lib osg-rsv/logs osg-rsv/logs/probes osg-rsv/logs/consumers osg-rsv/meta/consumers osg-rsv/etc/*.conf osg-rsv/share osg-rsv/CHANGELOG.core ! -name \*~ ! -name .#\* ! -type d | grep -v '\.svn'` osg-rsv/etc/consumers osg-rsv/output
+
+# Remove the version we put in
+svn revert osg-rsv/lib/python/rsv-control.py
