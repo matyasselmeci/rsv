@@ -276,4 +276,4 @@ def main(rsv, options, metrics):
                 rsv.echo("\nRunning metric %s:\n" % metric.name)
             execute_job(rsv, metric)
 
-    return
+    return True

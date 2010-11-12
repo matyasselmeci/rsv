@@ -424,3 +424,5 @@ def verify(rsv):
         if "gratia-consumer" not in consumers:
             rsv.echo("WARNING: The gratia-consumer is not enabled.  This indicates that your")
             rsv.echo("         resource is not reporting to OSG.")
+
+    return True

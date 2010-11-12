@@ -3,6 +3,7 @@
 # System libraries
 import os 
 import sys
+import signal
 from optparse import OptionParser, OptionGroup
 
 # Custom RSV libraries
@@ -143,6 +144,11 @@ def process_options(arguments=None):
 
 
 
+def sigint_handler(signal, frame):
+    """ Handle keyboard Ctrl-C """
+    print 'Received SIGINT.  Exiting.'
+    sys.exit(1)
+
 
 def main_rsv_control():
     """ Drive the program """
@@ -159,7 +165,7 @@ def main_rsv_control():
         else:
             return actions.list_metrics(rsv, options, args[0])
     elif options.run:
-        run_metric.main(rsv, options, args)
+        return run_metric.main(rsv, options, args)
     elif options.job_list:
         return actions.job_list(rsv, options.parsable, options.host)
     elif options.on:
@@ -175,8 +181,13 @@ def main_rsv_control():
     elif options.profile:
         return actions.profile(rsv)
     elif options.verify:
-        actions.verify(rsv)
-    
+        return actions.verify(rsv)
+
+    # We didn't find the request?
+    return False
+
+
+signal.signal(signal.SIGINT, sigint_handler)
 if __name__ == "__main__":
     PROGNAME = os.path.basename(sys.argv[0])
     if PROGNAME == 'rsv-control' or PROGNAME == 'rsv-control.py':
