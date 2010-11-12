@@ -6,7 +6,6 @@ import os
 import sys
 import copy
 import ConfigParser
-from pwd import getpwnam
 from optparse import OptionParser
 
 # RSV libraries
@@ -14,77 +13,6 @@ import RSV
 import Metric
 import Results
 import Sysutils
-
-
-def validate_rsv_config(rsv):
-    """ Perform validation on config values """
-
-    rsv.log("INFO", "Validating configuration:")
-
-    #
-    # make sure that the user is valid, and we are either that user or root
-    #
-    rsv.log("INFO", "Validating user:")
-    try:
-        user = rsv.config.get("rsv", "user")
-    except ConfigParser.NoOptionError:
-        rsv.log("ERROR", "'user' is missing in rsv.conf.  Set this value to your RSV user", 4)
-        clean_up(1)
-
-    try:
-        (desired_uid, desired_gid) = getpwnam(user)[2:4]
-    except KeyError:
-        rsv.log("ERROR", "The '%s' user defined in rsv.conf does not exist" % user, 4)
-        clean_up(1)
-
-    # If appropriate, switch UID/GID
-    rsv.sysutils.switch_user(user, desired_uid, desired_gid)
-
-                
-    #
-    # "details_data_trim_length" must be an integer because we will use it later
-    # in a splice
-    #
-    try:
-        rsv.config.getint("rsv", "details_data_trim_length")
-    except ConfigParser.NoOptionError:
-        # We set a default for this, but just to be safe set it again here.
-        rsv.config.set("rsv", "details_data_trim_length", "10000")
-    except ValueError:
-        rsv.log("ERROR: details_data_trim_length must be an integer.  It is set to '%s'"
-                % rsv.config.get("rsv", "details_data_trim_length"))
-        clean_up(1)
-
-
-    #
-    # job_timeout must be an integer because we will use it later in an alarm call
-    #
-    try:
-        rsv.config.getint("rsv", "job-timeout")
-    except ConfigParser.NoOptionError:
-        # We set a default for this, but just to be safe...
-        rsv.config.set("rsv", "job-timeout", "300")
-    except ValueError:
-        rsv.log("ERROR", "job-timeout must be an integer.  It is set to '%s'" %
-                rsv.config.get("rsv", "job-timeout"))
-        clean_up(1)
-
-
-    #
-    # warn if consumers are missing
-    #
-    try:
-        consumers = rsv.consumer_config.get("consumers", "enabled")
-        rsv.log("INFO", "Registered consumers: %s" % consumers, 0)
-    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
-        if not rsv.consumer_config.has_section("consumers"):
-            rsv.consumer_config.add_section("consumers")
-        rsv.consumer_config.set("consumers", "enabled", "")
-        rsv.log("WARNING", "no consumers are registered in consumers.conf.  This " +
-                "means that records will not be sent to a central collector for " +
-                "availability statistics.")
-
-    return
 
 
 
@@ -314,12 +242,6 @@ def execute_job(rsv, metric):
 
 
 
-def clean_up(exit_code=0):
-    """ Clean up any temporary files before exiting.  Currently there are none. """
-    sys.exit(exit_code)
-
-
-
 def main(rsv, options, metrics):
     """ Main subroutine: directs program flow """
 
@@ -334,7 +256,7 @@ def main(rsv, options, metrics):
         hosts[options.uri] = metrics
         total = len(metrics)
 
-    validate_rsv_config(rsv)
+    RSV.validate_config(rsv)
 
     # Process the command line and initialize
     count = 0
