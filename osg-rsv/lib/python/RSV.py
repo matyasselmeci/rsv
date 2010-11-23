@@ -162,7 +162,7 @@ class RSV:
     def get_hosts(self):
         """ Return a list of hosts that have configuration files """
 
-        special_config_files = ["rsv.conf", "consumers.conf"]
+        special_config_files = ["rsv.conf", "consumers.conf", "rsv-nagios.conf"]
 
         conf_dir = os.path.join(self.rsv_location, "etc")
         try:
