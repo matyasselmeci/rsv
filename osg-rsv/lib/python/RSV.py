@@ -470,7 +470,7 @@ class RSV:
             # Use the timeout declared in the config file
             timeout = self.config.getint("rsv", "job-timeout")
             
-        self.log("INFO", "Running command with timeout (%s):\n\t%s" % (timeout, command))
+        self.log("INFO", "Running command with timeout (%s seconds):\n\t%s" % (timeout, command))
         return self.sysutils.system(command, timeout)
 
 

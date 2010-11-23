@@ -118,6 +118,7 @@ def job_list(rsv, parsable=False, hostname=None):
 
 def profile(rsv):
     """ Run the rsv-profiler """
+    print "Running the rsv-profiler..."
     profiler = os.path.join(rsv.rsv_location, "bin", "misc", "rsv-profiler")
     sysutils = Sysutils.Sysutils(rsv)
     (ret, out, err) = sysutils.system(profiler, timeout=100)
