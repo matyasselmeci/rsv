@@ -454,7 +454,7 @@ def form_metric_row(host, metric, top_level):
 def generate_html_files():
     """ Write out the top-level HTML file and any host-specific files """
 
-    main_page = html_template()
+    main_page = html_template_header()
 
     # Fill in the basics
     timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
@@ -492,11 +492,8 @@ def generate_html_files():
 
         tables = "<table id='links_table'>%s</table>" % tables
 
-    main_page = re.sub("!!TABLES!!", tables, main_page)
-
-    # There is no data for the main HTML page.  This section is only used for the
-    # host-specific pages
-    main_page = re.sub("!!DATA!!", "", main_page)
+    main_page += tables
+    main_page += html_template_footer()
 
     try:
         main_html_file = os.path.join(OPTIONS.output_dir, "index.html")
@@ -515,7 +512,7 @@ def generate_host_html(host, info):
     # Turn the _ back into a : when displaying
     pretty_host = re.sub("_(\d+)$", ":\g<1>", host)
 
-    host_page = html_template()
+    host_page = html_template_header()
 
     # Fill in the basics
     timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
@@ -551,9 +548,10 @@ def generate_host_html(host, info):
 
         host_table = "<table id='links_table'>%s</table>" % host_table
         table = re.sub("!!ROWS!!", '\n'.join(rows), host_table)
-        
-    host_page = re.sub("!!TABLES!!", table, host_page)
-    host_page = re.sub("!!DATA!!", data, host_page)
+
+    host_page += table
+    host_page += data
+    host_page += html_template_footer()
 
     try:
         host_html_file = os.path.join(OPTIONS.output_dir, "%s.html" % host)
@@ -592,7 +590,7 @@ def sigterm_handler(signum, frame):
     return
 
 
-def html_template():
+def html_template_header():
     """ Returns the HTML template file """
 
     return """<html>
@@ -645,10 +643,10 @@ def html_template():
     </table>
     !!ALERTS!!
     <p><a href=\"#faq\">FAQ</a>
-    !!TABLES!!
-    !!DATA!!
+"""
 
-   <p>&nbsp;
+def html_template_footer():
+    return """<p>&nbsp;
    <p><a name=\"faq\" style='background:#ffffff;color:#000000;'>Frequently Asked Questions:</a>
    <ul>
 
@@ -669,7 +667,7 @@ def html_template():
      <tr id=\"warning\"><td>The metric produced some warnings</td></tr>
      <tr id=\"critical\"><td>The metric failed</td></tr>
      <tr id=\"unknown\"><td>The metric produced an unknown result</td></tr>
-     <tr id=\"old\"><td>The metric is enabled, but it has produced output for 24+ hours</td></tr>
+     <tr id=\"old\"><td>The metric is enabled, but it has not produced output for 24+ hours</td></tr>
    </table>
    </ul>
    </body>
