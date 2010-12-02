@@ -973,6 +973,10 @@ sub Print_Metric {
 	    "timestamp: $metric{'timestampToPrint'}\n";
 
 	$outstring .= "voName: $metric{'voName'}\n" if (defined($metric{'voName'}));
+
+        # siteName is used for Pigeon Tools
+        $outstring .= "siteName: $metric{'siteName'}\n" if(defined($metric{'siteName'}));
+
 	$outstring .= "metricStatus: $metric{'metricStatus'}\n".
 	    "serviceType: $metric{'serviceType'}\n";
 	if ($o{'localprobe'} == 1) {
