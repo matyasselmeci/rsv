@@ -40,8 +40,8 @@ our %testname= (
 	'put', 'srmPutDone',
 	'get', 'gsiftp-get',
 	'bringonline', 'srmBringOnline',
-	'pull', 'srmCopy-pull',
-	'push', 'srmCopy',
+	'pull', 'srmCopy-pull-TEST',
+	'push', 'srmCopy-push-TEST',
 	'gsiftp', 'srmCopy-pull-gsiftp',
 	'ls', 'srmLs',
 	'mv', 'srmMv',
@@ -115,6 +115,7 @@ sub Init {
     &RSVProbeBase::Extra_CLI_Option ("srm-destination-dir=s","srmcpDestinationDir" );
     &RSVProbeBase::Extra_CLI_Option ("srm-tester-dir=s","srmtesterDir" );
     &RSVProbeBase::Extra_CLI_Option ("test-file=s","srmcpTestfile" );
+    &RSVProbeBase::Extra_CLI_Option ("copysource=s","gsiftpcopysource" );
 
     ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
     &RSVProbeBase::Set_DetailsDataTrim ("False");
@@ -130,7 +131,37 @@ sub Setup_Srm_Metric {
     {
 	$o{'srmtesterDir'}=$o{'VDT_LOCATION_LOCAL'}."/srm-tester-lbnl/bin";
     }
-   
+    $o{'copysource'}=$o{'gsiftpcopysource'};
+    if ($o{'gsiftpcopysource'} eq "")
+    {
+	$o{'gsiftpcopysource'}="gsiftp://" . $o{'hostName'} . "/" . $o{'srmcpDestinationDir'};
+    }
+       
+}
+sub Setup_Drive_Metric {
+$o{'drivefile'}=$o{'slashTmp'} ."srm.". int(rand(100000)). ".properties";
+open(DRIVE,'>'.$o{'drivefile'});
+print DRIVE "testsites=TEST,SOURCE";
+print DRIVE "\nlocaltargetdir=/tmp";
+print DRIVE "\nlocalsource=".$o{'srmcpTestfile'};
+print DRIVE "\nproxyfile=".$o{'proxyFile'};
+print DRIVE "\nop=ping,put,pull,push";
+print DRIVE "\nretrytimeallowed=1";
+print DRIVE "\npullcopysrm=TEST\@" . 
+	$o{'srmServiceType'} . "://" .
+        $o{'hostName'} . ":".
+        $o{'srmPortNumber'} . "/". 
+	$o{'srmWebservicePath'}."?SFN=".
+	$o{'srmcpDestinationDir'}."/".
+	"srmtester-drive-file-".int(rand(10000)).
+	",SOURCE\@".$o{'copysource'};
+print DRIVE "\npushcopysource=TEST\@disable=false,SOURCE\@disable=false";
+print DRIVE "\npullcopysource=TEST\@disable=false,SOURCE\@disable=false";
+print DRIVE "\nbrowseafterput=true";
+print DRIVE "\nadvisorydelete=false";
+print DRIVE "\nputoverwrite=TEST\@true,SOURCE\@true";
+print DRIVE "\ncopyoverwrite=TEST\@true,SOURCE\@true";
+
 }
 
 ## Run
@@ -167,7 +198,7 @@ sub Run {
     my $cmd_output="";
     my $op_name=$probe_name;
     my $remotesfn=$o{'srmcpDestinationDir'};
-    my $copysource=$o{'srmcpDestinationDir'};
+    my $copysource="gsiftp://".$o{'hostName'}."/".$o{'srmcpDestinationDir'};
 
 
 #	Add command specific parameters
@@ -182,7 +213,7 @@ sub Run {
 		my $srmtester_putfile="srmtester-put-testfile."
 			.int(rand(10000));
 		$remotesfn=$o{'srmcpDestinationDir'}. "/".$srmtester_putfile;
-		$copysource=$o{'srmcpDestinationDir'}."/".$srmtester_putfile;
+		$copysource="gsiftp://".$o{'hostName'}."/".$o{'srmcpDestinationDir'}."/".$srmtester_putfile;
 	}
 
 	## get: call with a testfile.  Also, call put first to put the file
@@ -192,7 +223,7 @@ sub Run {
 	{
 		$op_name="put,get,srmrm";
 		$remotesfn=$o{'srmcpDestinationDir'}. "/".$srmtester_getfile;
-		$copysource=$o{'srmcpDestinationDir'}."/".$srmtester_getfile;
+		$copysource="gsiftp://".$o{'hostName'}."/".$o{'srmcpDestinationDir'}."/".$srmtester_getfile;
 	}	
 
 	## srmrm: Call put to put a file to delete first.
@@ -202,7 +233,7 @@ sub Run {
 		my $srmtester_rmfile="srmtester-rm-testfile."
 			.int(rand(10000));
 		$remotesfn=$o{'srmcpDestinationDir'}. "/".$srmtester_rmfile;
-		$copysource=$o{'srmcpDestinationDir'}."/".$srmtester_rmfile;
+		$copysource="gsiftp://".$o{'hostName'}."/".$o{'srmcpDestinationDir'}."/".$srmtester_rmfile;
 	}
 
 	## bringonline:  call put to create a file first, then srmrm to cleanup
@@ -212,7 +243,7 @@ sub Run {
                 my $srmtester_rmfile="srmtester-bringonline-testfile."
                         .int(rand(10000));
                 $remotesfn=$o{'srmcpDestinationDir'}. "/".$srmtester_rmfile;
-                $copysource=$o{'srmcpDestinationDir'}."/".$srmtester_rmfile;
+                $copysource="gsiftp://".$o{'hostName'}."/".$o{'srmcpDestinationDir'}."/".$srmtester_rmfile;
         }
 
 	## mv: I could only get mv working by doing two separate calls:
@@ -225,7 +256,7 @@ sub Run {
                 my $srmtester_mvtargetfile="srmtester-mv-target-testfile."
                         .int(rand(10000));
                 $remotesfn=$o{'srmcpDestinationDir'}."/".$srmtester_mvfile;
-                $copysource=$o{'srmcpDestinationDir'}."/.$srmtester_mvfile";
+                $copysource="gsiftp://".$o{'hostName'}."/".$o{'srmcpDestinationDir'}."/.$srmtester_mvfile";
 		my $srmtester_cmd1=$o{'srmtesterDir'}.
 			"/srm-tester -serviceurl " .
 			$o{'srmServiceType'} . "://" .
@@ -236,8 +267,7 @@ sub Run {
 			" -localtargetdir " . $o{'slashTmp'} .
 			" -remotesfn " . $remotesfn .
 			" -localtargetdir " . $o{'slashTmp'} .
-			" -gsiftpcopysource gsiftp://" . $o{'hostName'}
-			. "/" . $copysource;
+			" -gsiftpcopysource " . $copysource;
 		&RSVProbeBase::Run_Command ($srmtester_cmd1, "backtick");
 		$cmd_output .= "Command run:".$srmtester_cmd1 . "\n";
 		$cmd_output .= $o{'cmdOut'};
@@ -263,7 +293,7 @@ sub Run {
                 my $srmtester_putfile="srmtester-gsiftp-testfile."
                         .int(rand(10000));
                 $remotesfn=$o{'srmcpDestinationDir'}. "/".$srmtester_putfile;
-                $copysource=$o{'srmcpDestinationDir'}."/".$srmtester_putfile;
+                $copysource=$o{'gsiftpcopysource'};
 	}
 	## Space reservation ops: call reserve first to get a token
 	## and call release to cleanup
@@ -286,6 +316,7 @@ sub Run {
 	if ($probe_name eq "push")
 	{
 		$op_name="push";
+		&Setup_Drive_Metric();
 		my $srmtester_pushfile="srmtester-push-target-testfile."
                         .int(rand(10000));
                 $remotesfn=$o{'srmcpDestinationDir'}."/".$srmtester_pushfile;
@@ -294,11 +325,11 @@ sub Run {
 	}
 	if ($probe_name eq "pull")
 	{
+		&Setup_Drive_Metric();
 		my $srmtester_pullfile="srmtester-pull-target-testfile."
                         .int(rand(10000));
                 $remotesfn=$o{'srmcpDestinationDir'}."/".$srmtester_pullfile;
                 $copysource=$o{'srmcpDestinationDir'}."/".$srmtester_pullfile;
-
 	}
 	if ($probe_name eq "gsiftp")
 	{
@@ -317,13 +348,23 @@ sub Run {
 	" -localtargetdir " . $o{'slashTmp'} .
 	" -remotesfn " . $remotesfn .
 	" -localtargetdir " . $o{'slashTmp'} .
-	" -gsiftpcopysource gsiftp://" . $o{'hostName'} 
-	. "/" . $copysource;
+	" -gsiftpcopysource " . $copysource;
 
+	if ((($probe_name eq "pull")||($probe_name eq "push"))&&
+		($o{'copysource'} ne ""))
+	{
+                $srmtester_cmd=$o{'srmtesterDir'}.
+			"/srm-tester -conf " .
+			$o{'drivefile'} . " -drive";
+	}
 	#Run command and save output
 	&RSVProbeBase::Run_Command ($srmtester_cmd, "backtick");
         $cmd_output .= "Command run:".$srmtester_cmd . "\n";
         $cmd_output .= $o{'cmdOut'};
+	if (($probe_name eq "pull")||($probe_name eq "push"))
+	{
+		&RSVProbeBase::Run_Command ("$o{'rmCmd'} $o{'drivefile'}", "backtick");
+	}
 
 
 	# Check the output for the summary section and then record the result.

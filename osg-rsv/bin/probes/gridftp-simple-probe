@@ -73,6 +73,7 @@ sub Init {
     &RSVProbeBase::Extra_CLI_Option ("test-file=s","globusurlcopyTestfile");
     &RSVProbeBase::Extra_CLI_Option ("gridftp-destination-dir=s","gridftpDestinationDir");
     &RSVProbeBase::Extra_CLI_Option ("gridftp-delay=i","gridftpDelaySeconds");
+    &RSVProbeBase::Extra_CLI_Option ("sitename=s","siteName");
 
     ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
     ## &RSVProbeBase::Set_DetailsDataTrim ("False");
@@ -94,8 +95,12 @@ sub Run {
     ## Compare remote file and the one copied back; set metric accordingly
     &Diff_Files ();
     ## Clean up remote file and the one copied back;
-    &Cleanup()
+    &Cleanup();
     ## Print metric, and we're all done!
+    #if ($o{'SiteName'} ne "")
+    #{
+    #    $metric{'serviceUri'}=$o{'SiteName'}
+    #}
     &RSVProbeBase::Print_Metric ();
 }
 

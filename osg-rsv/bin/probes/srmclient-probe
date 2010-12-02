@@ -100,6 +100,7 @@ sub Init {
     &RSVProbeBase::Extra_CLI_Option ("srm-webservice-path=s","srmWebservicePath");
     &RSVProbeBase::Extra_CLI_Option ("srm-destination-dir=s","srmcpDestinationDir" );
     &RSVProbeBase::Extra_CLI_Option ("test-file=s","srmcpTestfile" );
+    &RSVProbeBase::Extra_CLI_Option ("sitename=s","siteName");
 
     ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
     &RSVProbeBase::Set_DetailsDataTrim ("False");
@@ -300,7 +301,6 @@ sub Run {
 
 	#Now compare files
 	my $diff_files_cmd = "$o{'diffCmd'} $o{'srmcpTestfile'} $o{'srmcpBackTestfile'} 2>&1";
-	print $diff_files_cmd;
     	&RSVProbeBase::Run_Command ($diff_files_cmd, "backtick");
 
 	if (($o{'cmdOut'} eq '') &&($o{'cmdExitValue'} == 0 ))
@@ -579,6 +579,12 @@ sub Run {
    }
    RSVProbeBase::Set_Summary_Metric_Results($out_value, "$out_desc.  Details: $cmd_output");
 
+
+#Use the site name if provided
+#   if ($o{'SiteName'} ne "")
+#   {
+#	$metric{'serviceUri'}=$o{'SiteName'}
+#   }
    &RSVProbeBase::Print_Metric();
 
 }
