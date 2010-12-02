@@ -16,21 +16,23 @@ from optparse import OptionParser
 # STATE holds all the metric info.  This is a multi-level data structure with the
 # following format:
 #   <Host> -> {}
-#             <Metric> -> {}
-#                         time   = Last time metric ran
-#                         status = Last status of metric
-#                         history -> []
-#                                    <full text of record>
-#                                    <full text of record>
-#                                    ...
-#            <Metric2> -> {}
-#                         ...
+#             sitename = Site Name, as used by Pigeon
+#             metrics -> <Metric> -> {}
+#                                    time   = Last time metric ran
+#                                    status = Last status of metric
+#                                    history -> []
+#                                               <full text of record>
+#                                               <full text of record>
+#                                               ...
+#                        <Metric2> -> {}
+#                                     ...
 #  <Host2> -> {}
 #             ...
 STATE = {}
 
 # CUR holds information that is only valid for this run, and should not be stored
-# in the state file
+# in the state file.  This includes whether the metric is enabled and when its
+# next run time is.
 CUR = {}
 
 JOB_INFO_ERROR = None
@@ -304,12 +306,18 @@ def process_record(raw_record):
     global STATE
     if host not in STATE:
         STATE[host] = {}
+        STATE[host]["metrics"] = {}
+        STATE[host]["sitename"] = None
+
+    # If the siteName line is present then stash it for the host
+    if "siteName" in record:
+        STATE[host]["sitename"] = record["siteName"]
 
     # Set the top-level metric info
-    if metric not in STATE[host]:
-        STATE[host][metric] = {}
-    STATE[host][metric]["time"]   = float(record["timestamp"])
-    STATE[host][metric]["status"] = record["metricStatus"]
+    if metric not in STATE[host]["metrics"]:
+        STATE[host]["metrics"][metric] = {}
+    STATE[host]["metrics"][metric]["time"]   = float(record["timestamp"])
+    STATE[host]["metrics"][metric]["status"] = record["metricStatus"]
 
     # Add an item to the history.  We could either do a history based on the number
     # of records kept (for each metric) or based on an expiration date since the record
@@ -321,15 +329,15 @@ def process_record(raw_record):
     # on the history web page.
     match = re.search("timestamp: (\d+)", trimmed_record)
     if match:
-        pretty_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(STATE[host][metric]["time"]))
+        pretty_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(STATE[host]["metrics"][metric]["time"]))
         trimmed_record = re.sub("timestamp: \d+", "timestamp: %s" % pretty_time, trimmed_record)
 
-    if "history" not in STATE[host][metric]:
-        STATE[host][metric]["history"] = []
+    if "history" not in STATE[host]["metrics"][metric]:
+        STATE[host]["metrics"][metric]["history"] = []
     
-    STATE[host][metric]["history"].insert(0, trimmed_record)
-    if len(STATE[host][metric]["history"]) > OPTIONS.max_history:
-        STATE[host][metric]["history"] = STATE[host][metric]["history"][0:OPTIONS.max_history]
+    STATE[host]["metrics"][metric]["history"].insert(0, trimmed_record)
+    if len(STATE[host]["metrics"][metric]["history"]) > OPTIONS.max_history:
+        STATE[host]["metrics"][metric]["history"] = STATE[host]["metrics"][metric]["history"][0:OPTIONS.max_history]
 
     return
 
@@ -419,8 +427,8 @@ def form_metric_row(host, metric, top_level):
     #    If it is enabled, mark it as "old"
     #    If it is disabled, remove it entirely
     one_day_ago = int(time.time()) - 24*60*60
-    if STATE[host][metric]["time"] >= one_day_ago:
-        id = STATE[host][metric]["status"].lower()        
+    if STATE[host]["metrics"][metric]["time"] >= one_day_ago:
+        id = STATE[host]["metrics"][metric]["status"].lower()
     else:
         try:
             if CUR[host][metric]["enabled"] == 1:
@@ -429,10 +437,10 @@ def form_metric_row(host, metric, top_level):
                 raise KeyError
         except KeyError:
             # This indicates that the record is not enabled, so purge it
-            del STATE[host][metric]
+            del STATE[host]["metrics"][metric]
             return ""
         
-    pretty_time   = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(STATE[host][metric]["time"]))
+    pretty_time   = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(STATE[host]["metrics"][metric]["time"]))
     next_run_time = get_next_run_time(host, metric)
 
     try:
@@ -446,9 +454,21 @@ def form_metric_row(host, metric, top_level):
         enabled = "NO"
     
     row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
-           (id, link, metric, pretty_time, enabled, next_run_time, STATE[host][metric]["status"])
+           (id, link, metric, pretty_time, enabled, next_run_time, STATE[host]["metrics"][metric]["status"])
 
     return row
+
+
+def format_hostname(host, sitename):
+    """ Get the hostname in the to-be-displayed format """
+    
+    # Turn the _ back into a : when displaying
+    pretty_host = re.sub("_(\d+)$", ":\g<1>", host)
+
+    if sitename:
+        pretty_host = "%s (%s)" % (sitename, pretty_host)
+
+    return pretty_host
 
 
 def generate_html_files():
@@ -476,14 +496,14 @@ def generate_html_files():
         tables = "<p>There is no data to display.</p>"
     else:
         for host in sorted(STATE.keys()):
-            # Turn the _ back into a : when displaying
-            pretty_host = re.sub("_(\d+)$", ":\g<1>", host)
-            
-            generate_host_html(host, STATE[host])
+            generate_host_html(host, STATE[host]["sitename"], STATE[host]["metrics"])
+
             host_table = html_table_template()
-            host_table = re.sub("!!HOSTNAME!!", pretty_host, host_table)
+            display_host = format_hostname(host, STATE[host]["sitename"])
+            host_table = re.sub("!!HOSTNAME!!", display_host, host_table)
+
             rows = []
-            for metric in sorted(STATE[host]):
+            for metric in sorted(STATE[host]["metrics"]):
                 rows.append(form_metric_row(host, metric, top_level=1))
 
             table = '\n'.join(rows)
@@ -506,18 +526,16 @@ def generate_html_files():
     return
 
 
-def generate_host_html(host, info):
+def generate_host_html(host, sitename, info):
     """ Create the host-specific HTML file """
 
-    # Turn the _ back into a : when displaying
-    pretty_host = re.sub("_(\d+)$", ":\g<1>", host)
-
+    display_host = format_hostname(host, sitename)
     host_page = html_template_header()
 
     # Fill in the basics
     timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    title = "RSV Status - %s - %s" % (pretty_host, timestamp)
-    header = "RSV Status - %s - %s" % (pretty_host, timestamp)
+    title = "RSV Status - %s - %s" % (display_host, timestamp)
+    header = "RSV Status - %s - %s" % (display_host, timestamp)
     host_page = re.sub("!!TITLE!!", title, host_page)
     host_page = re.sub("!!HEADER!!", header, host_page)
 
@@ -535,7 +553,7 @@ def generate_host_html(host, info):
         table = "<p>There is no data to display.</p>"
     else:
         host_table = html_table_template()
-        host_table = re.sub("!!HOSTNAME!!", pretty_host, host_table)
+        host_table = re.sub("!!HOSTNAME!!", display_host, host_table)
         rows = []
         for metric in sorted(info):
             row = form_metric_row(host, metric, top_level=0)
