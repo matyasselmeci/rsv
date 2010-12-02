@@ -695,7 +695,7 @@ def html_template_footer():
 def html_table_template():
     """ Return the HTML table template """
     return """<p>
-         <tr><td colspan=5 style='padding-top:15px;text-align:left;font-weight:bold;'>Hostname: !!HOSTNAME!!</td></tr>
+         <tr><td colspan=5 style='padding-top:15px;text-align:left;font-weight:bold;'>Host: !!HOSTNAME!!</td></tr>
          <tr>
             <th>Metric</th>
             <th>Last Executed</th>
