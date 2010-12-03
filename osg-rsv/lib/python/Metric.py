@@ -5,6 +5,9 @@ import re
 import sys
 import ConfigParser
 
+# For Python 2.3
+from compat import sorted
+
 VALID_OUTPUT_FORMATS = ["wlcg", "wlcg-multiple", "brief"]
 
 class Metric:
