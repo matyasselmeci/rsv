@@ -392,10 +392,12 @@ def verify(rsv):
     """ Perform some basic verification tasks to determine if RSV is functioning correctly """
 
     condor = Condor.Condor(rsv)
+    num_errors = 0
 
     rsv.echo("Testing if Condor-Cron is running...")
     if not condor.is_condor_running():
         rsv.echo("ERROR: condor-cron is not running.")
+        num_errors += 1
     else:
         rsv.echo("OK")
 
@@ -406,6 +408,7 @@ def verify(rsv):
             rsv.echo("OK (%s running metrics)" % num)
         else:
             rsv.echo("ERROR: No metrics are running")
+            num_errors += 1
 
         rsv.echo("\nTesting if consumers are running...")
         num = condor.number_of_running_consumers()
@@ -413,12 +416,14 @@ def verify(rsv):
             rsv.echo("OK (%s running consumers)" % num)
         else:
             rsv.echo("ERROR: No consumers are running")
+            num_errors += 1
         
     rsv.echo("\nChecking which consumers are configured...")
     consumers = rsv.get_enabled_consumers(want_objects=0)
     if len(consumers) == 0:
         rsv.echo("ERROR: No consumers are configured to run.")
         rsv.echo("This means that your metrics are not reporting information to any source.")
+        num_errors += 1
     else:
         rsv.echo("The following consumers are enabled: %s" % " ".join(consumers))
 
@@ -426,4 +431,7 @@ def verify(rsv):
             rsv.echo("WARNING: The gratia-consumer is not enabled.  This indicates that your")
             rsv.echo("         resource is not reporting to OSG.")
 
-    return True
+    if num_errors == 0:
+        return True
+    else:
+        return False
