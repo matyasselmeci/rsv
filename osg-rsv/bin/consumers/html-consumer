@@ -742,5 +742,14 @@ def system(command, timeout):
     return (ret, out, err)
 
 
+try:
+    sorted = sorted
+except NameError:
+    def sorted(iterable):
+        """ Implementing a barebones sorted function for Python 2.3. This can go
+        away once we no longer support RedHat 4 """
+        lst = list(iterable)
+        lst.sort()
+        return lst
 
 main()
