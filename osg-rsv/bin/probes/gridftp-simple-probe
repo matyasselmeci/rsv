@@ -81,6 +81,7 @@ sub Init {
 
 
 sub Run {
+    $metric{'siteName'}=$o{'siteName'};
     ## This test is already available in perl module; so just invoke it.
     &RSVProbeBase::Ping_Host ();
     

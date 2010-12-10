@@ -205,7 +205,7 @@ sub Run {
     &Process_Multi_Metrics ();
     ## If we this far then probe is in normal operation
 
-
+    $metric{'siteName'}=$o{'siteName'};
     ## Extract probe name from metric name 
     my $probe_name = &RSVProbeBase::Get_MetricName();
     $probe_name    =~ /.*\.srmclient-(.*)$/;
