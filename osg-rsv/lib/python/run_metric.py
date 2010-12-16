@@ -267,7 +267,11 @@ def main(rsv, options, metrics):
 
             # Check for some basic error conditions
             rsv.check_proxy(metric)
-            ping_test(rsv, metric)
+
+            if options.no_ping:
+                rsv.log("INFO", "Skipping ping check because --no-ping was supplied")
+            else:
+                ping_test(rsv, metric)
 
             # Run the job and parse the result
             if total > 1:

@@ -97,6 +97,8 @@ def process_options(arguments=None):
                      help="Show the configuration for specific metrics.")
     group.add_option("--profile", action="store_true", dest="profile", default=None,
                      help="Run the RSV profiler")
+    group.add_option("--no-ping", action="store_true", dest="no_ping", default=False,
+                     help="Skip the ping test against the host being monitored")
     parser.add_option_group(group)
 
     if arguments == None:
