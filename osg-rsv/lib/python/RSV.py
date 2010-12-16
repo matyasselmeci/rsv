@@ -400,7 +400,7 @@ class RSV:
 
         # If we won't have a proxy, and need-proxy was not set above, we bail
         self.results.no_proxy_found(metric)
-
+        sys.exit(1)
 
 
     def renew_service_certificate_proxy(self, metric, cert, key, proxy):
@@ -427,6 +427,7 @@ class RSV:
 
             if ret:
                 self.results.service_proxy_renewal_failed(metric, cert, key, proxy, out, err)
+                sys.exit(1)
 
         # Globus needs help finding the service proxy since it probably does not have the
         # default naming scheme of /tmp/x509_u<UID>
@@ -445,6 +446,7 @@ class RSV:
         # Check that the file exists on disk
         if not os.path.exists(proxy_file):
             self.results.missing_user_proxy(metric, proxy_file)
+            sys.exit(1)
 
         # Check that the proxy is not expiring in the next 10 minutes.  globus-job-run
         # doesn't seem to like a proxy that has a lifetime of less than 3 hours anyways,
@@ -455,6 +457,7 @@ class RSV:
                                            (OPENSSL_EXE, proxy_file, seconds_til_expiration))
         if ret:
             self.results.expired_user_proxy(metric, proxy_file, out, minutes_til_expiration)
+            sys.exit(1)
 
         # Just in case this isn't the default /tmp/x509_u<UID> we'll explicitly set it
         os.environ["X509_USER_PROXY"] = proxy_file
