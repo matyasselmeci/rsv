@@ -206,6 +206,7 @@ sub Run {
     ## If we this far then probe is in normal operation
 
     $metric{'siteName'}=$o{'siteName'};
+
     ## Extract probe name from metric name 
     my $probe_name = &RSVProbeBase::Get_MetricName();
     $probe_name    =~ /.*\.srmclient-(.*)$/;
@@ -449,11 +450,10 @@ sub Run {
 	&RSVProbeBase::Run_Command ($srmrm_cmd, "backtick");
 	$cmd_output .= $o{'cmdOut'}; 
         &RSVProbeBase::Run_Command ($srmls_cmd, "backtick");
-	$cmd_output .= $o{'cmdOut'}; 
         if (($rm1_result==0)&&($o{'cmdExitValue'} !=0))
 	{
 		$out_value=0;
-		$out_desc="SRM server $metric{'hostName'} was able to create and remove a file (following shows file was deleted).";
+		$out_desc="SRM server $metric{'hostName'} was able to create and remove a file.";
 	}
 	else
 	{
@@ -485,7 +485,6 @@ sub Run {
 	$cmd_output .= $o{'cmdOut'}; 
 	my $srmls_cmd = "$o{'srmlsCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestdirectoryUri'} 2>&1";
         &RSVProbeBase::Run_Command ($srmls_cmd, "backtick");
-	$cmd_output .= $o{'cmdOut'}; 
 	my $ls1_result=$o{'cmdExitValue'};
 	if ($probe_name eq "mkdir")
 	{
