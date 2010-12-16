@@ -46,7 +46,10 @@ class Metric:
         self.config = ConfigParser.RawConfigParser()
         self.config.optionxform = str
         self.load_config(defaults, options)
-        self.validate_config()
+
+        if not self.validate_config():
+            self.rsv.log("ERROR", "Metric %s is not configured correctly." % self.name)
+            
         return
     
 
@@ -115,22 +118,22 @@ class Metric:
         """ Validate metric-specific configuration """
 
         if not self.config_get("service-type") or not self.config_get("execute"):
-            rsv.log("ERROR", "metric configuration is missing 'service-type' or 'execute' " +
-                    "declaration.  This is likely caused by a missing or corrupt metric " +
-                    "configuration file")
+            self.rsv.log("ERROR", "Metric configuration is missing 'service-type' or 'execute' " +
+                         "declaration.  This is likely caused by a missing or corrupt metric " +
+                         "meta file or configuration file.")
             return False
 
         try:
             output_format = self.config_get("output-format").lower()
             if output_format not in VALID_OUTPUT_FORMATS:
                 valid_formats = " ".join(VALID_OUTPUT_FORMATS)
-                rsv.log("ERROR", "output-format '%s' is not supported.  Valid formats: %s\n" %
+                self.rsv.log("ERROR", "output-format '%s' is not supported.  Valid formats: %s\n" %
                         (output_format, valid_formats))
                 return False
 
         except ConfigParser.NoOptionError:
-            rsv.log("ERROR", "Metric output-format is missing.\n" +
-                    "This is likely caused by a missing or corrupt metric configuration file")
+            self.rsv.log("ERROR", "Metric output-format is missing.\n" +
+                         "This is likely caused by a missing or corrupt metric configuration file")
             return False
 
         return True
