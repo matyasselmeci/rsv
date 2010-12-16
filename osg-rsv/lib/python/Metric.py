@@ -53,13 +53,15 @@ class Metric:
     def load_config_file(self, file, required=0):
         """ Load a single configuration file """
         log_level = "INFO"
+        prefix = "Optional"
         if required:
             log_level = "ERROR"
+            prefix = "Mandatory"
         
         if not os.path.exists(file):
-            self.rsv.log(log_level, "Config file '%s' does not exist" % file)
+            self.rsv.log(log_level, "%s config file '%s' does not exist" % (prefix, file))
         elif not os.access(file, os.R_OK):
-            self.rsv.log(log_level, "Config file '%s' is not readable by RSV user" % file)
+            self.rsv.log("WARNING", "Config file '%s' is not readable by RSV user" % file)
         else:
             self.rsv.log("INFO", "Loading config file '%s'" % file)
             try:
