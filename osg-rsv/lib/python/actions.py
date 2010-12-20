@@ -87,7 +87,7 @@ def list_metrics(rsv, options, pattern):
         if pattern:
             tmp = " that match the supplied pattern"
 
-        retlines.append("The are %i metrics not enabled on any host%s.  Use --all to display them." %
+        retlines.append("There are %i metrics not enabled on any host%s.  Use --all to display them." %
                         (num_disabled_metrics, tmp))
             
 
