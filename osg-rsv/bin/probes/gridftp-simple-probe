@@ -260,7 +260,7 @@ sub Check_Gridftp_Transfer_Status {
     }
     
     ## Check if gridftp x'fer failed; if it did, print failure metric and exit
-    &RSVProbeBase::Exit_Error (2, "ERROR: Cannot copy file: $source_file to $dest_file ... Bailing now. Actual error message was: $metric{'cmdOut'}") 
+    &RSVProbeBase::Exit_Error (2, "ERROR: Cannot copy file: $source_file to $dest_file ... Bailing now. Actual error message was: $o{'cmdOut'}") 
 	if ($o{'cmdExitValue'} !=0);
 
     ## Default
@@ -299,7 +299,7 @@ sub Diff_Files {
 
     if (($o{'cmdOut'} ne '') ||  
 	($o{'cmdExitValue'} != 0 )){
-	&RSVProbeBase::Set_Summary_Metric_Results (2,"ERROR: Either file copied to $o{'hostName'} was different from our testfile or $o{'diffCmd'} could not be found; Absolute error message was: $metric{'cmdOut'}");
+	&RSVProbeBase::Set_Summary_Metric_Results (2,"ERROR: Either file copied to $o{'hostName'} was different from our testfile or $o{'diffCmd'} could not be found; Absolute error message was: $o{'cmdOut'}");
     }
 }
 
