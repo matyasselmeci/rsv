@@ -2,6 +2,9 @@
 
 # Global libraries
 import os
+import fcntl
+import select
+import time
 import sys
 import popen2
 import signal
@@ -33,20 +36,57 @@ class Sysutils:
         that requires Python 2.4 and we need to support Python 2.3+.
         """
 
+        out = ""
+        err = ""
+        ret = -1
+        # although using the signal module makes life 
+        # easier, it looks like it doesn't play nicely with popen3 so
+        # we need to handle the timing manually instead of the using
+        # SIGALRM
         try:
-            signal.signal(signal.SIGALRM, alarm_handler)
-            signal.alarm(timeout)
+            start = time.time()
             child = popen2.Popen3(command, capturestderr=1)
+            # set child's stderr to non blocking if possible
+            # prevents the child from hanging due to it blocking on stderr 
+            # or stdout 
+            error_fd = child.childerr.fileno()
+            flags = fcntl.fcntl(error_fd, fcntl.F_GETFL, 0) 
+            flags |= os.O_NONBLOCK
+            fcntl.fcntl(error_fd, fcntl.F_SETFL, flags)
+            # do the same for stdout            
+            out_fd = child.fromchild.fileno()
+            flags = fcntl.fcntl(out_fd, fcntl.F_GETFL, 0) 
+            flags |= os.O_NONBLOCK
+            fcntl.fcntl(out_fd, fcntl.F_SETFL, flags)
+            # use select to get output from child
+            while True:
+               interval = (start + timeout) - time.time()
+               ready_fds = select.select([error_fd, out_fd], [], [], interval)
+               if ready_fds[0] != []:
+                   # there's output that needs to be read
+                   if error_fd in ready_fds[0]:
+                       err += os.read(error_fd, 2048)
+                   if out_fd in ready_fds[0]:
+                       out += os.read(out_fd, 2048)
+
+               if child.poll() != -1:
+                  # child is done, exit. 
+                  break
+               
+               if ((time.time() - start) > timeout):
+                   # probe has been running for more than timeout seconds,
+                   # raise an exception to time out the execution
+                   raise TimeoutError
             ret = child.wait()
-            signal.alarm(0)
+        except IOError, ex: # from fcntl calls
+            self.rsv.log("ERROR", "Error while changing to non-blocking output")
+            os.kill(child.pid, signal.SIGKILL)
         except TimeoutError:
             self.rsv.log("ERROR", "Command timed out (timeout=%s): %s" % (timeout, command))
             os.kill(child.pid, signal.SIGKILL)
             raise TimeoutError("Command timed out (timeout=%s)" % timeout)
 
         self.rsv.log("INFO", "Exit code of job: %s" % ret)
-        out = child.fromchild.read()
-        err = child.childerr.read()
         return (ret, out, err)
 
 
