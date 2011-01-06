@@ -146,7 +146,7 @@ def initialize():
 
 def get_state_file_path():
     """ Returns the path of the state file """
-    return os.path.join(OPTIONS.output_dir, "state.file")
+    return os.path.join(OPTIONS.output_dir, "state.pickle")
 
 
 def load_state_file():
@@ -197,14 +197,28 @@ def write_state_file():
 def process_files():
     """ Open the records directory and load each file """
 
-    files = os.listdir(OPTIONS.records_dir)
-    log("Processing %s files" % len(files))
-    for filename in files:
+    filenames = os.listdir(OPTIONS.records_dir)
+    log("Processing %s files" % len(filenames))
+
+    # We need to sort the files by creation time so that in case multiple records have
+    # accumulated for a given metric we want to parse them in order (because the order
+    # that we parse them is the order they will show up in the history and the last one
+    # we parse will be the current state)
+    files = []
+    for filename in filenames:
+        path = os.path.join(OPTIONS.records_dir, filename)
+        ctime = os.stat(path).st_ctime
+        files.append( (ctime, filename) )
+    files.sort()
+    
+
+    for file in files:
         if CONSUMER_DONE == 1:
             break
         
         success = 0
 
+        filename = file[1]
         file = os.path.join(OPTIONS.records_dir, filename)
         fh = open(file, 'r')
         record = fh.read()
