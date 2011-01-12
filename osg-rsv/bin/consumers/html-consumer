@@ -520,9 +520,12 @@ def generate_html_files():
             for metric in sorted(STATE[host]["metrics"]):
                 rows.append(form_metric_row(host, metric, top_level=1))
 
-            table = '\n'.join(rows)
-            host_table = re.sub("!!ROWS!!", table, host_table)
-            tables += host_table
+            if len(rows) > 0:
+                # TODO: Perhaps we should run generate_host_html in here also since we
+                # don't need a host-specific HTML file unless there are some metrics
+                table = '\n'.join(rows)
+                host_table = re.sub("!!ROWS!!", table, host_table)
+                tables += host_table
 
         tables = "<table id='links_table'>%s</table>" % tables
 
