@@ -81,8 +81,8 @@ sub Init {
     &RSVProbeBase::Extra_CLI_Option ("srm-destination-dir=s","srmcpDestinationDir" );
     &RSVProbeBase::Extra_CLI_Option ("test-file=s","srmcpTestfile" );
 
-    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
-    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+    ## Comment if you want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
 }
 
 

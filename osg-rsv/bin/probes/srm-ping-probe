@@ -76,8 +76,8 @@ sub Init {
     &RSVProbeBase::Extra_CLI_Option ("srm-webservice-path=s","srmWebservicePath");
     &RSVProbeBase::Extra_CLI_Option ("srm-destination-dir=s","srmcpDestinationDir" );
 
-    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
-    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+    ## Comment if you want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
 }
 
 

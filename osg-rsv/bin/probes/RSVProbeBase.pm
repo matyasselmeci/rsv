@@ -930,11 +930,8 @@ sub Print_Metric {
     if (($o{'detailsDataTrim'} == 1) && (length ($metric{'detailsData'}) > $o{'detailsDataMaxLength'})) {
 	$metric{'detailsData'} = substr($metric{'detailsData'}, 0, $o{'detailsDataMaxLength'}).
 	    "\n... Truncated ...\nFor more details,  as \'$ENV{'USER'}\' user:\n".
-	    " - First source $o{'VDT_LOCATION_LOCAL'}/setup.sh\n".
-	    " - Then execute:".
-	    " $0 @{$o{'ARGV'}} --no-trim-details\n".
-	    "If the --verbose switch was passed to this execution, this file might have more information\n".
- 	    " \$VDT_LOCATION/osg-rsv/logs/probes/$o{'hostName'}__".$o{'probeName'}."\\\@$metric{'metricName'}.err.";
+	    "rsv-control --run --host $o{'hostname'} $o{'probeName'} --verbose 3";
+ 
     }
 
     ## Append proxy warning if applicable
