@@ -191,6 +191,7 @@ sub Setup_Srmcp_Metric {
 	RSVProbeBase::Verbose ("Setup_Srmcp_Metric:\n\tsrmServiceType: $o{'srmServiceType'}\tsrmPortNumber:$o{'srmPortNumber'}\n\tsrmcpTestfileUri: $o{'srmcpTestfileUri'}\n\tsrmcpRemoteTestfileUri: $o{'srmcpRemoteTestfileUri'}\n\tsrmcpBackTestfileUri: $o{'srmcpBackTestfileUri'}\n");
 }
 
+
 ## Run
 ##
 ## The main part of the program.
@@ -243,7 +244,7 @@ sub Run {
     my $srm_ping_cmd = "$o{'srmpingCmd'} -retry_num=0 -debug -" . $o{'srmProtocolVersion'}. " -x509_user_proxy=" . $o{'proxyFile'} . " " . $o{'srmServiceType'} .  "://". $o{'hostName'}. ":" . $o{'srmPortNumber'}. " -webservice_path=$o{'srmWebservicePath'} 2>&1 " ;
     &RSVProbeBase::Run_Command($srm_ping_cmd, "backtick");
     $cmd_output.=$o{'cmdOut'};
-## Set metric status based on srmping command's exit value
+    ## Set metric status based on srmping command's exit value
     if ($o{'cmdExitValue'} == 0) 
     {
 	$out_value=0;
@@ -255,7 +256,25 @@ sub Run {
 	$out_value=3;
 	$out_desc="SRM server running on $metric{'hostName'} returned unknown exit code upon runnnig [$srm_ping_cmd]. \n";
     }
-
+    ## Special parsing for dcache and no mapping
+    if ($o{'cmdOut'} =~/backend_type=dCache/)
+        {
+                if ($o{'cmdOut'} =~/backend_version=/)
+                { $out_value=0;}
+                else
+                {
+			$out_value=2;
+                        $out_desc="dCache did not provide backend type.";
+                }
+        }
+        else
+        {
+                if ($o{'cmdOut'} =~/gumsIDMapped=null/)
+                {
+			$out_value=1;
+                        $out_desc="Srm Ping worked, but did not authenticate to a gums id.";
+                }
+        }
    }
 
 ###
