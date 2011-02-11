@@ -683,7 +683,8 @@ def html_template_header():
        </tr>
     </table>
     !!ALERTS!!
-    <p><a href=\"#faq\">FAQ</a>
+    <p>Note: This page is for local reference only.  If your site participates in WLCG availability you can view your status at <a href="http://myosg.grid.iu.edu">http://myosg.grid.iu.edu</a>.
+    <p><a href=\"#faq\">Frequently Asked Questions</a>
 """
 
 def html_template_footer():
