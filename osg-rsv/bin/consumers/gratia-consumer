@@ -143,7 +143,7 @@ def process_files(info):
             # Gratia.Send will return an empty string on success, or an string containing
             # the problem on error.
             error_msg = Gratia.Send(gratia_record)
-            if not error_msg:
+            if not error_msg or re.match("^OK ", error_msg):
                 success = 1
                 
         except InvalidRecordError, err:
@@ -231,9 +231,9 @@ def parse_wlcg_record(raw_record):
     in_details_data = 0
     for line in raw_record.split('\n'):
         if not in_details_data:
-            match = re.match("(\w+): (.+)$", line)
+            match = re.match("(\w+):(.*)$", line)
             if match:
-                record[match.group(1)] = match.group(2)
+                record[match.group(1)] = match.group(2).strip()
                 if match.group(1) == "detailsData":
                     in_details_data = 1
             else:
