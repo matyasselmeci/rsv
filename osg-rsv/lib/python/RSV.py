@@ -543,7 +543,7 @@ def get_rsv_defaults():
     set_default_value("rsv", "details-data-trim-length", 10000)
 
     # Set the job timeout default in seconds
-    set_default_value("rsv", "job-timeout", 300)
+    set_default_value("rsv", "job-timeout", 1200)
 
     return defaults
 
@@ -598,7 +598,7 @@ def validate_config(rsv):
         rsv.config.getint("rsv", "job-timeout")
     except ConfigParser.NoOptionError:
         # We set a default for this, but just to be safe...
-        rsv.config.set("rsv", "job-timeout", "300")
+        rsv.config.set("rsv", "job-timeout", "1200")
     except ValueError:
         rsv.log("ERROR", "job-timeout must be an integer.  It is set to '%s'" %
                 rsv.config.get("rsv", "job-timeout"))
