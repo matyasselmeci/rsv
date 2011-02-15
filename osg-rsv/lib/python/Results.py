@@ -69,6 +69,15 @@ class Results:
             #        trim_length)
             # TODO - trim detailsData
 
+        # A bug was discovered in RSV 3.3.5 that sometimes reads only 2048 bytes of STDOUT.
+        # This results in a truncated record.  We will check our record now and if it has a
+        # detailsData section but does not end in EOT we are going to add EOT to the end of
+        # it.  This could be removed when we fix the Sysutils.System() function but it might
+        # be worth leaving in anyways to ensure records are always valid.
+        if re.search("^detailsData:", record, re.MULTILINE):
+            if not re.search("EOT\s*$", record):
+                record += "\nEOT\n"
+
         # Create a record with a local timestamp.
         local_record = record
         match = re.search("timestamp: ([\w\:\-]+)", local_record)
