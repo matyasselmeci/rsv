@@ -114,62 +114,65 @@ echo "" >> $rsvlog
 echo "" >> $rsvlog
 
 echo "rsv-control -l" >> $rsvlog
-rsv-control -l >> $rsvlog
+osg-rsv/bin/rsv-control -l >> $rsvlog 2>&1
 echo "" >>$rsvlog
 
 echo "rsv-control -j" >> $rsvlog
-rsv-control -j >> $rsvlog
+osg-rsv/bin/rsv-control -j >> $rsvlog 2>&1
 echo "" >>$rsvlog
 
 echo "rsv-control --verify" >> $rsvlog
-rsv-control --verify >> $rsvlog 2>&1
+osg-rsv/bin/rsv-control --verify >> $rsvlog 2>&1
 echo "" >>$rsvlog
 
-echo "Trying to copy config directory..." >> $rsvlog
-if [ -e osg-rsv/config ]; then
-  cp -pr osg-rsv/config/ $rsvfiledir
-  echo "copying config dir"     >> $rsvlog
+echo "Trying to copy etc directory..." >> $rsvlog
+if [ -e osg-rsv/etc ]; then
+  cp -pr osg-rsv/etc/ $rsvfiledir
+  echo "copying etc dir"     >> $rsvlog
 else
-  echo "cannot find config dir" >> $rsvlog
+  echo "cannot find etc dir" >> $rsvlog
 fi
 echo "" >> $rsvlog
 
 # See if there is anything in this directory
 echo "Failed gratia directory:" >> $rsvlog
-ls osg-rsv/output/failed-gratia-scripts >> $rsvlog 2>&1
+ls osg-rsv/output/failed-gratia-records >> $rsvlog 2>&1
 echo "" >> $rsvlog
 
-# We need to figure out the proxy in a better way here...submission files no longer exist
-# so we should look in osg-rsv/etc/rsv.conf
 # Attempt to see if proxy exists
-#echo "Looking for RSV proxy..." >> $rsvlog
-#proxy=`grep proxy osg-rsv/submissions/probes/* | perl -e '$t = <STDIN>; if($t =~ /--proxy\s+(\S+)/) { print "$1\n" }'`
-#if [ "x${proxy}" = "x" ]; then
-#  echo "Cannot figure out where proxy is.  Will run `ls -l /tmp/x509*` instead." >> $rsvlog
-#  ls -l /tmp/x509* >> $rsvlog
-#else
-#  echo "Proxy information:" >> $rsvlog
-#  ls -l $proxy >> $rsvlog
-#fi
-#echo "" >> $rsvlog
-
-# Get proxy information
-echo "Proxy information:" >> $rsvlog
-id=`id -u`
-user=`grep RUN_AS_USER post-install/osg-rsv | perl -e '$t = <STDIN>; if($t =~ /RUN_AS_USER\s*=\s*(\S+)/) { print "$1\n" }'`
-if [ ${id} == "0" ]; then
-  echo "grid-proxy-info:"                  >> $rsvlog
-  su -c 'globus/bin/grid-proxy-info' $user >> $rsvlog 2>&1
+echo "Looking for RSV proxy..." >> $rsvlog
+proxy=`grep service-proxy osg-rsv/etc/rsv.conf | perl -e '$t = <STDIN>; if($t =~ /^\s*service-proxy\s*=\s*(\S+)/) { print "$1\n" }'`
+if [ "x${proxy}" = "x" ]; then
+  proxy=`grep proxy-file osg-rsv/etc/rsv.conf | perl -e '$t = <STDIN>; if($t =~ /^\s*proxy-file\s*=\s*(\S+)/) { print "$1\n" }'`
+  if [ "x${proxy}" = "x" ]; then
+    echo "Cannot figure out where proxy is.  Will run `ls -l /tmp/x509*` instead." >> $rsvlog
+    ls -l /tmp/x509* >> $rsvlog
+  else
+    echo "Proxy information:" >> $rsvlog
+    ls -l $proxy >> $rsvlog
+  fi
 else
-  echo "Not root, cannot get grid-proxy-info info" >> $rsvlog
+  echo "Proxy information:" >> $rsvlog
+  ls -l $proxy >> $rsvlog
 fi
 echo "" >> $rsvlog
+
+# Get proxy information
+id=`id -u`
+user=`grep user osg-rsv/etc/rsv.conf | perl -e '$t = <STDIN>; if($t =~ /^\s*user\s*=\s*(\S+)/) { print "$1\n" }'`
+if [ ${id} == "0" ]; then
+  echo "grid-proxy-info:" >> $rsvlog
+  su -c "X509_USER_PROXY=$proxy globus/bin/grid-proxy-info" $user >> $rsvlog 2>&1
+else
+  echo "Not root, might not be able to run grid-proxy-info but still trying..." >> $rsvlog
+  X509_USER_PROXY=$proxy globus/bin/grid-proxy-info >> $rsvlog 2>&1
+fi
 
 # Get config.ini
 if [ -e osg/etc/config.ini ]; then
   cp osg/etc/config.ini $rsvfiledir
   echo "copying config.ini" >> $rsvlog
-else:
+else
   echo "could not find config.ini" >> $rsvlog
 fi
 echo "" >> $rsvlog
