@@ -46,38 +46,78 @@ class Sysutils:
         try:
             start = time.time()
             child = popen2.Popen3(command, capturestderr=1)
-            # set child's stderr to non blocking if possible
-            # prevents the child from hanging due to it blocking on stderr 
+
+            # Set the child's STDERR to non blocking if possible.
+            # This prevents the child from hanging due to it blocking on stderr 
             # or stdout 
-            error_fd = child.childerr.fileno()
-            flags = fcntl.fcntl(error_fd, fcntl.F_GETFL, 0) 
+            err_fd = child.childerr.fileno()
+            flags = fcntl.fcntl(err_fd, fcntl.F_GETFL, 0) 
             flags |= os.O_NONBLOCK
-            fcntl.fcntl(error_fd, fcntl.F_SETFL, flags)
+            fcntl.fcntl(err_fd, fcntl.F_SETFL, flags)
+
             # do the same for stdout            
             out_fd = child.fromchild.fileno()
             flags = fcntl.fcntl(out_fd, fcntl.F_GETFL, 0) 
             flags |= os.O_NONBLOCK
             fcntl.fcntl(out_fd, fcntl.F_SETFL, flags)
-            # use select to get output from child
-            while True:
-               interval = (start + timeout) - time.time()
-               ready_fds = select.select([error_fd, out_fd], [], [], interval)
-               if ready_fds[0] != []:
-                   # there's output that needs to be read
-                   if error_fd in ready_fds[0]:
-                       err += os.read(error_fd, 2048)
-                   if out_fd in ready_fds[0]:
-                       out += os.read(out_fd, 2048)
 
-               if child.poll() != -1:
-                  # child is done, exit. 
-                  break
-               
-               if ((time.time() - start) > timeout):
-                   # probe has been running for more than timeout seconds,
-                   # raise an exception to time out the execution
-                   raise TimeoutError
+            # We are going to loop and read from STDOUT and STDERR.  When they are
+            # hot but return 0 bytes we know that they have been closed by our child.
+            # Loop until both of them have been closed or we hit the timeout.
+            fds = [out_fd, err_fd]
+            while True:
+                if not fds:
+                    # When we have no more fds to read from we are done
+                    break
+                
+                interval = (start + timeout) - time.time()
+                ready_fds = select.select(fds, [], [], interval)
+                if ready_fds[0] != []:
+                    new_fds = []  # new_fds keeps track of fds that are not closed.
+                    for fd in fds:
+                        # Either there is out/err to read or else we will get 0 bytes
+                        # and that indicates that the child closed that pipe.
+                        if fd not in ready_fds[0]:
+                            new_fds.append(fd)
+                        else:
+                            new_data = os.read(fd, 2048)
+                            if len(new_data) == 0:
+                                # This indicates that the fd is closed by the child.
+                                # We will not add it to new_fds so that we stop
+                                # select()ing on it.
+                                pass
+                            else:
+                                new_fds.append(fd)
+                                if fd == out_fd:
+                                    out += new_data
+                                elif fd == err_fd:
+                                    err += new_data
+
+                    fds = new_fds
+                                  
+                if ((time.time() - start) > timeout):
+                    # probe has been running for more than timeout seconds,
+                    # raise an exception to time out the execution
+                    raise TimeoutError
+
+            # So now that both STDOUT and STDERR have been closed we need to also wait
+            # for the process to finish so that we can reap it and avoid a zombie.
+            # This is a rare case that probably indicates that the child forcibly closed
+            # STDOUT and STDERR and intends to continue running.
+            while True:
+                if child.poll() != -1:
+                    break
+
+                if (time.time() - start) > timeout:
+                    raise TimeoutError
+
+                time.sleep(1)
+
+            # When we are finally done we can grab the return code from the child.  This
+            # should not block because we will only get here if child.poll() told us that
+            # the child process is finished.
             ret = child.wait()
+            
         except IOError, ex: # from fcntl calls
             self.rsv.log("ERROR", "Error while changing to non-blocking output")
             os.kill(child.pid, signal.SIGKILL)
