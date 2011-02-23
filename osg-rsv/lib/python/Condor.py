@@ -164,6 +164,12 @@ class Condor:
             self.rsv.log("ERROR", "Error message: %s" % err)
             return False
 
+        # We need to change to a directory that can be read by the RSV user.  This is
+        # because Condor puts the current working directory into the job ad as 'Iwd'
+        # (Initial working dir).  When starting the job condor cd's to Iwd then starts
+        # the process.  If it cannot cd into the dir it gives a 'permission denied' error.
+        os.chdir(self.rsv.vdt_location)
+
         # Submit the job and remove the file
         exe = os.path.join(self.condor_cron_bin_dir, "condor_cron_submit")
         cmd = "%s %s" % (exe, sub_file_name)
