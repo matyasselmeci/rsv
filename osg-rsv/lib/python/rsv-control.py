@@ -2,6 +2,7 @@
 
 # System libraries
 import os 
+import pwd
 import sys
 import signal
 from optparse import OptionParser, OptionGroup
@@ -166,24 +167,32 @@ def main_rsv_control():
             return actions.list_metrics(rsv, options, "")
         else:
             return actions.list_metrics(rsv, options, args[0])
-    elif options.run:
-        return run_metric.main(rsv, options, args)
     elif options.job_list:
         return actions.job_list(rsv, options.parsable, options.host)
-    elif options.on:
-        return actions.dispatcher(rsv, "start", args, options.host)
-    elif options.off:
-        return actions.dispatcher(rsv, "stop", args, options.host)
-    elif options.enable:
-        return actions.dispatcher(rsv, "enable", args, options.host)
-    elif options.disable:
-        return actions.dispatcher(rsv, "disable", args, options.host)
     elif options.show_config:
         return actions.dispatcher(rsv, "show-config", args, options.host)
     elif options.profile:
         return actions.profile(rsv)
     elif options.verify:
         return actions.verify(rsv)
+    else:
+        # Check our UID
+        this_uid = os.getuid()
+        rsv_user = rsv.get_user()
+        if this_uid != 0 and this_uid != pwd.getpwnam(rsv_user).pw_uid:
+            rsv.echo("ERROR: You must be either root or %s to run these commands: run, on, off, enable, disable" % rsv_user)
+            return False
+            
+        if options.run:
+            return run_metric.main(rsv, options, args)
+        elif options.on:
+            return actions.dispatcher(rsv, "start", args, options.host)
+        elif options.off:
+            return actions.dispatcher(rsv, "stop", args, options.host)
+        elif options.enable:
+            return actions.dispatcher(rsv, "enable", args, options.host)
+        elif options.disable:
+            return actions.dispatcher(rsv, "disable", args, options.host)
 
     # We didn't find the request?
     return False
