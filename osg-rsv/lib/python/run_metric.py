@@ -235,7 +235,8 @@ def execute_job(rsv, metric):
             rsv.results.grid_job_failed(metric, job, out, err)
         elif metric.config_val("execute", "condor-grid"):
             rsv.results.condor_grid_job_failed(metric, job, out, err)
-        
+        return
+
     parse_job_output(rsv, metric, out, err)
 
     return
