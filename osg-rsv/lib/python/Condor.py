@@ -2,6 +2,7 @@
 
 import os
 import re
+import pwd
 import time
 import commands
 from time import strftime
@@ -307,7 +308,17 @@ class Condor:
         self.rsv.log("DEBUG", "commands_getstatusoutput: command='%s' user='%s'" % (command, user))
 
         if user:
-            command = 'su -c "%s" %s' % (command, user)
+            this_uid = os.getuid()
+            if this_uid == 0:
+                # If we are root, we can switch to the user to run the command
+                command = 'su -c "%s" %s' % (command, user)
+            else:
+                # If we are not root then make sure that our current UID is the same
+                # as the user we want to run the command as.  Otherwse, error out.
+                if this_uid != pwd.getpwnam(user).pw_uid:
+                    self.rsv.echo("ERROR: Cannot run a job as user '%s'.  Current user is '%s'" %
+                                  (user, pwd.getpwuid(this_uid).pw_name))
+                    return 1, ""
 
         ret, out = commands.getstatusoutput(command)
         return ret, out
