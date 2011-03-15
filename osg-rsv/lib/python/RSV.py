@@ -517,6 +517,25 @@ class RSV:
         return self.vdt_perl5lib
 
 
+    def get_source_setup_sh(self):
+        """ Check if we should source setup.sh before running metric """
+        
+        try:
+            value = self.config.getint("rsv", "source-setup-sh")
+            if value:
+                self.log("INFO", "source-setup-sh is true.  Will source setup.sh before running probe")
+                return True
+        except ValueError:
+            self.log("WARNING", "A non-integer value is set for source-setup-sh: '%s'.  Will source setup.sh before running probe." %
+                     self.config.get("rsv", "source-setup-sh"))
+            return True
+        except ConfigParser.NoOptionError:
+            pass
+
+        self.log("INFO", "source-setup-sh is false.  Will NOT source setup.sh before running probe")
+        return False
+
+
 # End of RSV class
 
 
@@ -544,6 +563,9 @@ def get_rsv_defaults():
 
     # Set the job timeout default in seconds
     set_default_value("rsv", "job-timeout", 1200)
+
+    # Whether to source setup.sh before running jobs
+    set_default_value("rsv", "source-setup-sh", 1)
 
     return defaults
 
