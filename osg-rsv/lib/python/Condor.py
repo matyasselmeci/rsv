@@ -230,10 +230,15 @@ class Condor:
 
         log_dir = self.rsv.get_metric_log_dir()
         environment = "PATH=/usr/bin:/bin;VDT_LOCATION=%s\n" % self.rsv.vdt_location
-        cron = metric.get_cron_entry()
         condor_id = metric.get_unique_name()
         arguments = "-r -u %s %s %s" % (metric.host, metric.name, metric.get_settings())
         timestamp = strftime("%Y-%m-%d %H:%M:%S %Z")
+
+        cron = metric.get_cron_entry()
+        if not cron:
+            self.rsv.log("ERROR", "Invalid cron time for metric %s on host %s.  Will not start." %
+                         (metric.name, metric.host))
+            return ""
 
         submit = ""
         submit += "######################################################################\n"
