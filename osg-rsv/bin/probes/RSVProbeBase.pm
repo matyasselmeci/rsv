@@ -49,7 +49,7 @@ use Getopt::Long qw(GetOptions);
 use Date::Manip  qw(ParseDate UnixDate Date_Cmp);
 use XML::Simple;
 use Data::Dumper qw(Dumper);
-
+use POSIX qw(strftime);
 
 ################################################################################
 ###### Global Variables ###########
@@ -1501,12 +1501,12 @@ sub Run_Command {
 
     ## Reset these for this command run
     ($o{'cmdOut'}, $o{'cmdExitValue'}) = 
-	("Command [$cmd] timed out after $o{'timeout'} seconds in OSG_RSV_Probe_Base".
+	("Command [$cmd] timed out after $o{'timeout'} seconds in RSVProbeBase".
 	 "::Run_Command(); bailing now ...",-1);
-    &Verbose ("\t CMD: [$cmd]\n");
-    my $time = localtime();
-    &Verbose ("\t Time: [$time]\n");
-    
+
+    &Verbose ("----- Running command via Run_Command() -----\n");
+    &Verbose ("CMD: [$cmd]\n");
+
     ## Eval the system/backtick call ... and then check if it timed out
     eval {
 	local $SIG{ALRM} = sub { die "alarm\n" }; 	
@@ -1528,17 +1528,16 @@ sub Run_Command {
     };
     $o{'cmdOut'} =~ s/^\s+//; chomp ($o{'cmdOut'});
     
-    &Verbose ( "\n\t CMD OUT: [$o{'cmdOut'}] and CMD EXIT: ".
-	      "[$o{'cmdExitValue'}] ");
-    
+    &Verbose ( "CMD EXIT: [$o{'cmdExitValue'}]\n\t CMD OUT: [$o{'cmdOut'}]\n");
+
     if ($@) {
  	&Exit_Error (3, "Unknown error in $o{'callingRoutine'} while attempting to executed CMD:\n $cmd\n Was looking for a timeout alarm.\n")
 	    unless $@ eq "alarm\n"; ## Catch unexpected errors
 	## Command timed out
-	&Verbose ( " CMD TIMED OUT after $o{'timeout'} seconds!\n");
+	&Verbose ( "CMD TIMED OUT after $o{'timeout'} seconds!\n");
 	&Exit_Error (3, $o{'cmdOut'});
     }
-    &Verbose ( " CMD did not time out after $o{'timeout'} seconds!\n");
+    &Verbose ( "CMD did not time out after $o{'timeout'} seconds!\n");
     &Set_Summary_Metric_Results (0,"$o{'cmdOut'}");
     return \%metric;
 }
@@ -1574,8 +1573,10 @@ sub Run_Command {
 
 sub Verbose  {
     my $string = $_[0];
+
     if ($o{'verbose'} > 0) {
-	print STDERR "VERBOSE ";
+        my $time = strftime "%Y/%m/%d %H:%M:%S", localtime;
+	print STDERR "$time VERBOSE ";
 	print STDERR "$o{'callingRoutine'} " if ($o{'callingRoutine'});
 	print STDERR $string; 
     }
