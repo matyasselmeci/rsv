@@ -136,7 +136,12 @@ rsvOutput=""
 for line in sys.stdin.readlines():
         rsvOutput = rsvOutput + line
 (PLUGIN_STATE,PLUGIN_OUTPUT,PLUGIN_HOST)=translate_rsv_2_nagios(rsvOutput)
+
 #Get the NAGIOS server, username and password from the config file
+if not os.path.exists(sys.argv[1]):
+    print "ERROR: The supplied configuration file '%s' does not exist." % sys.argv[1]
+    sys.exit(1)
+
 config = ConfigParser.ConfigParser();
 config.read(sys.argv[1]);
 NAGIOS_URL=config.get("RSV", "NAGIOS_URL");
