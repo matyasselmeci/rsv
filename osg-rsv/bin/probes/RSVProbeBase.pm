@@ -1504,6 +1504,8 @@ sub Run_Command {
 	("Command [$cmd] timed out after $o{'timeout'} seconds in OSG_RSV_Probe_Base".
 	 "::Run_Command(); bailing now ...",-1);
     &Verbose ("\t CMD: [$cmd]\n");
+    my $time = localtime();
+    &Verbose ("\t Time: [$time]\n");
     
     ## Eval the system/backtick call ... and then check if it timed out
     eval {
