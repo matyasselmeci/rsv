@@ -232,7 +232,7 @@ class Condor:
         environment = "PATH=/usr/bin:/bin;VDT_LOCATION=%s\n" % self.rsv.vdt_location
         cron = metric.get_cron_entry()
         condor_id = metric.get_unique_name()
-        arguments = "-r -u %s %s" % (metric.host, metric.name)
+        arguments = "-r -u %s %s %s" % (metric.host, metric.name, metric.get_settings())
         timestamp = strftime("%Y-%m-%d %H:%M:%S %Z")
 
         submit = ""

@@ -294,6 +294,27 @@ class Metric:
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
             # It's expected that this won't be defined most of the time
             return None
+
+    def get_settings(self):
+        """ Get settings that need to be passed to rsv-control.  This is different than
+        get_args_string() because the args get passed to the metric script.  This section
+        is to get settings the will be passed to rsv-control when Condor-Cron invokes it.
+        Since not all values in the namespace should be passed we will just add entries
+        to a list here. """
+
+        settings = ["no-ping"]
+
+        string = ""
+        for setting in settings:
+            try:
+                value = self.config.get(self.name, setting)
+                string += "--%s %s" % (setting, value)
+            except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+                # It is ok if they are not defined
+                pass
+
+        return string
+        
         
 
     def dump_config(self):
@@ -312,6 +333,11 @@ class Metric:
                     self.rsv.echo("\t%s = %s" % (key, self.config.get(self.name, key)))
         except ConfigParser.NoSectionError:
             self.rsv.echo("\t<none>")
+
+        # Command line switches
+        settings = self.get_settings() or "<none>"
+        self.rsv.echo("\nExtra command line options passed to rsv-control:")
+        self.rsv.echo("\t" + settings)
 
         # Command line switches
         args = self.get_args_string() or "<none>"
