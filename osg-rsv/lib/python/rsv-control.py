@@ -23,7 +23,7 @@ def process_options(arguments=None):
     --run [--all-enabled] --host <HOST> METRIC [METRIC ...]
     
     Show information about enabled and installed metrics:
-    --list [ --wide ] [ --all ] [ <pattern> ]
+    --list [ --wide ] [ --all ] [ --cron-times ] [ <pattern> ]
 
     Show information about running metrics:
     --job-list [ --host <host-name> ]
@@ -71,6 +71,8 @@ def process_options(arguments=None):
                      "then only metrics from that host are displayed.")
     group.add_option("-w", "--wide", action="store_true", dest="list_wide", default=False,
                      help="No truncation in metric listing")
+    group.add_option("--cron-times", action="store_true", dest="list_cron", default=False,
+                     help="Show cron times for metrics")
     group.add_option("-a", "--all", action="store_true", dest="list_all", default=False,
                      help="Also display metrics not enabled on any host.")
     group.add_option("--parsable", action="store_true", dest="parsable", default=False,

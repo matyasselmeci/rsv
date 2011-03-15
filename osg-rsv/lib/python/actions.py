@@ -19,7 +19,11 @@ def new_table(header, options):
     else:
         table_.truncate_leftright = True
     table_.makeFormat()
-    table_.makeHeader(header, 'Service')
+
+    if options.list_cron:
+        table_.makeHeader(header, 'Cron times')
+    else:
+        table_.makeHeader(header, 'Service')
     return table_
 
 
@@ -45,9 +49,14 @@ def list_metrics(rsv, options, pattern):
                 used_metrics[metric] = 1
                 if pattern and not re.search(pattern, metric):
                     continue
-                
-                metric_type = metrics[metric].get_type()
-                table.addToBuffer(metric, metric_type)
+
+                if options.list_cron:
+                    cron = metrics[metric].get_cron_string()
+                    table.addToBuffer(metric, cron)
+                else:
+                    metric_type = metrics[metric].get_type()
+                    table.addToBuffer(metric, metric_type)
+                    
                 num_metrics_displayed += 1
         else:
             pass
@@ -73,8 +82,13 @@ def list_metrics(rsv, options, pattern):
             if pattern and not re.search(pattern, metric):
                 continue
             num_disabled_metrics += 1
-            metric_type = metrics[metric].get_type()
-            table.addToBuffer(metric, metric_type)
+
+            if options.list_cron:
+                cron = metrics[metric].get_cron_string()
+                table.addToBuffer(metric, cron)
+            else:
+                metric_type = metrics[metric].get_type()
+                table.addToBuffer(metric, metric_type)
 
     # Display disabled metrics
     if options.list_all:
