@@ -231,7 +231,7 @@ class Condor:
         log_dir = self.rsv.get_metric_log_dir()
         environment = "PATH=/usr/bin:/bin;VDT_LOCATION=%s\n" % self.rsv.vdt_location
         condor_id = metric.get_unique_name()
-        arguments = "-r -u %s %s %s" % (metric.host, metric.name, metric.get_settings())
+        arguments = "-v 3 -r -u %s %s %s" % (metric.host, metric.name, metric.get_settings())
         timestamp = strftime("%Y-%m-%d %H:%M:%S %Z")
 
         cron = metric.get_cron_entry()
