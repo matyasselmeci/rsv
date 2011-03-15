@@ -1,5 +1,5 @@
 [org.osg.general.vo-supported]
-default-cron-interval = 47 6,18 * * *
+default-cron-interval = 54 6,18 * * *
 
 execute = local
 service-type = OSG-CE
