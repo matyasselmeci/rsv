@@ -100,13 +100,13 @@ sub Run {
     &Setup_Srmcp_Metric ();
     ## If proxy is good then perform srmcp actions
     ## Transfer file to remote host; then back, etc 
-    my $srmcp_cmd = "$o{'srmcpCmd'} -srm_protocol_version=".
+    my $srmcp_cmd = "$o{'srmcpCmd'} -streams_num=1 -srm_protocol_version=".
 	"$o{'srmProtocolVersion'}  $o{'srmcpTestfileUri'} ".
 	"$o{'srmcpRemoteTestfileUri'} 2>&1";
     &RSVProbeBase::Run_Command ($srmcp_cmd, "backtick");
     &Check_Srmcp_Srm_Transfer_Status ("true");
 
-    $srmcp_cmd = "$o{'srmcpCmd'} -srm_protocol_version=".
+    $srmcp_cmd = "$o{'srmcpCmd'} -streams_num=1 -srm_protocol_version=".
 	"$o{'srmProtocolVersion'} $o{'srmcpRemoteTestfileUri'} ".
 	" $o{'srmcpBackTestfileUri'} 2>&1";
     &RSVProbeBase::Run_Command ($srmcp_cmd, "backtick");
