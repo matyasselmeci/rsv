@@ -1537,7 +1537,7 @@ sub Run_Command {
 	&Verbose ( "CMD TIMED OUT after $o{'timeout'} seconds!\n");
 	&Exit_Error (3, $o{'cmdOut'});
     }
-    &Verbose ( "CMD did not time out after $o{'timeout'} seconds!\n");
+    &Verbose ( "CMD completed within the $o{'timeout'} second timeout length.\n");
     &Set_Summary_Metric_Results (0,"$o{'cmdOut'}");
     return \%metric;
 }
