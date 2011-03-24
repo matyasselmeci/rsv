@@ -275,7 +275,7 @@ sub Init {
     $o{'detailsDataMaxLength'} = 512;
     ## Default timeout for individual command executions. 
     ##  NOTE: Not for probe itself; though it should probably be, per intuition?
-    $o{'timeout'}   = 300;
+    $o{'timeout'}   = 600;
     $o{'proxyFile'} = "/tmp/x509up_u$>";
 
     ## Grab local VDT location from %ENV hash
@@ -757,7 +757,7 @@ PROBE OPTIONS                    DESCRIPTION
 
     print qq( [-t, --timeout <\# seconds>]      Timeout in seconds for system calls, for 
 	                            eg.: globus job commands
-                                    Default: 300 seconds per system call 
+                                    Default: 600 seconds per system call 
  [-l, --list-metric]              List metric(s) per WLCG standards
  [--vdt-location </path/VDT>]     Provide custom \$VDT_LOCATION (non OSG users)
  [--print-local-time]             Print timestamp in system local timezone 
