@@ -565,7 +565,7 @@ def get_rsv_defaults():
     set_default_value("rsv", "job-timeout", 1200)
 
     # Whether to source setup.sh before running jobs
-    set_default_value("rsv", "source-setup-sh", 1)
+    set_default_value("rsv", "source-setup-sh", 0)
 
     return defaults
 
