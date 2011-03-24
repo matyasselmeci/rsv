@@ -1,6 +1,6 @@
 #!/bin/sh
 
-export RSV_VERSION=3.3.10
+export RSV_VERSION=3.3.11
 
 perl -pi -e's/\@\@VERSION\@\@/$ENV{RSV_VERSION}/' osg-rsv/lib/python/rsv-control.py
 
