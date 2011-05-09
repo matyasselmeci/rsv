@@ -12,7 +12,7 @@ use File::Temp qw/ tempdir /;
 ## And alias to RSV::Probe_Base variables
 our %o;         *o         = \%RSVProbeBase::o;      
 our %metric;    *metric    = \%RSVProbeBase::metric;
-my $site_rsv_probe_version="1.1";
+my $site_rsv_probe_version="1.1.1";
 
 ##---------------------------------------------------------------------
 ##
@@ -1370,7 +1370,7 @@ sub Check_Freshness_Local_CRL{
 ##   %metric hash 
 ##  Third: 
 ##   %local hash containing 
-##      'certDir'   Directory where CA certs (*.0) can be found 
+##      'certDir'   Directory where CA certs (*.0) can be found # Not used any morw
 ##      'errorHrs'  Number hours since the failing downloads before an error is issued
 ##      'errorFile'  Error file to be used to record results
 ##      'type'      Value can be 'osg' or 'egee', to identify the OSG and EGEE CRL Mertics
@@ -1402,7 +1402,8 @@ sub Check_Local_CA{
     my $local_url="http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt";
     #Check if the file CA cers are installed from ITB
     my $ca_version_script= "$o{'PROBE_DIR_LOCAL'}/worker-scripts/ca_version.sh";
-    if (!$o{'localCE'}){
+
+    if (!defined $o{'localCE'}){
         $cmd = "-s  $ca_version_script \"$o{'REMOTE_ENV'}{'OSG_LOCATION'}\" 2>/dev/null";
         &RSVProbeBase::Globus_Job_Run ($cmd, "backtick");
     }else{
@@ -1417,6 +1418,20 @@ sub Check_Local_CA{
     }
     $ca_format_type=$contents[1];
 
+    # Get the list of CAs installed on remote CE and their md5sums
+
+    if ($contents[$#contents] != 0){
+        &RSVProbeBase::Set_Summary_Metric_Results (3,"Could not calculate md5sums of your CA file from $o{'hostName'}.");
+        return \%metric;
+    }
+    my %file_md5sum = ();
+    for (my $i=2; $i<$#contents;$i++){
+        my @tmp = split /\s+/, $contents[$i];
+        $file_md5sum{(split(/\./,basename($tmp[1])))[0]} = $tmp[0];
+    }
+
+
+    # Download the ms5sum file from OSG/ITB cache
     $cmd = "wget $local_url 2>&1";
     &RSVProbeBase::Run_Command ($cmd, "backtick");
     my $local_md5_file = "$working_dir/".basename($local_url);
@@ -1437,6 +1452,7 @@ sub Check_Local_CA{
         $md5{$local_hash} = $values[0];
     }
     close FILE;
+
 
     # Step 2: Get the list of Certs included in OSG from GOC website.
     chdir($working_dir);
@@ -1474,31 +1490,7 @@ sub Check_Local_CA{
     }
     close FILE;
 
-    # Step 3: Get the list of CAs installed on remote CE and their md5sums
-    my $cert_files = "$o{'certDir'}/*.0";
-    if ($ca_format_type == 1) { 
-        $cert_files = "$o{'certDir'}/*.pem";
-    }
-    if (!$o{'localCE'}){
-        $cmd = "-s  $o{'workerScriptFile'} \"$cert_files\" 2>/dev/null";
-        &RSVProbeBase::Globus_Job_Run ($cmd, "backtick");
-    }else{
-        $cmd = "$o{'workerScriptFile'} \"$cert_files\" ";
-        &RSVProbeBase::Run_Command ($cmd, "backtick");
-    }
-    @contents = split /\n/, $o{'cmdOut'};
-
-    if ($contents[$#contents] != 0){
-        &RSVProbeBase::Set_Summary_Metric_Results (3,"Could not calculate md5sums of your CA file at $o{'hostName'}:$cert_files.");
-        return \%metric;
-    }
-    my %file_md5sum = ();
-    for (my $i=0; $i<$#contents;$i++){
-        my @tmp = split /\s+/, $contents[$i];
-        $file_md5sum{(split(/\./,basename($tmp[1])))[0]} = $tmp[0];
-    }
-
-    # Step 4: Check the CAs to ensure that md5sums matchup
+    # Step 3: Check the CAs to ensure that md5sums matchup
     my $error_count = my $warn_count = my $ok_count = 0;
 
     foreach my $local_hash (keys %file_md5sum) {
@@ -1517,7 +1509,7 @@ sub Check_Local_CA{
             push @error_hash, $local_hash;
         }
     }
-    # Step 5: Special Case: For EGEE tests we want to notify of errors if any IGTF CAs are missing.
+    # Step 4: Special Case: For EGEE tests we want to notify of errors if any IGTF CAs are missing.
     my $missing_count = 0;
     if ($o{'type'} =~ /^egee$/i){
         for my $local_hash ( keys %source ) {
