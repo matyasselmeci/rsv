@@ -242,7 +242,7 @@ def parse_wlcg_record(raw_record):
             if re.match("EOT$", line):
                 return record
             else:
-                record["detailsData"] += line
+                record["detailsData"] += line + "\n"
 
     # If we reach this point, it means we did not see EOT.  So the record is invalid
     raise InvalidRecordError("'EOT' marker missing")
