@@ -12,7 +12,7 @@ use File::Temp qw/ tempdir /;
 ## And alias to RSV::Probe_Base variables
 our %o;         *o         = \%RSVProbeBase::o;      
 our %metric;    *metric    = \%RSVProbeBase::metric;
-my $site_rsv_probe_version="1.1.1";
+my $site_rsv_probe_version="1.1.2";
 
 ##---------------------------------------------------------------------
 ##
@@ -1197,9 +1197,18 @@ sub Check_Freshness_Local_CRL{
 
     if ($contents[0] =~ /ITB/i) {
         $itb=1;
-        $local_url="http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt";
+        #$local_url="http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt";
     }
     $ca_format_type=$contents[1];
+    if($itb==1 && $ca_format_type==0){
+        $local_url="http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt";
+    }elsif($itb==1 && $ca_format_type==1){
+        $local_url="http://software-itb.grid.iu.edu/pacman/cadist/INDEX-new.txt";
+    }elsif($itb==0 && $ca_format_type==0){
+        $local_url="http://software.grid.iu.edu/pacman/cadist/INDEX.txt";
+    }elsif($itb==0 && $ca_format_type==1){
+        $local_url="http://software.grid.iu.edu/pacman/cadist/INDEX-new.txt";
+    }
 
     $cmd = "wget $local_url 2>&1";
     &RSVProbeBase::Run_Command ($cmd, "backtick");
@@ -1414,11 +1423,18 @@ sub Check_Local_CA{
 
     if ($contents[0] =~ /ITB/i) {
         $itb=1;
-        $local_url="http://software-itb.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt";
     }
     $ca_format_type=$contents[1];
-
     # Get the list of CAs installed on remote CE and their md5sums
+    if($itb==1 && $ca_format_type==0){
+        $local_url="http://software-itb.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt";
+    }elsif($itb==1 && $ca_format_type==1){
+        $local_url="http://software-itb.grid.iu.edu/pacman/cadist/cacerts_md5sum-new.txt";
+    }elsif($itb==0 && $ca_format_type==0){
+        $local_url="http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt";
+    }elsif($itb==0 && $ca_format_type==1){
+        $local_url="http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum-new.txt";
+    }
 
     if ($contents[$#contents] != 0){
         &RSVProbeBase::Set_Summary_Metric_Results (3,"Could not calculate md5sums of your CA file from $o{'hostName'}.");
@@ -1456,10 +1472,16 @@ sub Check_Local_CA{
 
     # Step 2: Get the list of Certs included in OSG from GOC website.
     chdir($working_dir);
-    $local_url="http://software.grid.iu.edu/pacman/cadist/INDEX.txt";
-    if ($itb){
+    if($itb==1 && $ca_format_type==0){
         $local_url="http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt";
+    }elsif($itb==1 && $ca_format_type==1){
+        $local_url="http://software-itb.grid.iu.edu/pacman/cadist/INDEX-new.txt";
+    }elsif($itb==0 && $ca_format_type==0){
+        $local_url="http://software.grid.iu.edu/pacman/cadist/INDEX.txt";
+    }elsif($itb==0 && $ca_format_type==1){
+        $local_url="http://software.grid.iu.edu/pacman/cadist/INDEX-new.txt";
     }
+
     my $cmd = "wget $local_url 2>&1";
     &RSVProbeBase::Run_Command ($cmd, "backtick");
     chdir($cwd); 
@@ -1471,6 +1493,7 @@ sub Check_Local_CA{
         return \%metric;
     }
     my $ca_index_file = "$working_dir/".basename($local_url);
+
     open FILE, "< $ca_index_file" or &RSVProbeBase::Set_Summary_Metric_Results (3,"The downloaded CA list from OSG could not be opened. Unable to verify CAs.") && return \%metric;
     @contents = <FILE>;  
     foreach my $line (@contents) {
