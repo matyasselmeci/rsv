@@ -1,6 +1,6 @@
 #!/bin/sh
 
-export RSV_VERSION=3.4.0
+export RSV_VERSION=3.4.1
 
 # Form the tarballs
 cp -r rsv-metrics rsv-metrics-$RSV_VERSION
