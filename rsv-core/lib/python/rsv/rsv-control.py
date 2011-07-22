@@ -43,8 +43,6 @@ def process_options(arguments=None):
     version = "@@VERSION@@"
 
     parser = OptionParser(usage=usage, description=description, version=version)
-    parser.add_option("--vdt-location", dest="vdt_location", default=None,
-                      help="Root directory of the OSG installation", metavar="DIR")
     parser.add_option("-v", "--verbose", dest="verbose", default=1, type="int", metavar="LEVEL",
                       help="Verbosity level (0-3) 0=no output, 1=normal, 2=info, 3=debug. [Default=%default]")
     parser.add_option("-u", "--host", dest="host", default=None,
@@ -113,13 +111,6 @@ def process_options(arguments=None):
     # Validate options
     #
 
-    # Check for VDT_LOCATION
-    if not options.vdt_location:
-        options.vdt_location = RSV.get_osg_location()
-    if not options.vdt_location:
-        parser.error("VDT_LOCATION is not set.\nEither set this environment variable, or " +
-                     "pass the --vdt-location command line option.")
-
     # Check that we got exactly one command
     number_of_commands = len([i for i in [options.run, options.enable, options.disable, options.on,
                                           options.off, options.list, options.job_list, options.verify,
@@ -161,7 +152,7 @@ def main_rsv_control():
     # Process the command line
     options, args = process_options()
 
-    rsv = RSV.RSV(options.vdt_location, options.verbose)
+    rsv = RSV.RSV(options.verbose)
 
     # List the metrics
     if options.list:

@@ -24,8 +24,6 @@ class RSV:
 
     consumer_config_file = None
     consumer_config = None
-    vdt_location = None
-    rsv_location = None
     sysutils = None
     results = None
     config = None
@@ -37,15 +35,7 @@ class RSV:
     vdt_pythonpath = None
     vdt_perl5lib = None
 
-    def __init__(self, vdt_location=None, verbosity=1):
-
-        # Setup rsv_location
-        if vdt_location:
-            self.vdt_location = vdt_location
-            self.rsv_location = os.path.join(vdt_location, "osg-rsv")
-        else:
-            self.vdt_location = get_osg_location()
-            self.rsv_location = os.path.join(self.vdt_location, "osg-rsv")
+    def __init__(self, verbosity=1):
 
         # For any messages that won't go through the logger
         if verbosity == 0:
@@ -75,14 +65,13 @@ class RSV:
                 for item in defaults[section].keys():
                     self.config.set(section, item, defaults[section][item])
 
-        self.load_config_file(self.config, os.path.join(self.rsv_location, "etc", "rsv.conf"),
-                              required=1)
+        self.load_config_file(self.config, os.path.join("/", "etc", "rsv", "rsv.conf"), required=1)
         return
 
 
     def setup_consumer_config(self):
         """ Load configuration """
-        self.consumer_config_file = os.path.join(self.rsv_location, "etc", "consumers.conf")
+        self.consumer_config_file = os.path.join("/", "etc", "rsv", "consumers.conf")
         self.consumer_config = ConfigParser.RawConfigParser()
         self.consumer_config.optionxform = str # make keys case-insensitive
         self.load_config_file(self.consumer_config, self.consumer_config_file, required=0)
@@ -114,7 +103,7 @@ class RSV:
     
     def get_installed_metrics(self):
         """ Return a list of installed metrics """
-        metrics_dir = os.path.join(self.rsv_location, "bin", "metrics")
+        metrics_dir = os.path.join("/", "usr", "libexec", "rsv", "metrics")
         try:
             files = os.listdir(metrics_dir)
             files.sort()
@@ -133,7 +122,7 @@ class RSV:
 
     def get_installed_consumers(self):
         """ Return a list of installed consumers """
-        consumers_dir = os.path.join(self.rsv_location, "bin", "consumers")
+        consumers_dir = os.path.join("/", "usr", "libexec", "rsv", "consumers")
         try:
             files = os.listdir(consumers_dir)
             files.sort()
@@ -164,7 +153,7 @@ class RSV:
 
         special_config_files = ["rsv.conf", "consumers.conf", "rsv-nagios.conf"]
 
-        conf_dir = os.path.join(self.rsv_location, "etc")
+        conf_dir = os.path.join("/", "etc", "rsv")
         try:
             config_files = os.listdir(conf_dir)
             hosts = []
@@ -246,12 +235,12 @@ class RSV:
 
     def get_metric_log_dir(self):
         """ Return the directory to store condor log/out/err files for metrics """
-        return os.path.join(self.rsv_location, "logs", "metrics")
+        return os.path.join("/", "var", "logs", "rsv", "metrics")
 
 
     def get_consumer_log_dir(self):
         """ Return the directory to store condor log/out/err files for consumers """
-        return os.path.join(self.rsv_location, "logs", "consumers")
+        return os.path.join("/", "var", "logs", "rsv", "consumers")
 
 
     def get_user(self):
@@ -358,7 +347,7 @@ class RSV:
 
     def get_wrapper(self):
         """ Return the wrapper script that will run the metrics """
-        return os.path.join(self.rsv_location, "bin", "rsv-control")
+        return os.path.join("/", "usr", "bin", "rsv-control")
 
 
     def get_proxy(self):
@@ -419,11 +408,8 @@ class RSV:
             self.log("INFO", "Service certificate proxy expiring within %s hours.  Renewing it." %
                     hours_til_expiry, 4)
 
-            grid_proxy_init_exe = os.path.join(self.vdt_location, "globus", "bin", "grid-proxy-init")
-            grid_proxy_init_lib_dir = os.path.join(self.vdt_location, "globus", "lib")
-            libraries = "LD_LIBRARY_PATH=%s" % grid_proxy_init_lib_dir
-            (ret, out, err) = self.run_command("%s %s -cert %s -key %s -valid 12:00 -debug -out %s" %
-                                               (libraries, grid_proxy_init_exe, cert, key, proxy))
+            (ret, out, err) = self.run_command("grid-proxy-init -cert %s -key %s -valid 12:00 -debug -out %s" %
+                                               (cert, key, proxy))
 
             if ret:
                 self.results.service_proxy_renewal_failed(metric, cert, key, proxy, out, err)
@@ -477,71 +463,7 @@ class RSV:
         return self.sysutils.system(command, timeout)
 
 
-    def get_vdt_pythonpath(self):
-        """ Return the PYTHONPATH for Python modules installed by the VDT """
-        if self.vdt_pythonpath:
-            return self.vdt_pythonpath
-        
-        command = os.path.join(self.vdt_location, "python", "python-setup.py")
-        (ret, out, err) = self.run_command(command)
-        if ret != 0:
-            self.log("WARNING", "Error determining VDT PYTHONPATH\nSTDOUT - %s\nSTDERR - %s" %
-                     (out, err))
-            self.vdt_pythonpath = ""
-        else:
-            self.log("INFO", "VDT PYTHONPATH = %s" % out)
-            self.vdt_pythonpath = out
-
-        self.vdt_pythonpath = self.vdt_pythonpath.strip()
-
-        return self.vdt_pythonpath
-
-
-    def get_vdt_perl5lib(self):
-        """ Return the PERL5LIB for Perl modules installed by the VDT """
-        if self.vdt_perl5lib:
-            return self.vdt_perl5lib
-            
-        command = os.path.join(self.vdt_location, "perl", "perl-setup.pl")
-        (ret, out, err) = self.run_command(command)
-        if ret != 0:
-            self.log("WARNING", "Error determining VDT PERL5LIB\nSTDOUT - %s\nSTDERR - %s" %
-                     (out, err))
-            self.vdt_perl5lib = ""
-        else:
-            self.log("INFO", "VDT PERL5LIB = %s" % out)
-            self.vdt_perl5lib = out
-
-        self.vdt_perl5lib = self.vdt_perl5lib.strip()
-
-        return self.vdt_perl5lib
-
-
-    def get_source_setup_sh(self):
-        """ Check if we should source setup.sh before running metric """
-        
-        try:
-            value = self.config.getint("rsv", "source-setup-sh")
-            if value:
-                self.log("INFO", "source-setup-sh is true.  Will source setup.sh before running probe")
-                return True
-        except ValueError:
-            self.log("WARNING", "A non-integer value is set for source-setup-sh: '%s'.  Will source setup.sh before running probe." %
-                     self.config.get("rsv", "source-setup-sh"))
-            return True
-        except ConfigParser.NoOptionError:
-            pass
-
-        self.log("INFO", "source-setup-sh is false.  Will NOT source setup.sh before running probe")
-        return False
-
-
 # End of RSV class
-
-
-def get_osg_location():
-    """ Find the path to OSG root directory """
-    return os.environ.get("OSG_LOCATION", os.environ.get("VDT_LOCATION", ""))
 
 
 def get_rsv_defaults():
@@ -563,9 +485,6 @@ def get_rsv_defaults():
 
     # Set the job timeout default in seconds
     set_default_value("rsv", "job-timeout", 1200)
-
-    # Whether to source setup.sh before running jobs
-    set_default_value("rsv", "source-setup-sh", 0)
 
     return defaults
 

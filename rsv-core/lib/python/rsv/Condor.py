@@ -156,7 +156,8 @@ class Condor:
         """
 
         try:
-            sub_file_name = os.path.join(self.rsv.rsv_location, "submissions", condor_id + ".sub")
+            # TODO - put this in /var/tmp?  User tempfile
+            sub_file_name = os.path.join("/tmp", condor_id + ".sub")
             file_handle = open(sub_file_name, 'w')
             file_handle.write(submit_file_contents)
             file_handle.close()
@@ -169,7 +170,7 @@ class Condor:
         # because Condor puts the current working directory into the job ad as 'Iwd'
         # (Initial working dir).  When starting the job condor cd's to Iwd then starts
         # the process.  If it cannot cd into the dir it gives a 'permission denied' error.
-        os.chdir(self.rsv.vdt_location)
+        os.chdir(os.path.join("/", "tmp"))
 
         # Submit the job and remove the file
         exe = os.path.join(self.condor_cron_bin_dir, "condor_cron_submit")
@@ -229,7 +230,7 @@ class Condor:
         """ Create a submission file for a metric """
 
         log_dir = self.rsv.get_metric_log_dir()
-        environment = "PATH=/usr/bin:/bin;VDT_LOCATION=%s\n" % self.rsv.vdt_location
+        environment = "PATH=/usr/bin:/bin\n"
         condor_id = metric.get_unique_name()
         arguments = "-v 3 -r -u %s %s %s" % (metric.host, metric.name, metric.get_settings())
         timestamp = strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -276,7 +277,6 @@ class Condor:
         log_dir = self.rsv.get_consumer_log_dir()
 
         environment = "PATH=/usr/bin:/bin;"
-        environment += "VDT_LOCATION=%s;" % self.rsv.vdt_location
         environment += consumer.get_environment()
 
         condor_id = consumer.get_unique_name()

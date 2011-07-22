@@ -16,7 +16,7 @@ class Host:
     def __init__(self, host, rsv):
         self.host = host
         self.rsv  = rsv
-        self.conf_dir = os.path.join(rsv.rsv_location, "etc")
+        self.conf_dir = os.path.join("/", "etc", "rsv")
 
         # Load configuration
         self.config = ConfigParser.RawConfigParser()

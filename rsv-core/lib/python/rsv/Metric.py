@@ -26,11 +26,11 @@ class Metric:
         # Initialize vars
         self.name = metric
         self.rsv  = rsv
-        self.conf_dir = os.path.join(rsv.rsv_location, "etc", "metrics")
-        self.meta_dir = os.path.join(rsv.rsv_location, "meta", "metrics")
+        self.conf_dir = os.path.join("/", "etc", "rsv", "metrics")
+        self.meta_dir = os.path.join("/", "etc", "rsv", "meta", "metrics")
 
         # Find executable
-        self.executable = os.path.join(rsv.rsv_location, "bin", "metrics", metric)
+        self.executable = os.path.join("/", "usr", "libexec", "rsv", "metrics", metric)
         if os.path.islink(self.executable) and not os.path.exists(self.executable):
             rsv.log("ERROR", "Metric is a broken symlink at %s" % self.executable)
             sys.exit(1)
@@ -179,10 +179,6 @@ class Metric:
 
         env = {}
 
-        # All grid type metrics need GLOBUS_LOCATION because we call globus-job-run
-        if self.config_val("execute", "grid"):
-            env["GLOBUS_LOCATION"] = ["SET", os.path.join(self.rsv.vdt_location, "globus")]
-
         try:
             section = self.name + " env"
             for var in self.config.options(section):
@@ -208,9 +204,6 @@ class Metric:
                     self.rsv.log("WARNING", "Format must be VAR = ACTION | VALUE")
                     self.rsv.log("WARNING", "\t(VALUE may be blank if ACTION is 'UNSET')")
                 else:
-                    value = re.sub("!!VDT_LOCATION!!", self.rsv.vdt_location, value)
-                    value = re.sub("!!VDT_PYTHONPATH!!", self.rsv.get_vdt_pythonpath(), value)
-                    value = re.sub("!!VDT_PERL5LIB!!", self.rsv.get_vdt_perl5lib(), value)
                     env[var] = [action, value]
 
         except ConfigParser.NoSectionError:

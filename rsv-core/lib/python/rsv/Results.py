@@ -182,7 +182,7 @@ class Results:
         """ Make a file in the consumer records area """
 
         # Check/create the directory that we'll put record into
-        output_dir = os.path.join(self.rsv.rsv_location, "output", consumer.name)
+        output_dir = os.path.join("/", "var", "spool", "rsv", consumer.name)
 
         if not self.validate_directory(output_dir):
             self.rsv.log("WARNING", "Cannot write record for consumer '%s'" % consumer.name)

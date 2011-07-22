@@ -23,11 +23,11 @@ class Consumer:
         # Initialize vars
         self.name = consumer
         self.rsv  = rsv
-        self.conf_dir = os.path.join(rsv.rsv_location, "etc", "consumers")
-        self.meta_dir = os.path.join(rsv.rsv_location, "meta", "consumers")
+        self.conf_dir = os.path.join("/", "etc", "rsv", "consumers")
+        self.meta_dir = os.path.join("/", "etc", "rsv", "meta", "consumers")
 
         # Find executable
-        self.executable = os.path.join(rsv.rsv_location, "bin", "consumers", consumer)
+        self.executable = os.path.join("/", "usr", "libexec", "rsv", "consumers", consumer)
         if not os.path.exists(self.executable):
             rsv.log("ERROR", "Consumer does not exist at %s" % self.executable)
             sys.exit(1)
@@ -128,11 +128,6 @@ class Consumer:
 
         try:
             env = self.config.get(self.name, "environment")
-            env = re.sub("!!VDT_LOCATION!!", self.rsv.vdt_location, env)
-            if re.search("!!VDT_PYTHONPATH!!", env):
-                env = re.sub("!!VDT_PYTHONPATH!!", self.rsv.get_vdt_pythonpath(), env)
-            if re.search("!!VDT_PERL5LIB!!", env):
-                env = re.sub("!!VDT_PERL5LIB!!", self.rsv.get_vdt_perl5lib(), env)
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
             return ""
 
@@ -143,7 +138,6 @@ class Consumer:
 
         try:
             args = self.config.get(self.name, "args")
-            args = re.sub("!!VDT_LOCATION!!", self.rsv.vdt_location, args)
             return args
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
             return ""
