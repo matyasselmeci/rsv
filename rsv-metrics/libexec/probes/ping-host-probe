@@ -1,83 +1,73 @@
 #!/usr/bin/env perl
 
-###############################################################################
-##
-## Copyright 2009, The Trustees of Indiana University. 
-##
-## Open Science Grid Operations Team, Indiana University
-## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
-##
-## Type ./ping-host-probe -h for information
-##
-## REQUIRES
-##  'RSV::Probe_Base'
-##
-################################################################################
-
-######## Perl modules to use ######################################
 use strict;
-use RSVProbeBase;
+use warnings;
 
-######## Retrieve Global variables ################################
-## And alias to RSV::Probe_Base variables
-our %o;         *o         = \%RSVProbeBase::o;      
-our %metric;    *metric    = \%RSVProbeBase::metric;
+use Getopt::Long;
 
-&RSVProbeBase::Init();
-&RSVProbeBase::Run();
+my $OPT_HOSTNAME;
+my $OPT_TIMEOUT = 3;
+my $OPT_COUNT = 1;
 
-################################################################################
-## Main Program ends ##
-################################################################################
+GetOptions("u=s"             => \$OPT_HOSTNAME,
+           "ping-timeout=i"  => \$OPT_TIMEOUT,
+	   "ping-count=i"    => \$OPT_COUNT,
+           "help|usage"      => \&usage);
 
+print "RSV BRIEF RESULTS:\n";
 
-################################################################################
-## Local Sub-Routines
-################################################################################
-
-sub Init {
-
-    &RSVProbeBase::Set_MetricName ("org.osg.general.ping-host");
-
-    ## Pass "status" or "performance" depending on metric type
-    &RSVProbeBase::Set_MetricType ("status");
-    &RSVProbeBase::Set_ServiceType ("OSG-CE");
-    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 0.8.0");
-    &RSVProbeBase::Set_ProbeType ("OSG-CE");
-
-    ## Should automating tools run this probe on above probeType by default?
-    &RSVProbeBase::Set_EnableByDefault ("true");
-    
-    ## Unix cron type metric interval
-    &RSVProbeBase::Set_MetricInterval ("7,27,47 * * * *");
-
-    ## Define this value from RCS/SVN version
-    ## What version of the WLCG specification does this probe conform to?
-    &RSVProbeBase::Set_ProbeRevision ('3.0');
-    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
-
-    ## Basic intro for the probe; This string will be used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpIntro 
-	("Probe to check if a remote host is responding to pings. The number of ping\n".
-	 " packets sent, and the time waited by the ping command can be set using \n".
-	 " arguments shown below.");
-
-    ## Additional options to print in Usage info used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpOptions 
-	(" [--ping-count <integer>]         Number of ping packets to send\n".
-	 " [--ping-timeout <integer>]       Time (in seconds) that ping command should".
-	 "\n                                    wait per packet");
-
-    ## Uncomment if you want additional command line options
-    &RSVProbeBase::Extra_CLI_Option ("ping-count=i","pingCount");
-    &RSVProbeBase::Extra_CLI_Option ("ping-timeout=i","pingTimeout");
-
-    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
-    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+if(not $OPT_HOSTNAME) {
+    print "CRITICAL\n";
+    print "No hostname was supplied to $0\n";
+    exit 1; # Probe was invoked wrong, so give an error on exit status
 }
 
+my $ping = which("ping");
+if(not $ping) {
+    print "CRITICAL\n";
+    print "ping is not in PATH\n";
+    dump_debug();
+    exit 0;
+}
 
-sub Run {
-    ## This test is already available in perl module; so just invoke it.
-    &RSVProbeBase::Ping_Host ();
+my $ping_cmd = "ping -q -W $OPT_TIMEOUT -c $OPT_COUNT $OPT_HOSTNAME 2>&1";
+my $out = `$ping_cmd`;
+my $ret = $? >> 8;
+
+if($ret == 0) {
+    print "OK\n";
+    print "Host $OPT_HOSTNAME is alive and responding to pings.\n";
+}
+elsif ($ret == 1) {
+    print "CRITICAL\n";
+    print "Host $OPT_HOSTNAME is alive but not responding to pings.\n";
+}
+elsif ($ret == 2) {
+    print "CRITICAL\n";
+    print "Unable to ping host $OPT_HOSTNAME\n";
+    dump_debug();
+}
+else {  ## Unknown status here
+    print "CRITICAL\n";
+    print "ERROR: Cannot execute ping command $ping_cmd\n";
+}
+
+exit 0;
+
+
+sub which {
+    my ($exe) = @_;
+
+    foreach my $dir (split(/:/, $ENV{PATH})) {
+        if (-x "$dir/$exe") {
+            $dir =~ s|/+$||;  # Trim trailing slash on dir
+	    return "$dir/$exe";
+        }
+    }
+    return "";
+}
+
+sub dump_debug {
+    print STDERR `/usr/bin/env`;
+    return;
 }

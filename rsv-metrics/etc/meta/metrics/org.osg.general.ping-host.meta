@@ -3,11 +3,8 @@ default-cron-interval = 7,27,47 * * * *
 
 execute = local
 service-type = OSG-CE
-output-format = wlcg
-probe-spec = v3
+output-format = brief
 need-proxy = false
 enable-by-default = true
 
 [org.osg.general.ping-host env]
-PERL5LIB = PREPEND | /usr/libexec/rsv/probes
-
