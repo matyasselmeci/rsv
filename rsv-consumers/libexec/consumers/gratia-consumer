@@ -110,6 +110,7 @@ def load_gratia_libraries(info):
     try:
         global Gratia
         global Metric
+        # TODO Might need to do something like "import Gratia.Metric.Metric as Metric"
         import Gratia
         import Metric
     except ImportError, err:
