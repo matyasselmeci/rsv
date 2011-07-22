@@ -10,3 +10,4 @@ enable-by-default = true
 
 [org.osg.srm.srmcp-readwrite env]
 PERL5LIB = PREPEND | /usr/libexec/rsv/probes
+SRM_JAVA_OPTIONS= SET | -Xms128m -Xmx128m

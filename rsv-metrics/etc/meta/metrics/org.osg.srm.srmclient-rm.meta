@@ -10,3 +10,5 @@ enable-by-default = false
 
 [org.osg.srm.srmclient-rm env]
 PERL5LIB = PREPEND | /usr/libexec/rsv/probes
+SRM_JAVA_OPTIONS = SET | -Xms128m -Xmx128m
+
