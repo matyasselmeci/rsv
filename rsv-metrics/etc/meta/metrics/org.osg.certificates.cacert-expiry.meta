@@ -9,7 +9,4 @@ enable-by-default = true
 
 
 [org.osg.certificates.cacert-expiry env]
-PERL5LIB = PREPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes:!!VDT_PERL5LIB!!
-LD_LIBRARY_PATH = APPEND | !!VDT_LOCATION!!/globus/lib
-GLOBUS_LOCATION = SET | !!VDT_LOCATION!!/globus
-X509_CERT_DIR = SET | !!VDT_LOCATION!!/globus/TRUSTED_CA
+PERL5LIB = PREPEND | /usr/libexec/rsv/probes

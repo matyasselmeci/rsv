@@ -9,4 +9,4 @@ need-proxy = false
 enable-by-default = true
 
 [org.osg.local.hostcert-expiry env]
-PERL5LIB = PREPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes:!!VDT_PERL5LIB!!
+PERL5LIB = PREPEND | /usr/libexec/rsv/probes

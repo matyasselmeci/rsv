@@ -9,8 +9,4 @@ enable-by-default = false
 
 
 [org.osg.srm.srmclient-releasespace env]
-PERL5LIB = PREPEND | !!VDT_LOCATION!!/osg-rsv/bin/probes:!!VDT_PERL5LIB!!
-LD_LIBRARY_PATH = APPEND | !!VDT_LOCATION!!/globus/lib
-GLOBUS_LOCATION = SET | !!VDT_LOCATION!!/globus
-X509_CERT_DIR = SET | !!VDT_LOCATION!!/globus/TRUSTED_CA
-PATH = PREPEND | !!VDT_LOCATION!!/jdk1.6/bin
+PERL5LIB = PREPEND | /usr/libexec/rsv/probes
