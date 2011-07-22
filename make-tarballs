@@ -29,3 +29,8 @@ system("rm -fr rsv-core-$RSV_VERSION");
 system("cp -r rsv-consumers rsv-consumers-$RSV_VERSION");
 system("tar zcf rsv-consumers-$RSV_VERSION.tar.gz `find rsv-consumers-$RSV_VERSION ! -name \*~ ! -name .#\* ! -type d | grep -v '\.svn'`");
 system("rm -fr rsv-consumers-$RSV_VERSION");
+
+my $dir = "/p/vdt/public/html/upstream/$VERSION";
+print "Likely installation instructions:\n";
+print "mkdir $dir\n";
+print "mv *.tar.gz $dir/\n";
