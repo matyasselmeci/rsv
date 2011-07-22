@@ -1,4 +1,4 @@
 [html-consumer]
 
 timestamp = epoch
-environment = PYTHONPATH=!!VDT_PYTHONPATH!!
+#environment =
