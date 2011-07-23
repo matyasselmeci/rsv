@@ -67,7 +67,6 @@ def initialize():
 
 
     usage = """usage: html-consumer
-      --vdt-location <VDT directory>
       --output-dir <HTML directory>
       --max-history <Number of historical entries>
       --help | -h 
@@ -78,45 +77,29 @@ def initialize():
     description = "This script processes RSV records and generates an HTML status page."
 
     parser = OptionParser(usage=usage, description=description, version=version)
-    parser.add_option("--vdt-location", dest="vdt_location", default=None,
-                      help="Root directory of the OSG installation", metavar="DIR")
-    parser.add_option("--output-dir", dest="output-dir", default=None,
+    parser.add_option("--output-dir", dest="output_dir", default=None,
                       help="Directory to store HTML output", metavar="DIR")
-    parser.add_option("--max_history", dest="max_history", default=20, type="int",
+    parser.add_option("--max-history", dest="max_history", default=20, type="int",
                       help="Number of historical entries to store for each metric.", metavar="SIZE")
-    parser.add_option("--record_trim_length", dest="record_trim_length", type="int", default=10000,
+    parser.add_option("--record-trim-length", dest="record_trim_length", type="int", default=10000,
                       help="Size in bytes to trim each record.  Default=%default", metavar="LENGTH" )
 
     global OPTIONS
     (OPTIONS, args) = parser.parse_args()
 
     #
-    # Validate VDT-LOCATION
-    #
-    if not OPTIONS.vdt_location:
-        if "VDT_LOCATION" not in os.environ:
-            die("ERROR: VDT_LOCATION must be set in the environment or passed on the command line.")
-        else:
-            OPTIONS.vdt_location = os.environ["VDT_LOCATION"]
-
-    if not os.path.exists(OPTIONS.vdt_location):
-        die("ERROR: VDT_LOCATION is set to a non-existent directory: '%s'" % OPTIONS.vdt_location)
-
-    OPTIONS.rsv_location = os.path.join(OPTIONS.vdt_location, "osg-rsv")
-
-    #
     # Open a file for logging all output.  If we print all output to STDOUT it will end up in
     # a file that Condor will overwrite every time this script executes, so we'll move it to
     # a more permanent log file and rotate it manually.
     #
-    log_file = os.path.join(OPTIONS.rsv_location, "logs", "consumers", "html-consumer.output")
+    log_file = os.path.join("/", "var", "log", "rsv", "consumers", "html-consumer.output")
     OPTIONS.log = open(log_file, 'a')
 
     log("html-consumer initializing.")
 
     # Where records will be read from
     # This script will delete files from this directory, so it also needs write access.
-    OPTIONS.records_dir = os.path.join(OPTIONS.rsv_location, "output", "html-consumer")
+    OPTIONS.records_dir = os.path.join("/", "var", "spool", "rsv", "html-consumer")
     if not os.access(OPTIONS.records_dir, os.F_OK):
         die("WARNING: Records directory does not exist '%s' (This directory should be created when a metric runs.  Have any metrics run yet?)" % OPTIONS.records_dir)
     if not os.access(OPTIONS.records_dir, os.R_OK):
@@ -125,7 +108,7 @@ def initialize():
         die("ERROR: Cannot write records directory '%s'" % OPTIONS.records_dir)
 
     # Validate the HTML output directory and create it if necessary
-    OPTIONS.output_dir = os.path.join(OPTIONS.rsv_location, "output", "html")
+    OPTIONS.output_dir = os.path.join("/", "usr", "share", "rsv", "html-consumer")
     if not os.access(OPTIONS.output_dir, os.F_OK):
         log("Directory for HTML output does not exist at %s.  Creating it." % OPTIONS.output_dir)
         try:
@@ -366,7 +349,7 @@ def set_job_info_error(msg):
 def get_job_info():
     """ Figure out if any jobs are missing """
 
-    rsv_control = os.path.join(OPTIONS.vdt_location, "osg-rsv", "bin", "rsv-control")
+    rsv_control = os.path.join("/", "usr", "bin", "rsv-control")
     try:
         (ret, out, err) = system("%s -j --parsable" % rsv_control, 15)
     except TimeoutError:
