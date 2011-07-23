@@ -10,9 +10,6 @@ import signal
 
 from time import strftime
 
-# Declare globals to hold the imported Gratia and Metric objects
-# We can't import them until we know the value of VDT_LOCATION because we set
-# the import path accordingly.
 Gratia = None
 Metric = None
 CONSUMER_DONE = 0
@@ -25,7 +22,7 @@ class InvalidRecordError(Exception):
 
 def main():
     info = initialize()
-    load_gratia_libraries(info)
+    load_gratia_libraries()
     process_files(info)
     sys.exit(0)
 
@@ -39,26 +36,16 @@ def initialize():
     # We don't want people to accidently run this consumer as root because that may
     # cause permissions problems on log files and directories for the regular RSV user.
     #
+    # TODO - setuid to 'rsv'
     if os.geteuid() == 0:
         die("ERROR: The gratia-consumer cannot be run as root")
-
-    #
-    # Validate VDT_LOCATION
-    #
-    if "VDT_LOCATION" not in os.environ:
-        die("ERROR: VDT_LOCATION must be set in the environment")
-
-    info["vdt_location"] = os.environ["VDT_LOCATION"]
-
-    if not os.path.exists(info["vdt_location"]):
-        die("ERROR: VDT_LOCATION is set to a non-existent value: '%s'" % info["vdt_location"])
 
     #
     # Open a file for logging all output.  If we print all output to STDOUT it will end up in
     # a file that Condor will overwrite every time this script executes, so we'll move it to
     # a more permanent log file and rotate it manually.
     #
-    log_file = os.path.join(info["vdt_location"], "osg-rsv", "logs", "consumers", "gratia-consumer.output")
+    log_file = os.path.join("/", "var", "log", "rsv", "consumers", "gratia-consumer.output")
     global LOG_FH
     LOG_FH = open(log_file, 'a')
 
@@ -66,7 +53,7 @@ def initialize():
 
     # Where records will be read from
     # This script will delete files from this directory, so it also needs write access.
-    info["output_dir"] = os.path.join(info["vdt_location"], "osg-rsv", "output", "gratia-consumer")
+    info["output_dir"] = os.path.join("/", "var", "spool", "rsv", "gratia-consumer")
     if not os.access(info["output_dir"], os.F_OK):
         die("ERROR: Records directory does not exist '%s'" % info["output_dir"])
     if not os.access(info["output_dir"], os.R_OK):
@@ -77,7 +64,7 @@ def initialize():
     # Where records will be moved if they fail
     # This script will move files to this directory that fail, so it needs write access.
     # It won't read anything from the directory, but there's probably a problem if it can't.
-    info["failed_dir"] = os.path.join(info["vdt_location"], "osg-rsv", "output", "failed-gratia-records")
+    info["failed_dir"] = os.path.join("/", "var", "spool", "rsv", "failed-gratia-records")
     if not os.access(info["failed_dir"], os.F_OK):
         log("Directory for failed gratia scripts does not exist at %s.  Creating it." %
             info["failed_dir"],)
@@ -90,8 +77,7 @@ def initialize():
     if not os.access(info["failed_dir"], os.W_OK):
         die("ERROR: Cannot write failed records directory '%s'" % info["failed_dir"])
 
-    # TODO - make this a configuration setting
-    info["gratia_config_file"] = os.path.join(info["vdt_location"], "gratia", "probe", "metric", "ProbeConfig")
+    info["gratia_config_file"] = os.path.join("/", "etc", "gratia", "metric", "ProbeConfig")
 
     # Catch some signals and exit gracefully if we get them
     signal.signal(signal.SIGINT, sigterm_handler)
@@ -99,20 +85,16 @@ def initialize():
 
     return info
 
-def load_gratia_libraries(info):
-    """ Import the Gratia libraries """
 
-    # This script will find its own libraries, no need to set PYTHONPATH.  This makes
-    # it more convenient to run it by hand.
-    sys.path.insert(0, os.path.join(info["vdt_location"], "gratia", "probe", "metric"))
-    sys.path.insert(0, os.path.join(info["vdt_location"], "gratia", "probe", "common"))
-
+def load_gratia_libraries():
+    """ Try importing the Gratia libraries.  They might not be on the system so we treat
+    them more carefully than other libraries that we import """
+    
     try:
         global Gratia
         global Metric
-        # TODO Might need to do something like "import Gratia.Metric.Metric as Metric"
         import Gratia
-        import Metric
+        import gratia.metric as Metric
     except ImportError, err:
         msg = "ERROR: Could not import Gratia python libraries: %s\n" % err
         msg += "Contents of sys.path:\n"
