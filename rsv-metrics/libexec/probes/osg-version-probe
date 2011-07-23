@@ -1,83 +1,38 @@
 #!/usr/bin/env perl
 
-###############################################################################
-##
-## Copyright 2009, The Trustees of Indiana University. 
-##
-## Open Science Grid Operations Team, Indiana University
-## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
-##
-## This Perl script tests for the version of the OSG CE installed on remote host
-## Type ./osg-version-probe -h for information
-##
-## REQUIRES
-##  'RSV::Probe_Base'
-##
-################################################################################
-
-######## Perl modules to use ######################################
 use strict;
-use RSVProbeBase;
+use warnings;
 
-######## Retrieve Global variables ################################
-## And alias to RSV::Probe_Base variables
-our %o;         *o         = \%RSVProbeBase::o;      
-our %metric;    *metric    = \%RSVProbeBase::metric;
+# We assume we have the normal environment for a fork job here. It has
+# $OSG_LOCATION but not $VDT_LOCATION
 
-&RSVProbeBase::Init();
-&RSVProbeBase::Run();
+print "RSV BRIEF RESULTS:\n";
 
-################################################################################
-## Main Program ends ##
-################################################################################
+my $vdt_location = $ENV{OSG_LOCATION};
+my $vdt_version = "$vdt_location/vdt/bin/osg-version";
 
-
-################################################################################
-## Local Sub-Routines
-################################################################################
-
-sub Init {
-
-    &RSVProbeBase::Set_MetricName ("org.osg.general.osg-version");
-
-    ## Pass "status" or "performance" depending on metric type
-    &RSVProbeBase::Set_MetricType ("status");
-    &RSVProbeBase::Set_ServiceType ("OSG-CE");
-    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 0.8.0");
-    &RSVProbeBase::Set_ProbeType ("OSG-CE");
-
-    ## Should automating tools run this probe on above probeType by default?
-    &RSVProbeBase::Set_EnableByDefault ("true");
-    
-    ## Unix cron type metric interval
-    &RSVProbeBase::Set_MetricInterval ("1,21,41 * * * *");
-
-    ## Define this value from RCS/SVN version
-    ## What version of the WLCG specification does this probe conform to?
-    &RSVProbeBase::Set_ProbeRevision ('3.0');
-    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
-
-    ## Basic intro for the probe; This string will be used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpIntro ("Probe to report the version of OSG CE running on remote host.");
-
-    ## Additional options to print in Usage info used by Print_Usage ()
-    ## &RSVProbeBase::Set_ProbeHelpOptions ("");
-
-    ## Uncomment if you want additional command line options
-    ## Optional second argument defines non-default %o hash key
-    ## &RSVProbeBase::Extra_CLI_Option ("new-option=s","");
+if (! -x $vdt_version) {
+    print "CRITICAL\n";
+    print "Can't find vdt-version!\n";
+    dump_debug();
+}
+else {
+    my $version_out = `$vdt_version -vdt-location $vdt_location 2>&1`;
+    if ($? == 0) {
+        print "OK\n";
+        print $version_out;
+    } 
+    else {
+        print "CRITICAL\n";
+        print $version_out;
+        dump_debug();
+    }
 }
 
+exit 0;
 
-sub Run {
-    &RSVProbeBase::Get_Remote_Env();
-
-    &RSVProbeBase::Globus_Job_Run_Error_Code
-	("$o{'osgversionCmd'} 2>&1", "backtick",2);
-    &RSVProbeBase::Exit_Error (0, $o{'cmdOut'}); ## else
+sub dump_debug {
+    print STDERR "vdt_location = $vdt_location\n";
+    print STDERR `/usr/bin/env`;
+    return;
 }
-
-
-
-
-
