@@ -304,7 +304,7 @@ class Results:
         data  += "  Is the network available?\n"
         data  += "  Is the remote host available?\n\n"
         data  += "Ping stdout:\n%s\n" % stdout
-        data  += "Pint stderr:\n%s\n" % stderr
+        data  += "Ping stderr:\n%s\n" % stderr
 
         self.brief_result(metric, status, data, stderr="")
 
