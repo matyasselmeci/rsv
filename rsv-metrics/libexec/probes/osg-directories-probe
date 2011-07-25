@@ -3,8 +3,9 @@
 use strict;
 use warnings;
 
-# JOB RESULTS: is the header for the brief results format
-print "RSV BRIEF RESULTS:\n";
+use RSVMetric;
+
+print_output_header();
 
 # Define the directories we will examine
 my %dirs;
