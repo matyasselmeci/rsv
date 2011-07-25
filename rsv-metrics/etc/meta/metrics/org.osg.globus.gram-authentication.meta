@@ -3,8 +3,7 @@ default-cron-interval = 31 * * * *
 
 execute = local
 service-type = OSG-CE
-output-format = wlcg
-probe-spec = v3
+output-format = brief
 enable-by-default = true
 
 

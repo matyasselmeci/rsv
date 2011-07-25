@@ -1,80 +1,45 @@
 #!/usr/bin/env perl
 
-###############################################################################
-##
-## Copyright 2009, The Trustees of Indiana University. 
-##
-## Open Science Grid Operations Team, Indiana University
-## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
-##
-## Type ./gram-authentication-probe -h for more information
-##
-## REQUIRES
-##  'RSVProbe_Base'
-##
-################################################################################
-
-######## Perl modules to use ######################################
 use strict;
-use RSVProbeBase;
+use warnings;
+use Getopt::Long;
 
-######## Retrieve Global variables ################################
-## And alias to RSV::Probe_Base variables
-our %o;         *o         = \%RSVProbeBase::o;      
-our %metric;    *metric    = \%RSVProbeBase::metric;
+use RSVMetric;
 
-&RSVProbeBase::Init();
-&RSVProbeBase::Run();
+print_output_header();
 
-################################################################################
-## Main Program ends ##
-################################################################################
+my $OPT_HOSTNAME;
+my $OPT_METRIC;
 
+GetOptions("u=s"        => \$OPT_HOSTNAME,
+           "m=s"        => \$OPT_METRIC,
+           "help|usage" => \&usage);
 
-################################################################################
-## Local Sub-Routines
-################################################################################
+my $cmd = "globusrun -a -r $OPT_HOSTNAME";
+my $output = `$cmd`;
 
-sub Init {
+if($? == 0) {
+    print "OK\n";
+    print "Output from $cmd:\n";
+    print "$output\n";
+}
+else {
+    # The message from globusrun is not generally helpful.  So we will
+    # print it, but we'll also try a globus-url-copy and include that
+    # output because it tends to have better error messages.
+    print "CRITICAL\n";
+    print "Output from $cmd\n";
+    print "$output\n";
 
-    &RSVProbeBase::Set_MetricName ("org.osg.globus.gram-authentication");
-
-    ## Pass "status" or "performance" depending on metric type
-    &RSVProbeBase::Set_MetricType ("status");
-    &RSVProbeBase::Set_ServiceType ("OSG-CE");
-    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 1.0.0");
-    &RSVProbeBase::Set_ProbeType ("OSG-CE");
-
-    ## Should automating tools run this probe on above probeType by default?
-    &RSVProbeBase::Set_EnableByDefault ("true");
-    
-    ## Unix cron type metric interval
-    &RSVProbeBase::Set_MetricInterval ("31 * * * *");
-
-    ## Define this value from RCS/SVN version
-    ## What version of the WLCG specification does this probe conform to?
-    &RSVProbeBase::Set_ProbeRevision ('3.0');
-    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
-
-    ## Basic intro for the probe; This string will be used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpIntro 
-	("Probe to check if we can authenticate to remote site with available proxy.\n".
-	 " Basically a globusrun -a -r <host> test. Also checks for expiring-soon \n".
-	 " proxy (and obviously expired proxy!).");
-
-    ## Additional options to print in Usage info used by Print_Usage ()
-    ## &RSVProbeBase::Set_ProbeHelpOptions ("");
-
-    ## Uncomment if you want additional command line options
-    ## &RSVProbeBase::Extra_CLI_Option ("ping-count=i","pingCount");
-
-    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
-    &RSVProbeBase::Set_DetailsDataTrim ("False");
+    # TODO Now run globus-url-copy
 }
 
+exit 0;
 
-sub Run {
-    ## This test is already available in perl module; so just invoke it.
-    &RSVProbeBase::Check_Gram_Authentication ();
+sub usage {
+    print STDERR "Usage: $0\n";
+    print STDERR "\t-u <hostname>\n";
+    print STDERR "\t-m <metric>\n";
+    exit 1;
 }
 
