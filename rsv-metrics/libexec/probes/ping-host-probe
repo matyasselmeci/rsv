@@ -55,7 +55,7 @@ else {  ## Unknown status here
 
 exit 0;
 
-#TODO make usage()
+
 sub usage {
     print STDERR "Usage: $0\n";
     print STDERR "\t-u <hostname>\n";
