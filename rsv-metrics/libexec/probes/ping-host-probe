@@ -2,19 +2,20 @@
 
 use strict;
 use warnings;
-
 use Getopt::Long;
+
+use RSVMetric;
 
 my $OPT_HOSTNAME;
 my $OPT_TIMEOUT = 3;
 my $OPT_COUNT = 1;
 
+print_output_header();
+
 GetOptions("u=s"             => \$OPT_HOSTNAME,
            "ping-timeout=i"  => \$OPT_TIMEOUT,
 	   "ping-count=i"    => \$OPT_COUNT,
            "help|usage"      => \&usage);
-
-print "RSV BRIEF RESULTS:\n";
 
 if(not $OPT_HOSTNAME) {
     print "CRITICAL\n";
@@ -54,20 +55,12 @@ else {  ## Unknown status here
 
 exit 0;
 
-
-sub which {
-    my ($exe) = @_;
-
-    foreach my $dir (split(/:/, $ENV{PATH})) {
-        if (-x "$dir/$exe") {
-            $dir =~ s|/+$||;  # Trim trailing slash on dir
-	    return "$dir/$exe";
-        }
-    }
-    return "";
-}
-
-sub dump_debug {
-    print STDERR `/usr/bin/env`;
-    return;
+#TODO make usage()
+sub usage {
+    print STDERR "Usage: $0\n";
+    print STDERR "\t-u <hostname>\n";
+    print STDERR "\t-m <metric>\n";
+    print STDERR "\t--ping-timeout <num seconds>\n";
+    print STDERR "\t--ping-count <num pings>\n\n";
+    exit 1;
 }
