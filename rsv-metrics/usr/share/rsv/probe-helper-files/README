@@ -1,0 +1,3 @@
+# This is an area for non-code helper files for probes.
+# For example, if the gridftp probe needs a test file to transfer
+# if should be placed in here.
