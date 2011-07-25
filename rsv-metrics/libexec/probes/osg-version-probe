@@ -3,36 +3,40 @@
 use strict;
 use warnings;
 
-# We assume we have the normal environment for a fork job here. It has
-# $OSG_LOCATION but not $VDT_LOCATION
+use RSVMetric;
 
-print "RSV BRIEF RESULTS:\n";
+print_output_header();
 
-my $vdt_location = $ENV{OSG_LOCATION};
-my $vdt_version = "$vdt_location/vdt/bin/osg-version";
-
-if (! -x $vdt_version) {
-    print "CRITICAL\n";
-    print "Can't find vdt-version!\n";
-    dump_debug();
+if(defined $ENV{OSG_LOCATION}) {
+    monitor_old();
 }
 else {
-    my $version_out = `$vdt_version -vdt-location $vdt_location 2>&1`;
-    if ($? == 0) {
-        print "OK\n";
-        print $version_out;
-    } 
-    else {
-        print "CRITICAL\n";
-        print $version_out;
-        dump_debug();
-    }
+    # TODO - something more interesting than a list of RPMs?
+    print "OK\n";
+    print `rpm -qa | sort`;
 }
 
 exit 0;
 
-sub dump_debug {
-    print STDERR "vdt_location = $vdt_location\n";
-    print STDERR `/usr/bin/env`;
-    return;
+
+sub monitor_old {
+    my $osg_version = "$ENV{OSG_LOCATION}/osg/bin/osg-version";
+
+    if (! -x $osg_version) {
+        print "CRITICAL\n";
+        print "Can't find vdt-version!\n";
+        dump_debug();
+    }
+    else {
+        my $version_out = `$osg_version 2>&1`;
+        if ($? == 0) {
+            print "OK\n";
+            print $version_out;
+        } 
+        else {
+            print "CRITICAL\n";
+            print $version_out;
+            dump_debug();
+        }
+    }
 }
