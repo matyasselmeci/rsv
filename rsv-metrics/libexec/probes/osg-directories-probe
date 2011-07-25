@@ -6,20 +6,6 @@ use warnings;
 # JOB RESULTS: is the header for the brief results format
 print "RSV BRIEF RESULTS:\n";
 
-# We assume we have the normal environment for a fork job here. It has
-# $OSG_LOCATION but not $VDT_LOCATION
-my $vdt_location = $ENV{OSG_LOCATION} || "";
-
-if(!$vdt_location) {
-    status("CRITICAL", "OSG_LOCATION is not set in the environment");
-    exit 0;
-}
-elsif(!-d $vdt_location) {
-    status("CRITICAL", "OSG_LOCATION does not exist");
-    exit 0;
-}
-
-
 # Define the directories we will examine
 my %dirs;
 
@@ -108,6 +94,5 @@ sub status {
 
     # We'll always dump the environment to STDERR to help debug the metric.  This won't
     # be put into the metric record but it will be available in the job's .err file.
-    print STDERR "vdt_location = $vdt_location\n";
     print STDERR `/usr/bin/env`;
 }
