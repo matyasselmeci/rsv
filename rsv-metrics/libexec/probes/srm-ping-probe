@@ -11,11 +11,11 @@ my $OPT_METRIC;
 my $OPT_SRM_WEBSERVICE_PATH;
 my $OPT_SRM_PROTOCOL_VERSION = 2;
 
-GetOptions("u=s"                  => \$OPT_HOSTNAME,
-           "m=s"                  => \$OPT_METRIC,
-           "srm-webservice-path"  => \$OPT_SRM_WEBSERVICE_PATH,
-           "srm-protocol-version" => \$OPT_SRM_PROTOCOL_VERSION,
-           "help|usage"           => \&usage);
+GetOptions("u=s"                    => \$OPT_HOSTNAME,
+           "m=s"                    => \$OPT_METRIC,
+           "srm-webservice-path=s"  => \$OPT_SRM_WEBSERVICE_PATH,
+           "srm-protocol-version=s" => \$OPT_SRM_PROTOCOL_VERSION,
+           "help|usage"             => \&usage);
 
 if(not $OPT_HOSTNAME) {
     print "CRITICAL\n";
@@ -32,7 +32,7 @@ if(not $srm_ping) {
 }
 
 # TODO - might need '-x509_user_proxy=' included in here
-my $srm_ping_cmd = "srm-ping -retry_num=0 -debug -$OPT_SRM_PROTOCOL_VERSION srm://$OPT_HOSTNAME -webservice_path=$OPT_SRM_WEBSERVICE_PATH";
+my $srm_ping_cmd = "srm-ping srm://$OPT_HOSTNAME -retry_num=0 -debug -$OPT_SRM_PROTOCOL_VERSION -webservice_path=$OPT_SRM_WEBSERVICE_PATH";
 my $out = `$srm_ping_cmd`;
 my $ret = $? >> 8;
 
@@ -63,6 +63,18 @@ sub usage {
     print STDERR "\t-u <hostname>\n";
     print STDERR "\t-m <metric>\n";
     exit 1;
+}
+
+sub which {
+    my ($exe) = @_;
+
+    foreach my $dir (split(/:/, $ENV{PATH})) {
+        if (-x "$dir/$exe") {
+            $dir =~ s|/+$||;  # Trim trailing slash on dir
+	    return "$dir/$exe";
+        }
+    }
+    return "";
 }
 
 sub dump_debug {
