@@ -1,12 +1,10 @@
 [org.osg.general.vo-supported]
 default-cron-interval = 54 6,18 * * *
 
-execute = local
+execute = grid
 service-type = OSG-CE
-output-format = wlcg
-probe-spec = v3
+output-format = brief
 enable-by-default = true
 
 
 [org.osg.general.vo-supported env]
-PERL5LIB = PREPEND | /usr/libexec/rsv/probes

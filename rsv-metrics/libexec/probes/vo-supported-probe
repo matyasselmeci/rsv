@@ -1,82 +1,45 @@
 #!/usr/bin/env perl
 
-###############################################################################
-##
-## Copyright 2009, The Trustees of Indiana University. 
-##
-## Open Science Grid Operations Team, Indiana University
-## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
-##
-## Type ./vo-supported-probe -h for more information
-##
-## REQUIRES
-##  'RSV::Probe_Base'
-##
-################################################################################
-
-######## Perl modules to use ######################################
 use strict;
-use RSVProbeBase;
+use warnings;
 
-######## Retrieve Global variables ################################
-## And alias to RSV::Probe_Base variables
-our %o;         *o         = \%RSVProbeBase::o;      
-our %metric;    *metric    = \%RSVProbeBase::metric;
+print "RSV BRIEF RESULTS:\n";
 
-&RSVProbeBase::Init();
-&RSVProbeBase::Run();
-
-################################################################################
-## Main Program ends ##
-################################################################################
-
-
-################################################################################
-## Local Sub-Routines
-################################################################################
-
-sub Init {
-
-    &RSVProbeBase::Set_MetricName ("org.osg.general.vo-supported");
-
-    ## Pass "status" or "performance" depending on metric type
-    &RSVProbeBase::Set_MetricType ("status");
-    &RSVProbeBase::Set_ServiceType ("OSG-CE");
-    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 0.8.0");
-    &RSVProbeBase::Set_ProbeType ("OSG-CE");
-
-    ## Should automating tools run this probe on above probeType by default?
-    &RSVProbeBase::Set_EnableByDefault ("true");
-    
-    ## Unix cron type metric interval
-    &RSVProbeBase::Set_MetricInterval ("47 6,18 * * *");
-
-    ## Define this value from RCS/SVN version
-    ## What version of the WLCG specification does this probe conform to?
-    &RSVProbeBase::Set_ProbeRevision ('3.0');
-    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
-
-    ## Basic intro for the probe; This string will be used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpIntro ("Probe to print the list of supported VOs on remote host.");
-
-    ## Additional options to print in Usage info used by Print_Usage ()
-    ## &RSVProbeBase::Set_ProbeHelpOptions ("");
-
-    ## Uncomment if you want additional command line options
-    ## &RSVProbeBase::Extra_CLI_Option ("ping-count=i","pingCount");
-
-    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
-    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+my $file;
+if(defined $ENV{OSG_LOCATION}) {
+    $file = "$ENV{OSG_LOCATION}/monitoring/osg-supported-vo-list.txt";
+}
+else {
+    $file = "/etc/osg/osg-supported-vo-list.txt";
 }
 
+if(-e $file) {
+    if(not open(IN, '<', $file)) {
+        print "CRITICAL\n";
+        print "Cannot open the necessary file at '$file': $!\n";
+        exit 0;
+    }
+    else {
+        my $contents = join("", <IN>);
+        close(IN);
+        $contents =~ s/\n|\s+$/ /g;
+        
+        print "OK\n";
+        print "$contents\n";
+        exit 0;
+    }
+}
+else {
+    print "CRITICAL\n";
+    print "The necessary file does not exist at '$file'\n";
+    exit 0;
+}
 
-sub Run {
-    &RSVProbeBase::Get_Remote_Env();
-    
-    ## If we can authenticate and have got remove env, then find list of supported VO's using a globus job
-    &RSVProbeBase::Globus_Job_Run(" $o{'vosupportedCmd'} 2>&1 ", "backtick");
-    $o{'cmdOut'} =~ s/\n|\s+$/ /g;
-    &RSVProbeBase::Set_Summary_Metric_Results (0, $o{'cmdOut'});
+exit 0;
 
-    &RSVProbeBase::Print_Metric();
+
+sub dump_debug {
+    print STDERR "OSG_LOCATION = $ENV{OSG_LOCATION}\n";
+    print STDERR `/usr/bin/env`;
+    return;
 }
