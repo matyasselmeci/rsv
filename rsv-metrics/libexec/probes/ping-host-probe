@@ -4,15 +4,18 @@ use strict;
 use warnings;
 use Getopt::Long;
 
+use lib qw(/usr/libexec/rsv/probes);
 use RSVMetric;
 
 my $OPT_HOSTNAME;
+my $OPT_METRIC;
 my $OPT_TIMEOUT = 3;
 my $OPT_COUNT = 1;
 
 print_output_header();
 
 GetOptions("u=s"             => \$OPT_HOSTNAME,
+           "m=s"             => \$OPT_METRIC,
            "ping-timeout=i"  => \$OPT_TIMEOUT,
 	   "ping-count=i"    => \$OPT_COUNT,
            "help|usage"      => \&usage);

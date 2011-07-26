@@ -5,6 +5,7 @@ use warnings;
 use Getopt::Long;
 use File::Basename;
 
+use lib qw(/usr/libexec/rsv/probes);
 use RSVMetric;
 
 print_output_header();
@@ -95,7 +96,7 @@ else {
 #
 # Compare files
 #
-$out = `diff $test_file $new_local_path`;
+$out = `diff $test_file $new_local_path 2>&1`;
 if($? != 0) {
     print "CRITICAL\n";
     print "Successful transfer to remote host.\n";
@@ -124,15 +125,15 @@ sub usage {
 
 sub cleanup_files {
     # First cleanup the local file if it exists
-    if(-e $new_local_path) {
+    if($new_local_path and -e $new_local_path) {
         if(not unlink($new_local_path)) {
             print STDERR "Failed to unlink existing local file '$new_local_path': $!";
         }
     }
 
     # Then cleanup the remote file using UberFTP
-    my $out = `uberftp -rm $remote_uri`;
+    my $out = `uberftp -rm $remote_uri 2>&1`;
     if($? != 0) {
-        print STDERR "Failed to unlink remote file '$remote_uri'.  Output:\n$out\n";
+        print STDERR "Failed to remove remote file '$remote_uri'.  Output:\n$out\n";
     }
 }

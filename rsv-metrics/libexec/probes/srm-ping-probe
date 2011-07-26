@@ -23,16 +23,16 @@ if(not $OPT_HOSTNAME) {
     exit 1; # Probe was invoked wrong, so give an error on exit status
 }
 
-my $srm_ping = which("srm-ping");
-if(not $srm_ping) {
+if(not $OPT_SRM_WEBSERVICE_PATH) {
     print "CRITICAL\n";
-    print "srm-ping is not in PATH\n";
-    dump_debug();
-    exit 0;
+    print "You must specify the SRM webservice path (e.g. srm/v2/server) using the --srm-webservice-path flag.\n";
+    exit 1; # Probe was invoked wrong, so give an error on exit status
 }
 
+find_binary("srm-ping");
+
 # TODO - might need '-x509_user_proxy=' included in here
-my $srm_ping_cmd = "srm-ping srm://$OPT_HOSTNAME -retry_num=0 -debug -$OPT_SRM_PROTOCOL_VERSION -webservice_path=$OPT_SRM_WEBSERVICE_PATH";
+my $srm_ping_cmd = "srm-ping srm://$OPT_HOSTNAME -retry_num=0 -debug -$OPT_SRM_PROTOCOL_VERSION -webservice_path=$OPT_SRM_WEBSERVICE_PATH 2>&1";
 my $out = `$srm_ping_cmd`;
 my $ret = $? >> 8;
 
@@ -62,7 +62,22 @@ sub usage {
     print STDERR "Usage: $0\n";
     print STDERR "\t-u <hostname>\n";
     print STDERR "\t-m <metric>\n";
+    print STDERR "\t--srm-webservice-path <path, e.g. srm/v2/server>\n";
+    print STDERR "\t--srm-protocol-version <1 or 2>\n";
     exit 1;
+}
+
+sub find_binaries {
+    my @binaries = @_;
+
+    foreach my $binary (@binaries) {
+        if(not which($binary)) {
+            print "CRITICAL\n";
+            print "$binary is not in PATH\n";
+            dump_debug();
+            exit 0;
+        }
+    }
 }
 
 sub which {
