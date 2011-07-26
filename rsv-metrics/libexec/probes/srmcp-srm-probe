@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 use Getopt::Long;
+use File::Basename;
 
 print "RSV BRIEF RESULTS:\n";
 
@@ -50,9 +51,16 @@ find_binaries("srm-copy", "srm-ls", "srm-rm");
 my $local_file = "/usr/share/rsv/probe-helper-files/storage-probe-test-file";
 my $local_uri = "file://$local_file";
 
+if(!-e $local_file) {
+    print "CRITICAL\n";
+    print "The helper file is missing from '$local_file'.\n";
+    print "Your RSV installation may be incomplete or corrupt.\n";
+    exit 0;
+}
+
 my $time = time;
 my $remote_file = basename($local_file) . ".$time.$$";
-my $remote_uri = "srm://$OPT_HOSTNAME/$OPT_SRM_WEBSERVICE_PATH?SFN=$OPT_SRM_DEST_DIR";
+my $remote_uri = "srm://$OPT_HOSTNAME/$OPT_SRM_WEBSERVICE_PATH?SFN=$OPT_SRM_DEST_DIR/$remote_file";
 
 # TODO - might need '-x509_user_proxy=' included in here
 my $srm_copy_cmd = "srm-copy $local_uri $remote_uri 2>&1";
@@ -75,7 +83,7 @@ else {
 #
 
 my $new_local_file = "/tmp/$remote_file";
-my $new_local_uri = "file://$local_file";
+my $new_local_uri = "file://$new_local_file";
 
 # TODO - might need '-x509_user_proxy=' included in here
 $srm_copy_cmd = "srm-copy $remote_uri $new_local_uri 2>&1";
