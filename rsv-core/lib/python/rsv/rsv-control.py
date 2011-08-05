@@ -16,8 +16,9 @@ import run_metric
 def process_options(arguments=None):
     usage = """rsv-control:
 
-    Get more information: 0=print nothing, 1=normal, 2=info, 3=debug
+    Get more information:
     [ --verbose <level> ]
+    Level settings - 0=print nothing, 1=normal, 2=info, 3=debug
 
     Run a one-time test:
     --run [--all-enabled] --host <HOST> METRIC [METRIC ...]

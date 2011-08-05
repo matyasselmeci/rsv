@@ -235,12 +235,12 @@ class RSV:
 
     def get_metric_log_dir(self):
         """ Return the directory to store condor log/out/err files for metrics """
-        return os.path.join("/", "var", "logs", "rsv", "metrics")
+        return os.path.join("/", "var", "log", "rsv", "metrics")
 
 
     def get_consumer_log_dir(self):
         """ Return the directory to store condor log/out/err files for consumers """
-        return os.path.join("/", "var", "logs", "rsv", "consumers")
+        return os.path.join("/", "var", "log", "rsv", "consumers")
 
 
     def get_user(self):
