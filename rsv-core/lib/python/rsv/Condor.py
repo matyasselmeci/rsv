@@ -13,11 +13,9 @@ class Condor:
     """ Define the interface to condor-cron """
 
     rsv = None
-    condor_cron_bin_dir = None
 
     def __init__(self, rsv):
         self.rsv = rsv
-        self.condor_cron_bin_dir = os.path.join(rsv.vdt_location, "condor-cron", "wrappers")
 
 
     def is_condor_running(self):
@@ -25,8 +23,7 @@ class Condor:
         Determine if Condor-Cron is running.  Return True is so, false otherwise
         """
 
-        condor_cron_q_exe = os.path.join(self.condor_cron_bin_dir, "condor_cron_q")
-        (ret, out) = self.commands_getstatusoutput(condor_cron_q_exe)
+        (ret, out) = self.commands_getstatusoutput("condor_cron_q")
 
         if not ret and out.index("-- Submitter") != -1:
             self.rsv.log("DEBUG", "Condor is running.  Output of condor_cron_q:\n%s" % out)
@@ -73,8 +70,7 @@ class Condor:
             return None
 
         # Build the command
-        exe = os.path.join(self.condor_cron_bin_dir, "condor_cron_q")
-        cmd = "%s -l" % exe
+        cmd = "condor_cron_q -l"
         if constraint != None:
             cmd += " -constraint '%s'" % constraint
 
@@ -173,8 +169,7 @@ class Condor:
         os.chdir(os.path.join("/", "tmp"))
 
         # Submit the job and remove the file
-        exe = os.path.join(self.condor_cron_bin_dir, "condor_cron_submit")
-        cmd = "%s %s" % (exe, sub_file_name)
+        cmd = "condor_cron_submit %s" % (sub_file_name)
         raw_ec, out = self.commands_getstatusoutput(cmd, self.rsv.get_user())
         exit_code = os.WEXITSTATUS(raw_ec)
         self.rsv.log("INFO", "Condor submission: %s" % out)
@@ -211,7 +206,7 @@ class Condor:
             return True
 
         # Build the command
-        cmd = os.path.join(self.condor_cron_bin_dir, "condor_cron_rm")
+        cmd = "condor_cron_rm"
         if constraint != None:
             cmd += " -constraint '%s'" % constraint
 
