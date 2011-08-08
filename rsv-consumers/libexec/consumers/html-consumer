@@ -107,7 +107,7 @@ def initialize():
         die("ERROR: Cannot write records directory '%s'" % OPTIONS.records_dir)
 
     # Validate the HTML output directory and create it if necessary
-    OPTIONS.output_dir = os.path.join("/", "usr", "share", "rsv", "html-consumer")
+    OPTIONS.output_dir = os.path.join("/", "usr", "share", "rsv", "www")
     if not os.access(OPTIONS.output_dir, os.F_OK):
         log("Directory for HTML output does not exist at %s.  Creating it." % OPTIONS.output_dir)
         try:
