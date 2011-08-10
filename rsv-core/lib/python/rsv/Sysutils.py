@@ -2,10 +2,11 @@
 
 # Global libraries
 import os
+import re
+import sys
+import time
 import fcntl
 import select
-import time
-import sys
 import popen2
 import signal
 
@@ -156,3 +157,51 @@ class Sysutils:
                 # TODO - allow any user to run, but don't produce consumer records
                 self.rsv.log("ERROR", "You can only run metrics as root or the RSV user (%s)." % user, 0)
                 sys.exit(1)
+
+
+    def watch_log(self, log_path, keywords, timeout=300, sleep_interval=10):
+        """ Watch the specified log for the keywords.  Return the keyword that matches. """
+
+        self.rsv.log("DEBUG", "Watching log '%s' for keywords [%s].  Timeout is %ss" %
+                     (log_path, ', '.join(keywords), timeout))
+
+        start_time = int(time.time())
+        mtime = 0
+
+        while 1:
+            if int(time.time()) - start_time >= timeout:
+                raise TimeoutError("Timeout waiting for Condor-G job to finish (%ss)" % timeout)
+            
+            new_mtime = os.stat(log_path).st_mtime
+            if new_mtime != mtime:
+                print "Reading"
+                mtime = new_mtime
+                contents = self.slurp(log_path)
+
+                for keyword in keywords:
+                    if re.search(keyword, contents):
+                        return keyword
+
+            time.sleep(sleep_interval)
+        
+        return
+    
+
+    def slurp(self, file, must_exist=0):
+        """ Given a path, read the contents of that file """
+        self.rsv.log("DEBUG", "Slurping file '%s'" % file)
+        
+        try:
+            f = open(file, 'r')
+            contents = f.read()
+            f.close()
+        except IOError, err:
+            print "Error: %s" % err
+            if must_exist:
+                self.rsv.log("ERROR", "Could not read file: %s" % err, indent=4)
+                raise
+            else:
+                self.rsv.log("DEBUG", "Could not read file: %s" % err, indent=4)
+                contents = ""
+            
+        return contents
