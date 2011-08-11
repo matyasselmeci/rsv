@@ -2,8 +2,9 @@
 
 use strict;
 use warnings;
+use RSVMetric;
 
-print "RSV BRIEF RESULTS:\n";
+print_output_header();
 
 my $file;
 if(defined $ENV{OSG_LOCATION}) {

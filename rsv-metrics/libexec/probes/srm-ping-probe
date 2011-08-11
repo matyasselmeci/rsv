@@ -3,8 +3,9 @@
 use strict;
 use warnings;
 use Getopt::Long;
+use RSVMetric;
 
-print "RSV BRIEF RESULTS:\n";
+print_output_header();
 
 my $OPT_HOSTNAME;
 my $OPT_METRIC;
@@ -65,34 +66,4 @@ sub usage {
     print STDERR "\t--srm-webservice-path <path, e.g. srm/v2/server>\n";
     print STDERR "\t--srm-protocol-version <1 or 2>\n";
     exit 1;
-}
-
-sub find_binaries {
-    my @binaries = @_;
-
-    foreach my $binary (@binaries) {
-        if(not which($binary)) {
-            print "CRITICAL\n";
-            print "$binary is not in PATH\n";
-            dump_debug();
-            exit 0;
-        }
-    }
-}
-
-sub which {
-    my ($exe) = @_;
-
-    foreach my $dir (split(/:/, $ENV{PATH})) {
-        if (-x "$dir/$exe") {
-            $dir =~ s|/+$||;  # Trim trailing slash on dir
-	    return "$dir/$exe";
-        }
-    }
-    return "";
-}
-
-sub dump_debug {
-    print STDERR `/usr/bin/env`;
-    return;
 }
