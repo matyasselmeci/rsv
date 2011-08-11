@@ -331,11 +331,20 @@ class Results:
         self.brief_result(metric, status, data, stderr="")
 
 
-    def condor_grid_job_failed(self, metric, command, stdout, stderr):
-        """ Failed to run a metric of type condor-grid """
+    def condor_grid_job_failed(self, metric, stdout, stderr):
+        """ Failed to run a metric using Condor-G """
         status = "CRITICAL"
         data   = "Failed to run job via Condor-G\n\n"
-        data  += "Job run:\n%s\n\n" % command
+        data  += "Stdout:\n%s\n" % stdout
+        data  += "Stderr:\n%s\n" % stderr
+
+        self.brief_result(metric, status, data, stderr="")
+
+
+    def condor_grid_job_aborted(self, metric, stdout, stderr):
+        """ Condor-G job was aborted while trying to run metric """
+        status = "CRITICAL"
+        data   = "Condor-G job aborted\n\n"
         data  += "Stdout:\n%s\n" % stdout
         data  += "Stderr:\n%s\n" % stderr
 
@@ -347,5 +356,12 @@ class Results:
         status = "CRITICAL"
         data   = "Timeout hit - %s\n\n" % err
         data  += "Job run:\n%s\n\n" % command
+
+        self.brief_result(metric, status, data, stderr="")
+
+    def condor_g_submission_failed(self, metric):
+        """ Condor-G submission failed """
+        status = "CRITICAL"
+        data   = "Condor-G submission failed to remote host\n\n"
 
         self.brief_result(metric, status, data, stderr="")

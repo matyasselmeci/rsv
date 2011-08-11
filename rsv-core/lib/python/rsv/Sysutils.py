@@ -170,11 +170,10 @@ class Sysutils:
 
         while 1:
             if int(time.time()) - start_time >= timeout:
-                raise TimeoutError("Timeout waiting for Condor-G job to finish (%ss)" % timeout)
+                raise TimeoutError("Timeout while watching log (%ss)" % timeout)
             
             new_mtime = os.stat(log_path).st_mtime
             if new_mtime != mtime:
-                print "Reading"
                 mtime = new_mtime
                 contents = self.slurp(log_path)
 

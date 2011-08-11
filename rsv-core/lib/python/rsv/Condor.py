@@ -5,6 +5,7 @@ import re
 import pwd
 import time
 import commands
+import tempfile
 from time import strftime
 
 import Host
@@ -145,15 +146,14 @@ class Condor:
         return self.submit_job(submit_file_contents, condor_id)
 
 
-    def submit_job(self, submit_file_contents, condor_id):
+    def submit_job(self, submit_file_contents, condor_id, dir="/tmp", remove=1):
         """
         Input: submit file contents and job identifier
         Create submission file, submits it to Condor and removes it
         """
 
         try:
-            # TODO - put this in /var/tmp?  User tempfile
-            sub_file_name = os.path.join("/tmp", condor_id + ".sub")
+            sub_file_name = os.path.join(dir, condor_id + ".sub")
             file_handle = open(sub_file_name, 'w')
             file_handle.write(submit_file_contents)
             file_handle.close()
@@ -174,11 +174,12 @@ class Condor:
         exit_code = os.WEXITSTATUS(raw_ec)
         self.rsv.log("INFO", "Condor submission: %s" % out)
         self.rsv.log("DEBUG", "Condor submission completed: %s (%s)" % (exit_code, raw_ec))
-        os.remove(sub_file_name)
+
+        if remove:
+            os.remove(sub_file_name)
 
         if exit_code != 0:
-            self.rsv.log("ERROR", "Problem submitting job to condor-cron.  Command output:\n%s" %
-                         out)
+            self.rsv.log("ERROR", "Problem submitting job to condor.  Command output:\n%s" % out)
             return False
 
         return True
@@ -219,6 +220,40 @@ class Condor:
 
         return True
 
+
+    def condor_g_submit(self, host, jobmanager, metric, args):
+        """ Form a grid submit file and submit the job to Condor """
+
+        # Make a temporary directory to store submit file, input, output, and log
+        parent_dir = os.path.join("/", "var", "tmp", "rsv")
+        dir = tempfile.mkdtemp(prefix="condor_g-", dir=parent_dir)
+        self.rsv.log("INFO", "Condor-G working directory: %s" % dir)
+
+        metric_path = os.path.join("/", "usr", "libexec", "rsv", "metrics", metric)
+
+        log = os.path.join(dir, "%s.log" % metric)
+        out = os.path.join(dir, "%s.out" % metric)
+        err = os.path.join(dir, "%s.err" % metric)
+
+        submit_file = "Universe = grid\n"
+        submit_file += "grid_resource = gt2 %s/jobmanager-%s\n\n" % (host, jobmanager)
+
+        submit_file += "Executable = %s\n" % metric_path
+        submit_file += "Arguments  = %s\n" % args
+        # TODO: transfer the metrics library.  Where should it be declared?
+        #submit_file += "transfer_input_files = %s\n" % (RSVMetricsLib)
+        submit_file += "Log = %s\n" % log
+        submit_file += "Output = %s\n" % out
+        submit_file += "Error = %s\n\n" % err
+
+        #submit_file += "transfer_output_files = <list your files here>\n\n"
+
+        submit_file += "Queue\n"
+
+        if self.submit_job(submit_file, metric, dir=dir, remove=0):
+            return (log, out, err)
+        else:
+            return (False, False, False)
 
 
     def build_metric_submit_file(self, metric):

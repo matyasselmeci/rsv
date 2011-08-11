@@ -10,6 +10,7 @@ from optparse import OptionParser
 
 # RSV libraries
 import RSV
+import Condor
 import Metric
 import Results
 import Sysutils
@@ -124,24 +125,179 @@ def parse_job_output_brief(rsv, metric, stdout, stderr):
 def execute_job(rsv, metric):
     """ Execute the job """
 
+    execute_type = metric.config_get("execute").lower()
+    if execute_type == "local":
+        rsv.log("INFO", "Executing job locally")
+        execute_local_job(rsv, metric)
+    elif execute_type == "grid":
+        rsv.log("INFO", "Executing job remotely using globus-job-run")
+        execute_grid_job(rsv, metric)
+    elif execute_type == "condor-grid":
+        rsv.log("INFO", "Executing job remotely using Condor-G")
+        execute_condor_g_job(rsv, metric)
+    else:
+        rsv.log("ERROR", "The execute type of the probe is unknown: '%s'" % execute_type)
+        sys.exit(1)
+
+    return
+
+
+def execute_local_job(rsv, metric):
+    """ Execute the old-style probes, or any probe that should run locally, e.g. srm probes """
+
+    # Build the custom parameters to the script
+    args = metric.get_args_string()
+
+    # Anthony Tiradani uses extra RSL to get his jobs to run with priority at Fermi
+    # This is done for old style metrics by passing --extra-globus-rsl.
+    if metric.config_val("probe-spec", "v3") and rsv.get_extra_globus_rsl():
+        args += " --extra-globus-rsl %s" % rsv.get_extra_globus_rsl()
+
+    job = "%s -m %s -u %s %s" % (metric.executable,
+                                 metric.name,
+                                 metric.host,
+                                 args)
+
+    # A metric can define a custom timeout, otherwise we'll default to the RSV global
+    # settings for this value.  The custom timeout was added because the pigeon probe
+    # can take a long time to run (many times longer than the average metric)
+    job_timeout = metric.get_timeout()
+
+    original_environment = copy.copy(os.environ)
+    setup_job_environment(rsv, metric)
+
+    try:
+        (ret, out, err) = rsv.run_command(job, job_timeout)
+    except Sysutils.TimeoutError, err:
+        os.environ = original_environment
+        rsv.results.job_timed_out(metric, job, err)
+        return
+
+    os.environ = original_environment
+
+    if ret:
+        rsv.results.local_job_failed(metric, job, out, err)
+        return
+
+    parse_job_output(rsv, metric, out, err)
+    return
+
+
+def execute_grid_job(rsv, metric):
+    """ Execute a job using globus-job-run.  This will be replaced by Condor-G """
+
+    # Build the custom parameters to the script
+    args = metric.get_args_string()
+
     jobmanager = metric.config_get("jobmanager")
 
     if not jobmanager:
         rsv.log("CRITICAL", "ej1: jobmanager not defined in config")
         sys.exit(1)
 
-    #
+    # Anthony Tiradani uses extra RSL to get his jobs to run with priority at Fermi
+    # This is done by passing -x to globus-job-run
+    extra_globus_rsl = ""
+    if rsv.get_extra_globus_rsl():
+        extra_globus_rsl = "-x %s" % rsv.get_extra_globus_rsl()
+
+    job = "globus-job-run %s/jobmanager-%s %s -s %s -- -m %s -u %s %s" % (metric.host,
+                                                                          jobmanager,
+                                                                          extra_globus_rsl,
+                                                                          metric.executable,
+                                                                          metric.name,
+                                                                          metric.host,
+                                                                          args)
+
+    # A metric can define a custom timeout, otherwise we'll default to the RSV global
+    # settings for this value.  The custom timeout was added because the pigeon probe
+    # can take a long time to run (many times longer than the average metric)
+    job_timeout = metric.get_timeout()
+
+    original_environment = copy.copy(os.environ)
+    setup_job_environment(rsv, metric)
+
+    try:
+        (ret, out, err) = rsv.run_command(job, job_timeout)
+    except Sysutils.TimeoutError, err:
+        os.environ = original_environment
+        rsv.results.job_timed_out(metric, job, err)
+        return
+
+    os.environ = original_environment
+
+    if ret:
+        rsv.results.grid_job_failed(metric, job, out, err)
+
+    parse_job_output(rsv, metric, out, err)
+    return
+
+
+def execute_condor_g_job(rsv, metric):
+    """ Execute a remote job via Condor-G.  This is the preferred format so that we
+    can support both Globus and CREAM """
+
     # Build the custom parameters to the script
-    #
     args = metric.get_args_string()
 
-    #
-    # Set the environment for the job
-    #
-    rsv.log("INFO", "Setting up job environment:")
+    jobmanager = metric.config_get("jobmanager")
+
+    if not jobmanager:
+        rsv.log("CRITICAL", "ej1: jobmanager not defined in config")
+        sys.exit(1)
+
     original_environment = copy.copy(os.environ)
+    setup_job_environment(rsv, metric)
+
+    # Submit the job
+    condor = Condor.Condor(rsv)
+    # TODO - add extra RSL
+    (log_file, out_file, err_file) = condor.condor_g_submit(metric.host, jobmanager, metric.name, args)
+
+    os.environ = original_environment
+
+    if not log_file:
+        rsv.results.condor_g_submission_failed(metric)
+        return
+
+    # Monitor the job's log and watch for it to finish
+    keywords = ["return value", "error", "abort"]
+    job_timeout = metric.get_timeout() or rsv.config.get("rsv", "job-timeout")
+    utils = Sysutils.Sysutils(rsv)
+
+    try:
+        keyword = utils.watch_log(log_file, keywords, job_timeout)
+    except Sysutils.TimeoutError, err:
+        rsv.results.job_timed_out(metric, "condor-g submission", err)
+        return            
+
+    # Read the out and err from the files
+    out = utils.slurp(out_file)
+    err = utils.slurp(err_file)
+
+    ret = None
+    if keyword == "return value":
+        ret = 0
+    elif keyword == "abort":
+        rsv.results.condor_grid_job_aborted(metric, out, err)
+    elif keyword == "error":
+        rsv.results.condor_grid_job_failed(metric, out, err)
+
+    parse_job_output(rsv, metric, out, err)
+    return
+
+
+def setup_job_environment(rsv, metric):
+    """ Set the appropriate environment values that a metric expects """
+
+    rsv.log("INFO", "Setting up job environment:")
 
     env = metric.get_environment()
+
+    if not env:
+        rsv.log("INFO", "No environment setup declared", 4)
+        return
+    
     for var in env.keys():
         (action, value) = env[var]
         action = action.upper()
@@ -164,82 +320,7 @@ def execute_job(rsv, metric):
             if var in os.environ:
                 del os.environ[var]
 
-
-    #
-    # Build the command line for the job
-    #
-
-    execute_type = metric.config_get("execute").lower()
-    if execute_type == "local":
-        # Anthony Tiradani uses extra RSL to get his jobs to run with priority at Fermi
-        # This is done for old style metrics by passing --extra-globus-rsl.  For direct
-        # globus-job-run calls we need to add the -x flag (see below in the 'grid' section)
-        if metric.config_val("probe-spec", "v3") and rsv.get_extra_globus_rsl():
-            args += " --extra-globus-rsl %s" % rsv.get_extra_globus_rsl()
-            
-        job = "%s -m %s -u %s %s" % (metric.executable,
-                                     metric.name,
-                                     metric.host,
-                                     args)
-
-    elif execute_type == "grid":
-        # Anthony Tiradani uses extra RSL to get his jobs to run with priority at Fermi
-        # This is done by passing -x to globus-job-run
-        extra_globus_rsl = ""
-        if rsv.get_extra_globus_rsl():
-            extra_globus_rsl = "-x %s" % rsv.get_extra_globus_rsl()
-            
-        job = "globus-job-run %s/jobmanager-%s %s -s %s -- -m %s -u %s %s" % (metric.host,
-                                                                              jobmanager,
-                                                                              extra_globus_rsl,
-                                                                              metric.executable,
-                                                                              metric.name,
-                                                                              metric.host,
-                                                                              args)
-
-    elif execute_type == "condor-grid":
-        rsv.log("ERROR", "The condor-grid execute type is not yet implemented")
-        sys.exit(1)
-
-    else:
-        rsv.log("ERROR", "The execute type of the probe is unknown: '%s'" % execute_type)
-        sys.exit(1)
-
-    # A metric can define a custom timeout, otherwise we'll default to the RSV global
-    # settings for this value.  The custom timeout was added because the pigeon probe
-    # can take a long time to run (many times longer than the average metric)
-    job_timeout = metric.get_timeout()
-
-    try:
-        (ret, out, err) = rsv.run_command(job, job_timeout)
-    except Sysutils.TimeoutError, err:
-        os.environ = original_environment
-        rsv.results.job_timed_out(metric, job, err)
-        return
-
-    #
-    # Restore the environment
-    # 
-    os.environ = original_environment
-
-
-    #
-    # Handle the output
-    #
-    if ret:
-        if metric.config_val("execute", "local"):
-            rsv.results.local_job_failed(metric, job, out, err)
-        elif metric.config_val("execute", "grid"):
-            rsv.results.grid_job_failed(metric, job, out, err)
-        elif metric.config_val("execute", "condor-grid"):
-            rsv.results.condor_grid_job_failed(metric, job, out, err)
-        return
-
-    parse_job_output(rsv, metric, out, err)
-
     return
-
-
 
 def main(rsv, options, metrics):
     """ Main subroutine: directs program flow """
