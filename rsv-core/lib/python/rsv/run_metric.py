@@ -237,22 +237,13 @@ def execute_condor_g_job(rsv, metric):
     """ Execute a remote job via Condor-G.  This is the preferred format so that we
     can support both Globus and CREAM """
 
-    # Build the custom parameters to the script
-    args = metric.get_args_string()
-
-    jobmanager = metric.config_get("jobmanager")
-
-    if not jobmanager:
-        rsv.log("CRITICAL", "ej1: jobmanager not defined in config")
-        sys.exit(1)
-
     original_environment = copy.copy(os.environ)
     setup_job_environment(rsv, metric)
 
     # Submit the job
     condor = Condor.Condor(rsv)
     # TODO - add extra RSL
-    (log_file, out_file, err_file) = condor.condor_g_submit(metric.host, jobmanager, metric.name, args)
+    (log_file, out_file, err_file) = condor.condor_g_submit(metric)
 
     os.environ = original_environment
 

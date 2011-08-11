@@ -221,36 +221,45 @@ class Condor:
         return True
 
 
-    def condor_g_submit(self, host, jobmanager, metric, args):
+    def condor_g_submit(self, metric):
         """ Form a grid submit file and submit the job to Condor """
 
         # Make a temporary directory to store submit file, input, output, and log
         parent_dir = os.path.join("/", "var", "tmp", "rsv")
         dir = tempfile.mkdtemp(prefix="condor_g-", dir=parent_dir)
         self.rsv.log("INFO", "Condor-G working directory: %s" % dir)
+        
+        log = os.path.join(dir, "%s.log" % metric.name)
+        out = os.path.join(dir, "%s.out" % metric.name)
+        err = os.path.join(dir, "%s.err" % metric.name)
 
-        metric_path = os.path.join("/", "usr", "libexec", "rsv", "metrics", metric)
+        # This is Globus specific.  When we support CREAM we need to modify this section
+        jobmanager = metric.config_get("jobmanager")
+        if not jobmanager:
+            rsv.log("CRITICAL", "ej1: jobmanager not defined in config")
+            sys.exit(1)
 
-        log = os.path.join(dir, "%s.log" % metric)
-        out = os.path.join(dir, "%s.out" % metric)
-        err = os.path.join(dir, "%s.err" % metric)
-
+        # Build the submit file
         submit_file = "Universe = grid\n"
-        submit_file += "grid_resource = gt2 %s/jobmanager-%s\n\n" % (host, jobmanager)
+        submit_file += "grid_resource = gt2 %s/jobmanager-%s\n\n" % (metric.host, jobmanager)
 
+        metric_path = os.path.join("/", "usr", "libexec", "rsv", "metrics", metric.name)
         submit_file += "Executable = %s\n" % metric_path
-        submit_file += "Arguments  = %s\n" % args
-        # TODO: transfer the metrics library.  Where should it be declared?
-        #submit_file += "transfer_input_files = %s\n" % (RSVMetricsLib)
+        submit_file += "Arguments  = %s\n" % metric.get_args_string()
+
+        transfer_files = metric.get_transfer_files()
+        if transfer_files:
+            submit_file += "transfer_input_files = %s\n" % transfer_files
+            
         submit_file += "Log = %s\n" % log
         submit_file += "Output = %s\n" % out
         submit_file += "Error = %s\n\n" % err
 
-        #submit_file += "transfer_output_files = <list your files here>\n\n"
+        submit_file += "WhenToTransferOutput = ON_EXIT_OR_EVICT\n\n"
 
         submit_file += "Queue\n"
 
-        if self.submit_job(submit_file, metric, dir=dir, remove=0):
+        if self.submit_job(submit_file, metric.name, dir=dir, remove=0):
             return (log, out, err)
         else:
             return (False, False, False)

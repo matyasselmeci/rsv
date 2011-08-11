@@ -314,8 +314,20 @@ class Metric:
                 pass
 
         return string
-        
-        
+
+
+    def get_transfer_files(self):
+        """ Return the list of required files to transfer for a probe.  This
+        is only """
+        try:
+            transfer_files = self.config.get(self.name, "transfer-files")
+            self.rsv.log("INFO", "List of files to transfer: %s" % transfer_files)
+        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+            self.rsv.log("INFO", "No files to transfer are declared.")
+            return None
+
+        return transfer_files
+
 
     def dump_config(self):
         """ Print out all config information for this metric/host pair """
