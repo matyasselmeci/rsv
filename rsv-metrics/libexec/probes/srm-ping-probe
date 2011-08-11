@@ -29,7 +29,7 @@ if(not $OPT_SRM_WEBSERVICE_PATH) {
     exit 1; # Probe was invoked wrong, so give an error on exit status
 }
 
-find_binary("srm-ping");
+find_binaries("srm-ping");
 
 # TODO - might need '-x509_user_proxy=' included in here
 my $srm_ping_cmd = "srm-ping srm://$OPT_HOSTNAME -retry_num=0 -debug -$OPT_SRM_PROTOCOL_VERSION -webservice_path=$OPT_SRM_WEBSERVICE_PATH 2>&1";
