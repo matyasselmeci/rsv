@@ -3,8 +3,6 @@
 use strict;
 use warnings;
 use Getopt::Long;
-
-use lib qw(/usr/libexec/rsv/probes);
 use RSVMetric;
 
 print_output_header();

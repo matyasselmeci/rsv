@@ -1,7 +1,8 @@
 [org.osg.general.osg-version]
 default-cron-interval = 47 18 * * *
 
-execute = grid
+execute = condor-grid
+transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
 service-type = OSG-CE
 output-format = brief
 enable-by-default = true
