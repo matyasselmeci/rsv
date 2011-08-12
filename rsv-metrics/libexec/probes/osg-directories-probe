@@ -9,10 +9,13 @@ print_output_header();
 # Define the directories we will examine
 my %dirs;
 
-# OSG_LOCATION is obviously required and critical
-$dirs{OSG_LOCATION}{isCritical} = 1;
-$dirs{OSG_LOCATION}{isRequired} = 1;
-$dirs{OSG_LOCATION}{permission} = "7[75]5";
+# OSG 3.0+ CEs will not have OSG_LOCATION defined
+if(defined $ENV{OSG_LOCATION}) {
+    # OSG_LOCATION is obviously required and critical
+    $dirs{OSG_LOCATION}{isCritical} = 1;
+    $dirs{OSG_LOCATION}{isRequired} = 1;
+    $dirs{OSG_LOCATION}{permission} = "7[75]5";
+}
 
 # OSG_APP is required, but we'll just give a warning if something is wrong
 $dirs{OSG_APP}{isCritical} = 0;
