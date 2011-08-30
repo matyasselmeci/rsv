@@ -29,7 +29,7 @@ class Host:
 
         self.config_file = os.path.join(self.conf_dir, self.host + ".conf")
         if not os.path.exists(self.config_file):
-            self.rsv.log("ERROR", "Host config file '%s' does not exist" % self.config_file)
+            self.rsv.log("INFO", "Host config file '%s' does not exist" % self.config_file)
         else:
             try:
                 self.config.read(self.config_file)
