@@ -221,7 +221,7 @@ class Condor:
         return True
 
 
-    def condor_g_submit(self, metric):
+    def condor_g_submit(self, metric, attrs=None):
         """ Form a grid submit file and submit the job to Condor """
 
         # Make a temporary directory to store submit file, input, output, and log
@@ -239,13 +239,20 @@ class Condor:
             rsv.log("CRITICAL", "ej1: jobmanager not defined in config")
             sys.exit(1)
 
+        #
         # Build the submit file
+        #
         submit_file = "Universe = grid\n"
         submit_file += "grid_resource = gt2 %s/jobmanager-%s\n\n" % (metric.host, jobmanager)
 
         metric_path = os.path.join("/", "usr", "libexec", "rsv", "metrics", metric.name)
         submit_file += "Executable = %s\n" % metric_path
         submit_file += "Arguments  = %s\n" % metric.get_args_string()
+
+        # Add in custom attributes
+        if attrs:
+            for key in attrs.keys():
+                submit_file += "%s = %s\n" % (key, attrs[key])
 
         transfer_files = metric.get_transfer_files()
         if transfer_files:

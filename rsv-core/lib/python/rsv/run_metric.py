@@ -184,7 +184,8 @@ def execute_local_job(rsv, metric):
 
 
 def execute_grid_job(rsv, metric):
-    """ Execute a job using globus-job-run.  This will be replaced by Condor-G """
+    """ Execute a job using globus-job-run.  This is an old method and we will likely
+    replace all uses of this with Condor-G in the future. """
 
     # Build the custom parameters to the script
     args = metric.get_args_string()
@@ -242,8 +243,12 @@ def execute_condor_g_job(rsv, metric):
 
     # Submit the job
     condor = Condor.Condor(rsv)
-    # TODO - add extra RSL
-    (log_file, out_file, err_file) = condor.condor_g_submit(metric)
+
+    attrs = {}
+    if rsv.get_extra_globus_rsl():
+        attrs["globus_rsl"] = rsv.get_extra_globus_rsl()
+
+    (log_file, out_file, err_file) = condor.condor_g_submit(metric, attrs)
 
     os.environ = original_environment
 
