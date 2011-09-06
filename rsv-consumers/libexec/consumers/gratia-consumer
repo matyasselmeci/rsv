@@ -93,8 +93,8 @@ def load_gratia_libraries():
     try:
         global Gratia
         global Metric
-        import Gratia
-        import gratia.metric as Metric
+        import gratia.common.Gratia as Gratia
+        import gratia.metric.Metric as Metric
     except ImportError, err:
         msg = "ERROR: Could not import Gratia python libraries: %s\n" % err
         msg += "Contents of sys.path:\n"
