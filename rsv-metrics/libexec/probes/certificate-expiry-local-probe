@@ -1,141 +1,72 @@
 #!/usr/bin/env perl
 
-###############################################################################
-##
-## Copyright 2009, The Trustees of Indiana University. 
-##
-## Open Science Grid Operations Team, Indiana University
-## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
-## Last modified by Arvind Gopu (2009-06-17) 
-##
-##
-## This Perl script tests if the host/container/http cert on local host
-##  is still valid
-## Type ./certificate-expiry-local-probe -h for more information
-##
-##
-## REQUIRES
-##  'RSVProbeBase.pm'
-##
-##
-################################################################################
-
-######## Perl modules to use ######################################
 use strict;
-use RSVProbeBase;
+use warnings;
+use Getopt::Long;
+use RSVMetric;
 
-######## Retrieve Global variables ################################
-## And alias to RSV::Probe_Base variables
-our %o;         *o         = \%RSVProbeBase::o;      
-our %metric;    *metric    = \%RSVProbeBase::metric;
+my $warning_hours = 168;
+my $warning_seconds = $warning_hours * 60 * 60;
 
-&RSVProbeBase::Init();
-&RSVProbeBase::Run();
+my $OPT_METRIC;
+my $OPT_HOST;
 
-################################################################################
-## Main Program ends ##
-################################################################################
+print_output_header();
 
+GetOptions("m=s"        => \$OPT_METRIC,
+           "u=s"        => \$OPT_HOST,
+           "help|usage" => \&usage);
 
-################################################################################
-## Local Sub-Routines
-################################################################################
-
-sub Init {
-
-    &RSVProbeBase::Set_MultiMetric ("true");
-
-    ## Pass "status" or "performance" depending on metric type
-    &RSVProbeBase::Set_MetricType ("status");
-    &RSVProbeBase::Set_ServiceType ("OSG-Local-Monitor");
-    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 0.6.0");
-    &RSVProbeBase::Set_ProbeType ("OSG-Local-Monitor");
-    &RSVProbeBase::Set_ProbeRevision ('3.0');
-    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
-
-    ## Flag this as a local probe
-    &RSVProbeBase::Set_LocalProbe();
-
-    ## Basic intro for the probe; This string will be used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpIntro 
-	("IMPORTANT NOTE: This is a local probe that will work on the host it\'s ".
-	 "run on.\n\nProbe to verify if the certificate specified is expired or is ".
-	 "expiring soon.\n Can check host cert, container cert and http cert.\n\n".
-	 "IMPORTANT NOTE 2: This probe can test for expiry of different certificates;\n".
-	 " so it is REQUIRED to specify a metric; refer to metric names shown below or".
-	 " \n type $0 -m all -l to retrieve all metric names.\n");
-    ## Additional options to print in Usage info used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpOptions 
-	("Valid values include: all,\n".
-	 "                                    org.osg.local.hostcert-expiry,\n".
-	 "                                    org.osg.local.containercert-expiry,\n".
-	 "                                    org.osg.local.httpcert-expiry\n".
-	 " [--host-cert-file <file>]        Host certificate to check \n".
-	 " [--containter-cert-file <file>]  Container certificate to check \n".
-	 " [--http-cert-file <file>]        HTTP certificate to check \n".
-	 "                                   (Defaults defined in perl module\n".
-	 "                                    RSVProbeBase.pm)\n".
-	 " [--warning-hours <\# hours>]      Threshold value to use when checking certs");
-
-    ## Uncomment if you want additional command line options
-    &RSVProbeBase::Extra_CLI_Option ("host-cert-file=s","org.osg.local.hostcert-expiry");
-    &RSVProbeBase::Extra_CLI_Option ("containter-cert-file=s","org.osg.local.containercert-expiry");
-    &RSVProbeBase::Extra_CLI_Option ("http-cert-file=s","org.osg.local.httpcert-expiry");
-    &RSVProbeBase::Extra_CLI_Option ("warning-hours=i","certWarningHours");
-
-    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
-    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+my $openssl = which("openssl");
+if(not $openssl) {
+    print "CRITICAL\n";
+    print "openssl is not in PATH\n";
+    dump_debug();
+    exit 0;
 }
 
+my %certs = ( "org.osg.local.hostcert-expiry" => "/etc/grid-security/hostcert.pem",
+              "org.osg.local.httpcert-expiry" => "/etc/grid-security/http/httpcert.pem",
+              #"org.osg.local.rsvcert-expiry"  => "/etc/grid-security/rsvcert.pem",
+);
 
-sub Run {
-    ##### Begin special section since this is a multi metric probe ##### 
-    ## Process some simple options, and exit if they're specified after acting
-    &Process_Multi_Metrics ();
-    ##### End special section since this is a multi metric probe ##### 
+my $cert = $certs{$OPT_METRIC};
 
-    &RSVProbeBase::Test_Certificate ();
+if(!-e $cert) {
+    print "CRITICAL\n";
+    print "The certificate '$cert' does not exist or your RSV user does not have permission to read it.\n";
+    exit 0;
 }
 
-## Main Program ends ##
-################################################################################
+my $openssl_cmd = "openssl x509 -in $cert -noout -checkend $warning_seconds 2>&1";
+my $out = `$openssl_cmd`;
+my $ret = $? >> 8;
 
+if($ret == 0) {
+    print "OK\n";
+    print "Certificate '$cert' is valid for at least $warning_hours more hours.\n";
+    exit 0;
+}
+elsif ($ret == 1) {
+    my $valid = `openssl x509 -in $cert -noout -enddate`;
+    chomp $valid;
 
-################################################################################
-###### Local Sub routines begin ###########
-################################################################################
-
-################################################################################
-##
-## SUB-ROUTINE
-##  Process_Multi_Metrics
-##
-## ARGUMENTS: 
-##  None
-##
-## CALLS:
-##  Process_Informational_Arguments ()
-##
-## OUTPUT: 
-##  None
-##
-## RETURNS:
-##  None
-## 
-################################################################################
-
-sub Process_Multi_Metrics {
-    ## Do above step for each metric possible
-    if (defined ($o{'listmetric'})) {
-	foreach my $metric_name (sort keys %{$o{'localCertificates'}}) {
-	    &RSVProbeBase::Set_MetricName($metric_name);
-	    if (-r $o{'localCertificates'}{$metric_name}) {
-		&RSVProbeBase::Set_EnableByDefault("true");
-	    } else { &RSVProbeBase::Set_EnableByDefault("false"); } 
-	    &RSVProbeBase::Set_MetricInterval (int(rand(60)). " 1 * * *");
-	    &RSVProbeBase::List_Summary_Metric();
-	}
-	exit 0;
-    } 
+    print "CRITICAL\n";
+    print "Certificate '$cert' is expiring/expired.  It is valid until: $valid\n";
+    exit 0;
+}
+else {
+    print "CRITICAL\n";
+    print "Error running openssl command ($openssl_cmd).  Output:\n$out\n";
+    dump_debug();
+    exit 0;
 }
 
+exit 0;
+
+
+sub usage {
+    print STDERR "Usage: $0\n";
+    print STDERR "\t-m <metric>\n";
+    exit 1;
+}
