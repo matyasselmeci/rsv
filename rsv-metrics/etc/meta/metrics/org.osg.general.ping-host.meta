@@ -9,3 +9,4 @@ enable-by-default = true
 description = Check if a remote host is responding to pings.
 
 [org.osg.general.ping-host env]
+PERL5LIB = PREPEND | /usr/libexec/rsv/probes
