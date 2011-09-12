@@ -119,12 +119,18 @@ sub write_data {
     }
 
     # Check that we got the necessary attributes
-    foreach my $attribute (qw/metricName metricStatus serviceURI timestamp/) {
+    foreach my $attribute (qw/metricName metricStatus timestamp/) {
         if(not defined($info{$attribute})) {
             debug_print("ERROR: In file '$file', missing attribute $attribute.  Skipping record.");
             debug_print("Full record:\n$data");
             return;
         }
+    }
+
+    if(!defined($info{hostName}) and !(defined($info{serviceURI}) and defined($info{gatheredAt}))) {
+        debug_print("ERROR: Missing either hostName or (serviceURI + gatheredAt)");
+        debug_print("Full record:\n$data");
+        return;
     }
    
     ########################
