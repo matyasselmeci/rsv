@@ -27,6 +27,8 @@ if(not $openssl) {
 
 my %certs = ( "org.osg.local.hostcert-expiry" => "/etc/grid-security/hostcert.pem",
               "org.osg.local.httpcert-expiry" => "/etc/grid-security/http/httpcert.pem",
+              # TODO - add rsvcert expiry?  Need to look at two locations, 
+              # /etc/grid-security/(rsv)?/rsvcert.pem
               #"org.osg.local.rsvcert-expiry"  => "/etc/grid-security/rsvcert.pem",
 );
 
