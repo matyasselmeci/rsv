@@ -8,3 +8,4 @@ enable-by-default = true
 
 
 [org.osg.globus.gridftp-simple env]
+PERL5LIB = PREPEND | /usr/libexec/rsv/probes
