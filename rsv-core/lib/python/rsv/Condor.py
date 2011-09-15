@@ -182,7 +182,15 @@ class Condor:
             self.rsv.log("ERROR", "Problem submitting job to condor.  Command output:\n%s" % out)
             return False
 
-        return True
+        # Determine the job cluster ID
+        match = re.search("submitted to cluster (\d+)\.", out)
+        if match:
+            job_id = match.group(1)
+            self.rsv.log("DEBUG", "Condor job cluster ID: %s" % job_id)
+            return job_id
+        else:
+            self.rsv.log("ERROR", "Could not determine job cluster ID from output:\n%s" % out)
+            return False
 
 
     def stop_jobs(self, constraint):
@@ -266,11 +274,27 @@ class Condor:
 
         submit_file += "Queue\n"
 
-        if self.submit_job(submit_file, metric.name, dir=dir, remove=0):
-            return (log, out, err)
+        job_id = self.submit_job(submit_file, metric.name, dir=dir, remove=0)
+        if job_id:
+            return (log, out, err, job_id)
         else:
             return (False, False, False)
 
+
+    def condor_g_remove(self, jobids):
+        """ Remove the supplied job """
+
+        if type(jobids).__name__ != "list":
+            jobids = [jobids]
+
+        exprs = map(lambda id: "ClusterId==%s" % id, jobids)
+        constraint = " || ".join(exprs)
+        if not self.stop_jobs(constraint):
+            self.rsv.log("WARNING", "Could not stop Condor-G jobs.  Constraint: %s" % constraint)
+            return False
+
+        return True
+        
 
     def build_metric_submit_file(self, metric):
         """ Create a submission file for a metric """

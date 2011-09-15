@@ -249,7 +249,7 @@ def execute_condor_g_job(rsv, metric):
     if rsv.get_extra_globus_rsl():
         attrs["globus_rsl"] = rsv.get_extra_globus_rsl()
 
-    (log_file, out_file, err_file) = condor.condor_g_submit(metric, attrs)
+    (log_file, out_file, err_file, jobid) = condor.condor_g_submit(metric, attrs)
 
     os.environ = original_environment
 
@@ -265,6 +265,7 @@ def execute_condor_g_job(rsv, metric):
     try:
         keyword = utils.watch_log(log_file, keywords, job_timeout)
     except Sysutils.TimeoutError, err:
+        condor.condor_g_remove(jobid)
         rsv.results.job_timed_out(metric, "condor-g submission", err)
         return            
 
@@ -280,8 +281,10 @@ def execute_condor_g_job(rsv, metric):
     elif keyword == "error":
         rsv.results.condor_grid_job_failed(metric, out, err)
     elif keyword == "Globus job submission failed":
+        condor.condor_g_remove(jobid)
         rsv.results.condor_g_submission_authentication_failure(metric)
     elif keyword == "Detected Down Globus Resource":
+        condor.condor_g_remove(jobid)
         rsv.results.condor_g_remote_gatekeeper_down(metric)
 
     parse_job_output(rsv, metric, out, err)
