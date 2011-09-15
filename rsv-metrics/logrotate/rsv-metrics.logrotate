@@ -1,0 +1,18 @@
+# Rotate daily
+weekly
+
+# Keep a week's worth
+rotate 2
+
+# Compress old files
+compress
+compressoptions -9f
+
+# Truncate, instead of moving, files to avoid problems with apps
+copytruncate
+
+# Just ignore it if they're not there
+missingok
+
+/var/log/rsv/metrics/*.log {
+}
