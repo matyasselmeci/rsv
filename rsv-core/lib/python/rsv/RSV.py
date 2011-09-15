@@ -22,7 +22,7 @@ class RSV:
     of RSV.  This could be replaced with a singleton pattern to reduce the need
     to pass the instance around in functions. """
 
-    consumer_config_file = None
+    consumer_config_file = os.path.join("/", "etc", "rsv", "consumers.conf")
     consumer_config = None
     sysutils = None
     results = None
@@ -71,7 +71,6 @@ class RSV:
 
     def setup_consumer_config(self):
         """ Load configuration """
-        self.consumer_config_file = os.path.join("/", "etc", "rsv", "consumers.conf")
         self.consumer_config = ConfigParser.RawConfigParser()
         self.consumer_config.optionxform = str # make keys case-insensitive
         self.load_config_file(self.consumer_config, self.consumer_config_file, required=0)
@@ -463,6 +462,22 @@ class RSV:
         return self.sysutils.system(command, timeout)
 
 
+    def use_condor_g(self):
+        """ Return True or False depending on if we should submit remote jobs using
+        Condor-G.  We will default to true because it is the better behavior. """
+
+        try:
+            value = self.config.get("rsv", "use_condor_g")
+            if value.lower() == "true":
+                return True
+            else:
+                return False
+        except ConfigParser.NoOptionError:
+            self.log("INFO", "use_condor_g is not defined in Condor config file.  Defaulting to true.")
+            return True
+
+        return True
+
 # End of RSV class
 
 
@@ -561,3 +576,4 @@ def validate_config(rsv):
                 "availability statistics.")
 
     return
+    

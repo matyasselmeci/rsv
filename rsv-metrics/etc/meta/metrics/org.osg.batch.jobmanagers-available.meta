@@ -1,7 +1,7 @@
 [org.osg.batch.jobmanagers-available]
 default-cron-interval = 59 4 * * *
 
-execute = condor-grid
+execute = grid
 transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
 service-type = OSG-CE
 output-format = brief

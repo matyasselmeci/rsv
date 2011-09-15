@@ -130,11 +130,12 @@ def execute_job(rsv, metric):
         rsv.log("INFO", "Executing job locally")
         execute_local_job(rsv, metric)
     elif execute_type == "grid":
-        rsv.log("INFO", "Executing job remotely using globus-job-run")
-        execute_grid_job(rsv, metric)
-    elif execute_type == "condor-grid":
-        rsv.log("INFO", "Executing job remotely using Condor-G")
-        execute_condor_g_job(rsv, metric)
+        if rsv.use_condor_g():
+            rsv.log("INFO", "Executing job remotely using Condor-G")
+            execute_condor_g_job(rsv, metric)
+        else:
+            rsv.log("INFO", "Executing job remotely using globus-job-run")
+            execute_grid_job(rsv, metric)
     else:
         rsv.log("ERROR", "The execute type of the probe is unknown: '%s'" % execute_type)
         sys.exit(1)
