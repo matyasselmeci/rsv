@@ -89,19 +89,25 @@ def parse_job_output_brief(rsv, metric, stdout, stderr):
     """ Parse the "brief" job output.  This format consists of just a keyword, status
     and details.  Here is an example:
     RSV BRIEF RESULTS:
+    org.osg.general.ping-host
+    osg-edu.cs.wisc.edu
     OK
     More information, which can
     be on multiple lines.
     """
 
+    host = None
+    metric = None
     status = None
     details = None
 
     lines = stdout.split("\n")
 
     if lines[0] == "RSV BRIEF RESULTS:":
-        status = lines[1].strip()
-        details = "\n".join(lines[2:])
+        metric = lines[1].strip()
+        host = lines[2].strip()
+        status = lines[3].strip()
+        details = "\n".join(lines[4:])
 
     if status and details:
         rsv.results.brief_result(metric, status, details, stderr)
@@ -263,7 +269,7 @@ def execute_condor_g_job(rsv, metric):
     utils = Sysutils.Sysutils(rsv)
 
     try:
-        keyword = utils.watch_log(log_file, keywords, job_timeout)
+        (keyword, log_contents) = utils.watch_log(log_file, keywords, job_timeout)
     except Sysutils.TimeoutError, err:
         condor.condor_g_remove(jobid)
         rsv.results.job_timed_out(metric, "condor-g submission", err)
@@ -284,7 +290,7 @@ def execute_condor_g_job(rsv, metric):
         return
     elif keyword == "Globus job submission failed":
         condor.condor_g_remove(jobid)
-        rsv.results.condor_g_submission_authentication_failure(metric)
+        rsv.results.condor_g_submission_failed(metric, log_contents)
         return
     elif keyword == "Detected Down Globus Resource":
         condor.condor_g_remove(jobid)

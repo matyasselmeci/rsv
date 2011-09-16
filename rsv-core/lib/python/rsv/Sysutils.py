@@ -179,11 +179,11 @@ class Sysutils:
 
                 for keyword in keywords:
                     if re.search(keyword, contents):
-                        return keyword
+                        return (keyword, contents)
 
             time.sleep(sleep_interval)
         
-        return
+        return (None, None)
     
 
     def slurp(self, file, must_exist=0):

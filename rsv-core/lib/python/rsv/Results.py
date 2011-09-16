@@ -360,19 +360,13 @@ class Results:
         self.brief_result(metric, status, data, stderr="")
 
 
-    def condor_g_submission_failed(self, metric):
+    def condor_g_submission_failed(self, metric, details=None):
         """ Condor-G submission failed """
         status = "CRITICAL"
         data   = "Condor-G submission failed to remote host\n\n"
 
-        self.brief_result(metric, status, data, stderr="")
-
-
-    def condor_g_submission_authentication_failure(self, metric):
-        """ Condor-G submission failed due to authentication failure """
-        status = "CRITICAL"
-        data   = "Condor-G submission failed due to an authentication failure\n"
-        data  += "Make sure that your RSV user credentials are accepted by the remote gatekeeper\n\n"
+        if details:
+            data += "Condor log file:\n%s" % details
 
         self.brief_result(metric, status, data, stderr="")
 
