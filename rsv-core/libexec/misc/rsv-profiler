@@ -9,16 +9,7 @@ if [ ! -w $dir ]; then
     exit 1
 fi
 
-if [ "x${VDT_LOCATION}" = "x" ]
-then
-    echo "VDT_LOCATION is not defined. You need to source setup.sh or "
-    echo "setup.csh before you can run the rsv-profiler."
-    exit 1
-fi
-
-cd $VDT_LOCATION
-
-filedirname=rsv-profiler.files
+filedirname=rsv-profiler
 export rsvfiledir="$dir/$filedirname"
 if [ -e $rsvfiledir ]; then
   rm -fr $rsvfiledir
@@ -47,9 +38,6 @@ echo ""                 >> $rsvlog
 echo "current user:"    >> $rsvlog
 /usr/bin/whoami         >> $rsvlog
 echo ""                 >> $rsvlog
-echo "vdt-version:"     >> $rsvlog
-vdt/bin/vdt-version     >> $rsvlog
-echo ""                 >> $rsvlog
 echo ""                 >> $rsvlog
 
 
@@ -59,23 +47,15 @@ echo ""                 >> $rsvlog
 echo "Condor information" >> $rsvlog
 
 echo "Condor version:" >> $rsvlog
-if [ -r condor-cron/wrappers/condor_cron_version ]; then 
-  condor-cron/wrappers/condor_cron_version  >> $rsvlog 2>&1
-else
-  echo "cannot find condor_cron_version"    >> $rsvlog
-fi
-echo ""                                     >> $rsvlog
+condor_cron_version    >> $rsvlog 2>&1
+echo ""                >> $rsvlog
 
 
 echo "condor_cron_q:" >> $rsvlog
-if [ -r condor-cron/wrappers/condor_cron_q ]; then 
-  condor-cron/wrappers/condor_cron_q  >> $rsvlog 2>&1
-else
-  echo "cannot find condor_cron_q"    >> $rsvlog
-fi
-echo ""                               >> $rsvlog
+condor_cron_q         >> $rsvlog 2>&1
+echo ""               >> $rsvlog
 
-condor_log_dir=`condor-cron/wrappers/condor_cron_config_val log`
+condor_log_dir=`condor_cron_config_val log`
 echo "Trying to copy condor logs from $condor_log_dir:" >> $rsvlog
 if [ -d $condor_log_dir ]; then
   cp -p $condor_log_dir/*Log $rsvfiledir
@@ -85,22 +65,12 @@ else
 fi
 
 echo "Trying to copy condor_conf file..." >> $rsvlog
-if [ -r condor-cron/etc/condor_config ]; then
-  cp condor-cron/etc/condor_config $rsvfiledir
+if [ -r /etc/condor-cron/condor_config ]; then
+  cp /etc/condor-cron/condor_config $rsvfiledir
   echo "copied condor_config"      >> $rsvlog
 else
   echo "cannot find condor_config" >> $rsvlog
 fi
-
-echo "Trying to copy local condor config file..." >> $rsvlog
-local_config=`condor-cron/wrappers/condor_cron_config_val LOCAL_CONFIG_FILE`
-if [ -r $local_config ]; then
-  cp $local_config $rsvfiledir
-  echo "copied local config file $local_config"    >> $rsvlog
-else
-  echo "cannot find local condor-cron config file" >> $rsvlog
-fi
-
 
 
 
@@ -114,20 +84,20 @@ echo "" >> $rsvlog
 echo "" >> $rsvlog
 
 echo "rsv-control -l" >> $rsvlog
-osg-rsv/bin/rsv-control -l >> $rsvlog 2>&1
+rsv-control -l >> $rsvlog 2>&1
 echo "" >>$rsvlog
 
 echo "rsv-control -j" >> $rsvlog
-osg-rsv/bin/rsv-control -j >> $rsvlog 2>&1
+rsv-control -j >> $rsvlog 2>&1
 echo "" >>$rsvlog
 
 echo "rsv-control --verify" >> $rsvlog
-osg-rsv/bin/rsv-control --verify >> $rsvlog 2>&1
+rsv-control --verify >> $rsvlog 2>&1
 echo "" >>$rsvlog
 
 echo "Trying to copy etc directory..." >> $rsvlog
-if [ -e osg-rsv/etc ]; then
-  cp -pr osg-rsv/etc/ $rsvfiledir
+if [ -e /etc/rsv ]; then
+  cp -pr /etc/rsv $rsvfiledir
   echo "copying etc dir"     >> $rsvlog
 else
   echo "cannot find etc dir" >> $rsvlog
@@ -136,14 +106,14 @@ echo "" >> $rsvlog
 
 # See if there is anything in this directory
 echo "Failed gratia directory:" >> $rsvlog
-ls osg-rsv/output/failed-gratia-records >> $rsvlog 2>&1
+ls /var/spool/rsv/failed-gratia-records/ >> $rsvlog 2>&1
 echo "" >> $rsvlog
 
 # Attempt to see if proxy exists
 echo "Looking for RSV proxy..." >> $rsvlog
-proxy=`grep service-proxy osg-rsv/etc/rsv.conf | perl -e '$t = <STDIN>; if($t =~ /^\s*service-proxy\s*=\s*(\S+)/) { print "$1\n" }'`
+proxy=`grep service-proxy /etc/rsv/rsv.conf | perl -e '$t = <STDIN>; if($t =~ /^\s*service-proxy\s*=\s*(\S+)/) { print "$1\n" }'`
 if [ "x${proxy}" = "x" ]; then
-  proxy=`grep proxy-file osg-rsv/etc/rsv.conf | perl -e '$t = <STDIN>; if($t =~ /^\s*proxy-file\s*=\s*(\S+)/) { print "$1\n" }'`
+  proxy=`grep proxy-file /etc/rsv/rsv.conf | perl -e '$t = <STDIN>; if($t =~ /^\s*proxy-file\s*=\s*(\S+)/) { print "$1\n" }'`
   if [ "x${proxy}" = "x" ]; then
     echo "Cannot figure out where proxy is.  Will run `ls -l /tmp/x509*` instead." >> $rsvlog
     ls -l /tmp/x509* >> $rsvlog
@@ -159,21 +129,21 @@ echo "" >> $rsvlog
 
 # Get proxy information
 id=`id -u`
-user=`grep user osg-rsv/etc/rsv.conf | perl -e '$t = <STDIN>; if($t =~ /^\s*user\s*=\s*(\S+)/) { print "$1\n" }'`
+user=`grep user /etc/rsv/rsv.conf | perl -e '$t = <STDIN>; if($t =~ /^\s*user\s*=\s*(\S+)/) { print "$1\n" }'`
 if [ ${id} == "0" ]; then
   echo "grid-proxy-info:" >> $rsvlog
-  su -c "X509_USER_PROXY=$proxy globus/bin/grid-proxy-info" $user >> $rsvlog 2>&1
+  su -c "X509_USER_PROXY=$proxy grid-proxy-info" $user >> $rsvlog 2>&1
 else
   echo "Not root, might not be able to run grid-proxy-info but still trying..." >> $rsvlog
-  X509_USER_PROXY=$proxy globus/bin/grid-proxy-info >> $rsvlog 2>&1
+  X509_USER_PROXY=$proxy grid-proxy-info >> $rsvlog 2>&1
 fi
 
 # Get config.ini
-if [ -e osg/etc/config.ini ]; then
-  cp osg/etc/config.ini $rsvfiledir
-  echo "copying config.ini" >> $rsvlog
+if [ -e /etc/osg/config.d/30-rsv.ini ]; then
+  cp /etc/osg/config.d/30-rsv.ini $rsvfiledir
+  echo "copying 30-rsv.ini" >> $rsvlog
 else
-  echo "could not find config.ini" >> $rsvlog
+  echo "could not find 30-rsv.ini" >> $rsvlog
 fi
 echo "" >> $rsvlog
 
@@ -182,8 +152,8 @@ echo "" >> $rsvlog
 echo "Getting RSV probe and consumer logs:" >> $rsvlog
 mkdir $rsvfiledir/logs
 mkdir $rsvfiledir/logs/consumers $rsvfiledir/logs/probes
-perl -e 'foreach $file (`ls -1 osg-rsv/logs/probes/`) { chomp($file); system("echo $file >> $ENV{rsvlog}"); system("tail -1000 osg-rsv/logs/probes/$file > $ENV{rsvfiledir}/logs/$file") }'
-perl -e 'foreach $file (`ls -1 osg-rsv/logs/consumers/`) { chomp($file); system("echo $file >> $ENV{rsvlog}"); system("tail -1000 osg-rsv/logs/consumers/$file > $ENV{rsvfiledir}/logs/$file") }'
+perl -e 'foreach $file (`ls -1 /var/log/rsv/metrics/`) { chomp($file); system("echo $file >> $ENV{rsvlog}"); system("tail -1000 /var/log/rsv/metrics/$file > $ENV{rsvfiledir}/logs/$file") }'
+perl -e 'foreach $file (`ls -1 /var/log/rsv/consumers/`) { chomp($file); system("echo $file >> $ENV{rsvlog}"); system("tail -1000 /var/log/rsv/consumers/$file > $ENV{rsvfiledir}/logs/$file") }'
 echo "" >> $rsvlog
 
 echo "Done, making tarball" >> $rsvlog
