@@ -278,7 +278,7 @@ class Condor:
         if job_id:
             return (log, out, err, job_id)
         else:
-            return (False, False, False)
+            return (False, False, False, False)
 
 
     def condor_g_remove(self, jobids):
