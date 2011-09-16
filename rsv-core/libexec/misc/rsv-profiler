@@ -73,6 +73,11 @@ else
 fi
 
 
+echo "Installed packages..." >> $rsvlog
+rpm -qa | grep condor >> $rsvfiledir 2>&1
+rpm -qa | grep rsv    >> $rsvfiledir 2>&1
+echo ""               >> $rsvfiledir
+
 
 ##
 ## RSV stuff
