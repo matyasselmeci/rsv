@@ -5,9 +5,6 @@ import re
 import sys
 import ConfigParser
 
-# For Python 2.3
-from compat import sorted
-
 class Consumer:
     """ Instantiable class to read and store configuration about a single consumer """
     
