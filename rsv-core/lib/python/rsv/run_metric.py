@@ -278,14 +278,18 @@ def execute_condor_g_job(rsv, metric):
         ret = 0
     elif keyword == "abort":
         rsv.results.condor_grid_job_aborted(metric, out, err)
+        return
     elif keyword == "error":
         rsv.results.condor_grid_job_failed(metric, out, err)
+        return
     elif keyword == "Globus job submission failed":
         condor.condor_g_remove(jobid)
         rsv.results.condor_g_submission_authentication_failure(metric)
+        return
     elif keyword == "Detected Down Globus Resource":
         condor.condor_g_remove(jobid)
         rsv.results.condor_g_remote_gatekeeper_down(metric)
+        return
 
     parse_job_output(rsv, metric, out, err)
     return
