@@ -8,6 +8,8 @@ print_output_header();
 
 # If your probe needs arguments beyond -m (metric) and -u (host) then put them into
 # a hash table here, and pass it to process_command_line()
+# Make sure to include '=s', '=i', etc if your arguments expects a value.  See 
+# the documentation for Getopt::Long for more information.
 my %extra_opts = ("some-option=s"     => "Option description",
                   "another-options=s" => "Another description");
 
