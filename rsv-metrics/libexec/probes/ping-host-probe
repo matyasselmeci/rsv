@@ -6,8 +6,8 @@ use RSVMetric;
 
 print_output_header();
 
-my %extra_opts = ("ping-timeout" => "<Timeout in seconds>",
-                  "ping-count"   => "<Number of ping attempts>");
+my %extra_opts = ("ping-timeout=i" => "<Timeout in seconds>",
+                  "ping-count=i"   => "<Number of ping attempts>");
 
 my %options = process_command_line(%extra_opts);
 

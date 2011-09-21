@@ -6,8 +6,8 @@ use RSVMetric;
 
 print_output_header();
 
-my %extra_opts = ("srm-webservice-path" => "Required: Remote webservice path, e.g. srm/v2/server",
-                  "srm-protocol-version" => "1 or 2");
+my %extra_opts = ("srm-webservice-path=s"  => "Required: Remote webservice path, e.g. srm/v2/server",
+                  "srm-protocol-version=i" => "1 or 2");
 
 my %options = process_command_line(%extra_opts);
 
