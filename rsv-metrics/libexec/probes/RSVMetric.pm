@@ -36,7 +36,7 @@ sub process_command_line {
         usage(%extra_opts);
     }
 
-    return \%options;
+    return %options;
 }
 
 

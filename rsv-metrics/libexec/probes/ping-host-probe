@@ -2,51 +2,35 @@
 
 use strict;
 use warnings;
-use Getopt::Long;
 use RSVMetric;
-
-my $OPT_HOSTNAME;
-my $OPT_METRIC;
-my $OPT_TIMEOUT = 3;
-my $OPT_COUNT = 1;
 
 print_output_header();
 
-GetOptions("u=s"             => \$OPT_HOSTNAME,
-           "m=s"             => \$OPT_METRIC,
-           "ping-timeout=i"  => \$OPT_TIMEOUT,
-	   "ping-count=i"    => \$OPT_COUNT,
-           "help|usage"      => \&usage);
+my %extra_opts = ("ping-timeout" => "<Timeout in seconds>",
+                  "ping-count"   => "<Number of ping attempts>");
 
-if(not $OPT_HOSTNAME) {
-    print "CRITICAL\n";
-    print "No hostname was supplied to $0\n";
-    exit 1; # Probe was invoked wrong, so give an error on exit status
-}
+my %options = process_command_line(%extra_opts);
 
-my $ping = which("ping");
-if(not $ping) {
-    print "CRITICAL\n";
-    print "ping is not in PATH\n";
-    dump_debug();
-    exit 0;
-}
+$options{'ping-timeout'} |= 3;
+$options{'ping-count'} |= 1;
 
-my $ping_cmd = "ping -q -W $OPT_TIMEOUT -c $OPT_COUNT $OPT_HOSTNAME 2>&1";
+find_binaries("ping");
+
+my $ping_cmd = "ping -q -W $options{'ping-timeout'} -c $options{'ping-count'} $options{u} 2>&1";
 my $out = `$ping_cmd`;
 my $ret = $? >> 8;
 
 if($ret == 0) {
     print "OK\n";
-    print "Host $OPT_HOSTNAME is alive and responding to pings.\n";
+    print "Host $options{u} is alive and responding to pings.\n";
 }
 elsif ($ret == 1) {
     print "CRITICAL\n";
-    print "Host $OPT_HOSTNAME is alive but not responding to pings.\n";
+    print "Host $options{u} is alive but not responding to pings.\n";
 }
 elsif ($ret == 2) {
     print "CRITICAL\n";
-    print "Unable to ping host $OPT_HOSTNAME\n";
+    print "Unable to ping host $options{u}\n";
     dump_debug();
 }
 else {  ## Unknown status here
@@ -55,13 +39,3 @@ else {  ## Unknown status here
 }
 
 exit 0;
-
-
-sub usage {
-    print STDERR "Usage: $0\n";
-    print STDERR "\t-u <hostname>\n";
-    print STDERR "\t-m <metric>\n";
-    print STDERR "\t--ping-timeout <num seconds>\n";
-    print STDERR "\t--ping-count <num pings>\n\n";
-    exit 1;
-}

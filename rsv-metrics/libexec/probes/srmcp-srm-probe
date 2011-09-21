@@ -2,45 +2,22 @@
 
 use strict;
 use warnings;
-use Getopt::Long;
 use File::Basename;
 use RSVMetric;
 
 print_output_header();
 
-my $OPT_HOSTNAME;
-my $OPT_METRIC;
-my $OPT_SRM_DEST_DIR;
-my $OPT_SRM_WEBSERVICE_PATH;
-my $OPT_SRM_PROTOCOL_VERSION = 2;
+my %extra_opts = ("srm-destination-dir" => "Required: Remote destination to put temp file",
+                  "srm-webservice-path" => "Required: Remote webservice path, e.g. srm/v2/server",
+                  "srm-protocol-version" => "1 or 2");
 
-GetOptions("u=s"                    => \$OPT_HOSTNAME,
-           "m=s"                    => \$OPT_METRIC,
-           "srm-destination-dir=s"  => \$OPT_SRM_DEST_DIR,
-           "srm-webservice-path=s"  => \$OPT_SRM_WEBSERVICE_PATH,
-           "srm-protocol-version=s" => \$OPT_SRM_PROTOCOL_VERSION,
-           "help|usage"             => \&usage);
+my %options = process_command_line(%extra_opts);
 
-#
-# Validate options
-#
+$options{'srm-protocol-version'} |= 2;
 
-if(not $OPT_HOSTNAME) {
-    print "CRITICAL\n";
-    print "No hostname was supplied to $0\n";
-    exit 1; # Probe was invoked wrong, so give an error on exit status
-}
-
-if(not $OPT_SRM_DEST_DIR) {
-    print "CRITICAL\n";
-    print "You must specify the SRM remote directory using the --srm-destination-dir flag.\n";
-    exit 1; # Probe was invoked wrong, so give an error on exit status
-}
-
-if(not $OPT_SRM_WEBSERVICE_PATH) {
-    print "CRITICAL\n";
-    print "You must specify the SRM webservice path (e.g. srm/v2/server) using the --srm-webservice-path flag.\n";
-    exit 1; # Probe was invoked wrong, so give an error on exit status
+if(!defined($options{'srm-destination-dir'}) or !defined($options{'srm-webservice-path'})) {
+    print "ERROR: You must pass both --srm-destination-dir and --srm-webservice-path\n\n";
+    usage(%extra_opts);
 }
 
 find_binaries("srm-copy", "srm-ls", "srm-rm");
@@ -61,7 +38,7 @@ if(!-e $local_file) {
 
 my $time = time;
 my $remote_file = basename($local_file) . ".$time.$$";
-my $remote_uri = "srm://$OPT_HOSTNAME/$OPT_SRM_WEBSERVICE_PATH?SFN=$OPT_SRM_DEST_DIR/$remote_file";
+my $remote_uri = "srm://$options{u}/$options{'srm-webservice-path'}?SFN=$options{'srm-destination-dir'}/$remote_file";
 
 # TODO - might need '-x509_user_proxy=' included in here
 my $srm_copy_cmd = "srm-copy $local_uri $remote_uri 2>&1";
@@ -147,13 +124,6 @@ print "Remote file was properly listed using srm-ls.\n";
 cleanup_files();
 exit 0;
 
-
-sub usage {
-    print STDERR "Usage: $0\n";
-    print STDERR "\t-u <hostname>\n";
-    print STDERR "\t-m <metric>\n";
-    exit 1;
-}
 
 sub cleanup_files {
     # First the local file

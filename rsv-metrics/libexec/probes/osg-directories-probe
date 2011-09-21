@@ -6,6 +6,8 @@ use RSVMetric;
 
 print_output_header();
 
+my %options = process_command_line();
+
 # Define the directories we will examine
 my %dirs;
 

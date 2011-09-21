@@ -2,50 +2,38 @@
 
 use strict;
 use warnings;
-use Getopt::Long;
 use RSVMetric;
 
 print_output_header();
 
-my $OPT_HOSTNAME;
-my $OPT_METRIC;
-my $OPT_SRM_WEBSERVICE_PATH;
-my $OPT_SRM_PROTOCOL_VERSION = 2;
+my %extra_opts = ("srm-webservice-path" => "Required: Remote webservice path, e.g. srm/v2/server",
+                  "srm-protocol-version" => "1 or 2");
 
-GetOptions("u=s"                    => \$OPT_HOSTNAME,
-           "m=s"                    => \$OPT_METRIC,
-           "srm-webservice-path=s"  => \$OPT_SRM_WEBSERVICE_PATH,
-           "srm-protocol-version=s" => \$OPT_SRM_PROTOCOL_VERSION,
-           "help|usage"             => \&usage);
+my %options = process_command_line(%extra_opts);
 
-if(not $OPT_HOSTNAME) {
-    print "CRITICAL\n";
-    print "No hostname was supplied to $0\n";
-    exit 1; # Probe was invoked wrong, so give an error on exit status
-}
+$options{'srm-protocol-version'} |= 2;
 
-if(not $OPT_SRM_WEBSERVICE_PATH) {
-    print "CRITICAL\n";
-    print "You must specify the SRM webservice path (e.g. srm/v2/server) using the --srm-webservice-path flag.\n";
-    exit 1; # Probe was invoked wrong, so give an error on exit status
+if(not defined($options{'srm-webservice-path'})) {
+    print "ERROR: You must pass --srm-webservice-path\n\n";
+    usage(%extra_opts);
 }
 
 find_binaries("srm-ping");
 
 # TODO - might need '-x509_user_proxy=' included in here
-my $srm_ping_cmd = "srm-ping srm://$OPT_HOSTNAME -retry_num=0 -debug -$OPT_SRM_PROTOCOL_VERSION -webservice_path=$OPT_SRM_WEBSERVICE_PATH 2>&1";
+my $srm_ping_cmd = "srm-ping srm://$options{u} -retry_num=0 -debug -$options{'srm-protocol-version'} -webservice_path=$options{'srm-webservice-path'} 2>&1";
 my $out = `$srm_ping_cmd`;
 my $ret = $? >> 8;
 
 if($ret == 0) {
     print "OK\n";
-    print "SRM server running at $OPT_HOSTNAME is alive and responding to the srm-ping command.\n";
+    print "SRM server running at $options{u} is alive and responding to the srm-ping command.\n";
     print "Output from srm-ping:\n$out\n";
     exit 0;
 }
 elsif ($ret == 1) {
     print "CRITICAL\n";
-    print "SRM server running at $OPT_HOSTNAME is not responding to the srm-ping command.\n";
+    print "SRM server running at $options{u} is not responding to the srm-ping command.\n";
     print "Output from srm-ping:\n$out\n";
     exit 0;
 }
@@ -57,13 +45,3 @@ else {  ## Unknown status here
 }
 
 exit 0;
-
-
-sub usage {
-    print STDERR "Usage: $0\n";
-    print STDERR "\t-u <hostname>\n";
-    print STDERR "\t-m <metric>\n";
-    print STDERR "\t--srm-webservice-path <path, e.g. srm/v2/server>\n";
-    print STDERR "\t--srm-protocol-version <1 or 2>\n";
-    exit 1;
-}

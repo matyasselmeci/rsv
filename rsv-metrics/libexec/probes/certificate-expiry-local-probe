@@ -8,22 +8,11 @@ use RSVMetric;
 my $warning_hours = 168;
 my $warning_seconds = $warning_hours * 60 * 60;
 
-my $OPT_METRIC;
-my $OPT_HOST;
-
 print_output_header();
 
-GetOptions("m=s"        => \$OPT_METRIC,
-           "u=s"        => \$OPT_HOST,
-           "help|usage" => \&usage);
+my %options = process_command_line();
 
-my $openssl = which("openssl");
-if(not $openssl) {
-    print "CRITICAL\n";
-    print "openssl is not in PATH\n";
-    dump_debug();
-    exit 0;
-}
+find_binaries("openssl");
 
 my %certs = ( "org.osg.local.hostcert-expiry" => "/etc/grid-security/hostcert.pem",
               "org.osg.local.httpcert-expiry" => "/etc/grid-security/http/httpcert.pem",
@@ -32,7 +21,7 @@ my %certs = ( "org.osg.local.hostcert-expiry" => "/etc/grid-security/hostcert.pe
               #"org.osg.local.rsvcert-expiry"  => "/etc/grid-security/rsvcert.pem",
 );
 
-my $cert = $certs{$OPT_METRIC};
+my $cert = $certs{$options{m}};
 
 if(!-e $cert) {
     print "CRITICAL\n";
@@ -65,10 +54,3 @@ else {
 }
 
 exit 0;
-
-
-sub usage {
-    print STDERR "Usage: $0\n";
-    print STDERR "\t-m <metric>\n";
-    exit 1;
-}
