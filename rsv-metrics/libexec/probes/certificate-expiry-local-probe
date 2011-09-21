@@ -2,7 +2,6 @@
 
 use strict;
 use warnings;
-use Getopt::Long;
 use RSVMetric;
 
 my $warning_hours = 168;
