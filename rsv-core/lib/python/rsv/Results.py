@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 # Standard libraries
 import os
@@ -331,36 +331,39 @@ class Results:
         self.brief_result(metric, status, data, stderr="")
 
 
-    def condor_grid_job_failed(self, metric, stdout, stderr):
+    def condor_grid_job_failed(self, metric, stdout, stderr, log):
         """ Failed to run a metric using Condor-G """
         status = "CRITICAL"
         data   = "Failed to run job via Condor-G\n\n"
         data  += "Stdout:\n%s\n" % stdout
         data  += "Stderr:\n%s\n" % stderr
-
+        data  += "Log:\n%s\n" % log_contents
+        
         self.brief_result(metric, status, data, stderr="")
 
 
-    def condor_grid_job_aborted(self, metric, stdout, stderr):
+    def condor_grid_job_aborted(self, metric, log):
         """ Condor-G job was aborted while trying to run metric """
         status = "CRITICAL"
         data   = "Condor-G job aborted\n\n"
-        data  += "Stdout:\n%s\n" % stdout
-        data  += "Stderr:\n%s\n" % stderr
+        data  += "Log:\n%s\n" % log
 
         self.brief_result(metric, status, data, stderr="")
 
 
-    def job_timed_out(self, metric, command, err):
+    def job_timed_out(self, metric, command, err, info=""):
         """ The job exceeded our timeout value """
         status = "CRITICAL"
         data   = "Timeout hit - %s\n\n" % err
         data  += "Job run:\n%s\n\n" % command
 
+        if info:
+            data += "More info:\n%s" % info
+
         self.brief_result(metric, status, data, stderr="")
 
 
-    def condor_g_submission_failed(self, metric, details=None):
+    def condor_g_globus_submission_failed(self, metric, details=None):
         """ Condor-G submission failed """
         status = "CRITICAL"
         data   = "Condor-G submission failed to remote host\n\n"
@@ -371,10 +374,11 @@ class Results:
         self.brief_result(metric, status, data, stderr="")
 
 
-    def condor_g_remote_gatekeeper_down(self, metric):
+    def condor_g_remote_gatekeeper_down(self, metric, log):
         """ Condor-G submission failed because the remote side was down """
         status = "CRITICAL"
         data   = "Condor-G submission failed because the remote side is down.\n"
         data  += "Make sure that the resource you are trying to monitor is online.\n\n"
+        data  += "Log:\n%s\n" % log
 
         self.brief_result(metric, status, data, stderr="")

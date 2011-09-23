@@ -87,11 +87,11 @@ class Table(object):
         All lines must be different to sort the buffer. No duplicate lines will be
         added by rsv-control.
         """
-        #TODO: fix clashes when duplicate lines are in the buffer
+        # Still need to fix clashes when duplicate lines are in the buffer
         retlines = []
         if not sort_:
             for i in self._buffer:
-                #TODO: multiline format to be faster
+                #multiline format to be faster?
                 retlines.append(self.format(*(i)))
                 self._buffer = []
                 return retlines
@@ -107,7 +107,7 @@ class Table(object):
             kl = order_dic.keys()
             kl.sort()
             for i in kl:
-                #TODO: multiline format to be faster
+                #multiline format to be faster?
                 retlines.append(self.format(*(order_dic[i])))
         self._buffer = []
         return retlines

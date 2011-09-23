@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 # Standard libraries
 import re
@@ -10,8 +10,8 @@ from optparse import OptionParser
 
 # RSV libraries
 import RSV
-import Condor
 import Metric
+import CondorG
 import Results
 import Sysutils
 
@@ -89,25 +89,19 @@ def parse_job_output_brief(rsv, metric, stdout, stderr):
     """ Parse the "brief" job output.  This format consists of just a keyword, status
     and details.  Here is an example:
     RSV BRIEF RESULTS:
-    org.osg.general.ping-host
-    osg-edu.cs.wisc.edu
     OK
     More information, which can
     be on multiple lines.
     """
 
-    host = None
-    metric = None
     status = None
     details = None
 
     lines = stdout.split("\n")
 
     if lines[0] == "RSV BRIEF RESULTS:":
-        metric = lines[1].strip()
-        host = lines[2].strip()
-        status = lines[3].strip()
-        details = "\n".join(lines[4:])
+        status = lines[1].strip()
+        details = "\n".join(lines[2:])
 
     if status and details:
         rsv.results.brief_result(metric, status, details, stderr)
@@ -245,59 +239,39 @@ def execute_condor_g_job(rsv, metric):
     """ Execute a remote job via Condor-G.  This is the preferred format so that we
     can support both Globus and CREAM """
 
-    original_environment = copy.copy(os.environ)
-    setup_job_environment(rsv, metric)
-
     # Submit the job
-    condor = Condor.Condor(rsv)
+    condorg = CondorG.CondorG(rsv)
 
     attrs = {}
     if rsv.get_extra_globus_rsl():
         attrs["globus_rsl"] = rsv.get_extra_globus_rsl()
 
-    (log_file, out_file, err_file, jobid) = condor.condor_g_submit(metric, attrs)
+    original_environment = copy.copy(os.environ)
+    setup_job_environment(rsv, metric)
+
+    ret = condorg.submit(metric, attrs)
 
     os.environ = original_environment
 
-    if not log_file:
+    if not ret:
         rsv.results.condor_g_submission_failed(metric)
         return
 
-    # Monitor the job's log and watch for it to finish
-    keywords = ["return value", "error", "abort", "Globus job submission failed", "Detected Down Globus Resource"]
-    job_timeout = metric.get_timeout() or rsv.config.get("rsv", "job-timeout")
-    utils = Sysutils.Sysutils(rsv)
+    ret = condorg.wait()
 
-    try:
-        (keyword, log_contents) = utils.watch_log(log_file, keywords, job_timeout)
-    except Sysutils.TimeoutError, err:
-        condor.condor_g_remove(jobid)
-        rsv.results.job_timed_out(metric, "condor-g submission", err)
-        return            
+    if ret == 0:
+        parse_job_output(rsv, metric, condorg.get_stdout(), condorg.get_stderr())
+    elif ret == 1:
+        rsv.results.condor_grid_job_aborted(metric, condorg.get_log_contents())
+    elif ret == 2:
+        rsv.results.condor_grid_job_failed(metric, condorg.get_stdout(), condorg.get_stderr(), condorg.get_log_contents())
+    elif ret == 3:
+        rsv.results.condor_g_globus_submission_failed(metric, condorg.get_log_contents())
+    elif ret == 4:
+        rsv.results.condor_g_remote_gatekeeper_down(metric, condorg.get_log_contents())
+    elif ret == 5:
+        rsv.results.job_timed_out(metric, "condor-g submission", "", info=condorg.get_log_contents())
 
-    # Read the out and err from the files
-    out = utils.slurp(out_file)
-    err = utils.slurp(err_file)
-
-    ret = None
-    if keyword == "return value":
-        ret = 0
-    elif keyword == "abort":
-        rsv.results.condor_grid_job_aborted(metric, out, err)
-        return
-    elif keyword == "error":
-        rsv.results.condor_grid_job_failed(metric, out, err)
-        return
-    elif keyword == "Globus job submission failed":
-        condor.condor_g_remove(jobid)
-        rsv.results.condor_g_submission_failed(metric, log_contents)
-        return
-    elif keyword == "Detected Down Globus Resource":
-        condor.condor_g_remove(jobid)
-        rsv.results.condor_g_remote_gatekeeper_down(metric)
-        return
-
-    parse_job_output(rsv, metric, out, err)
     return
 
 

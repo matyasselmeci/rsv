@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import os
 import re
@@ -224,73 +224,6 @@ class Condor:
         if ret != 0:
             self.rsv.log("ERROR", "Command returned error code '%i': '%s'.  Output:\n%s" %
                          (ret, cmd, out))
-            return False
-
-        return True
-
-
-    def condor_g_submit(self, metric, attrs=None):
-        """ Form a grid submit file and submit the job to Condor """
-
-        # Make a temporary directory to store submit file, input, output, and log
-        parent_dir = os.path.join("/", "var", "tmp", "rsv")
-        dir = tempfile.mkdtemp(prefix="condor_g-", dir=parent_dir)
-        self.rsv.log("INFO", "Condor-G working directory: %s" % dir)
-        
-        log = os.path.join(dir, "%s.log" % metric.name)
-        out = os.path.join(dir, "%s.out" % metric.name)
-        err = os.path.join(dir, "%s.err" % metric.name)
-
-        # This is Globus specific.  When we support CREAM we need to modify this section
-        jobmanager = metric.config_get("jobmanager")
-        if not jobmanager:
-            rsv.log("CRITICAL", "ej1: jobmanager not defined in config")
-            sys.exit(1)
-
-        #
-        # Build the submit file
-        #
-        submit_file = "Universe = grid\n"
-        submit_file += "grid_resource = gt2 %s/jobmanager-%s\n\n" % (metric.host, jobmanager)
-
-        metric_path = os.path.join("/", "usr", "libexec", "rsv", "metrics", metric.name)
-        submit_file += "Executable = %s\n" % metric_path
-        submit_file += "Arguments  = %s\n" % metric.get_args_string()
-
-        # Add in custom attributes
-        if attrs:
-            for key in attrs.keys():
-                submit_file += "%s = %s\n" % (key, attrs[key])
-
-        transfer_files = metric.get_transfer_files()
-        if transfer_files:
-            submit_file += "transfer_input_files = %s\n" % transfer_files
-            
-        submit_file += "Log = %s\n" % log
-        submit_file += "Output = %s\n" % out
-        submit_file += "Error = %s\n\n" % err
-
-        submit_file += "WhenToTransferOutput = ON_EXIT_OR_EVICT\n\n"
-
-        submit_file += "Queue\n"
-
-        job_id = self.submit_job(submit_file, metric.name, dir=dir, remove=0)
-        if job_id:
-            return (log, out, err, job_id)
-        else:
-            return (False, False, False, False)
-
-
-    def condor_g_remove(self, jobids):
-        """ Remove the supplied job """
-
-        if type(jobids).__name__ != "list":
-            jobids = [jobids]
-
-        exprs = map(lambda id: "ClusterId==%s" % id, jobids)
-        constraint = " || ".join(exprs)
-        if not self.stop_jobs(constraint):
-            self.rsv.log("WARNING", "Could not stop Condor-G jobs.  Constraint: %s" % constraint)
             return False
 
         return True
