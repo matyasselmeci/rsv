@@ -5,7 +5,7 @@ execute = local
 service-type = OSG-CE
 output-format = wlcg
 probe-spec = v3
-enable-by-default = true
+enable-by-default = false
 
 
 [org.osg.batch.jobmanager-default-status env]
