@@ -1,10 +1,14 @@
 #!/usr/bin/env perl
 
 use strict;
+use warnings;
 use Getopt::Long qw(GetOptions);
 use File::Basename;
 use Date::Manip;
 
+use RSVMetric;
+
+print_output_header();
 
 ######## Retrieve Global variables ################################
 our %o;
@@ -20,63 +24,22 @@ my ($is_root, $probeconfig_problems, $soaphost, $probename,
     $record_count, $file_count, $archive_count, $old_file_count
    );
 
-&Init();
-&Run();
-################################################################################
-## Main Program ends ##
-################################################################################
+my %extra_opts = ("discover"       => "<Show available probes on this system>",
+                  "human-readable" => "<Print output in readable format>");
 
+my %options = process_command_line(%extra_opts);
 
-################################################################################
-## Local Sub-Routines
-################################################################################
+$options{'discover'} |= 0;
+$options{'human-readable'} |= 0;
 
-sub Init {
-  GetOptions
-    (
-     "help|h" => \$o{'help'},
-     "discover"  => \$o{'discover'},
-     "vdt-location=s"  => \$ENV{'VDT_LOCATION'},
-     "gratia-probe-name|p=s"  => \$o{'gratiaProbeType'},
-     "human-readable|X" => \$o{'human-readable'}
-    ) or usage(1);
-  usage(1) if $o{'help'};
-}
+($o{'gratiaProbeType'} = $options{'m'}) =~ s/^org\.osg\.gratia\.//;
 
-sub usage {
-  my $exit_code = shift;
-  my $prog = basename($0);
-  print STDERR <<EOF;
-Usage: $0 <options>
+Run();
 
-Options:
-
-  --help
-   -h
-    This help
-
-  --discover
-    Show available probes on this system (use in conjunction with -X for
-    human-readable output.
-
-  --vdt-location <VDT_LOCATION>
-    Specify VDT_LOCATION (overrides value in environment if any).
-
-  --human-readable
-   -X
-    Produce human-readable output (default is XML).
-
-  --gratia-probe-name <probe name>
-   -p
-    Run tests for specific probe. Possible values can be ascertained
-    with --discover option.
-EOF
-  exit($exit_code);
-}
 
 sub Run {
 
-  if ($o{'discover'}) {
+  if ($options{discover}) {
     &discoverProbesToTest();
   }
 
@@ -93,27 +56,19 @@ EOF
     normal_exit()
   }
 
-  # VDT_LOCATION
-  unless ($ENV{VDT_LOCATION}) {
-    setCritical();
-    &appendDetailsData(<<EOF);
-ERROR: VDT_LOCATION must be set in the environment or with the
---vdt-location=<vdt-location> option!
-EOF
-    normal_exit()
-  }
-
   ####################################
   # Start tests
-  my @PYTHONPATH = ();
-  @PYTHONPATH = split /:/, $ENV{PYTHONPATH} if  $ENV{PYTHONPATH};
-  unless (grep m&^\Q$ENV{VDT_LOCATION}/gratia/probe/common\E$&, @PYTHONPATH) {
-    push @PYTHONPATH, "$ENV{VDT_LOCATION}/gratia/probe/common";
-    $ENV{PYTHONPATH} = join(":", @PYTHONPATH);
-  }
 
-  # Make sure wget is in our path (not safe to assume a system one exists).
-  $ENV{PATH} = "$ENV{PATH}:$ENV{VDT_LOCATION}/wget/bin";
+  if($ENV{OSG_LOCATION}) {
+    my @PYTHONPATH = ();
+    @PYTHONPATH = split /:/, $ENV{PYTHONPATH} if  $ENV{PYTHONPATH};
+    unless (grep m&^\Q$ENV{OSG_LOCATION}/gratia/probe/common\E$&, @PYTHONPATH) {
+      push @PYTHONPATH, "$ENV{OSG_LOCATION}/gratia/probe/common";
+      $ENV{PYTHONPATH} = join(":", @PYTHONPATH);
+    }
+
+    $ENV{PATH} = "$ENV{PATH}:$ENV{OSG_LOCATION}/wget/bin";
+  }
 
   # Check directories
   unless (checkProbeDirs()) {
@@ -315,10 +270,9 @@ EOF
   $dir=qx^cd "$dir" && /bin/pwd^;
   chomp $dir;
   $dir =~ s&worker-scripts/?&&;
-  &appendDetailsData (sprintf("(cd \"%s\" && ./worker-scripts/%s --vdt-location \"%s\" -X -p %s)\n",
+  &appendDetailsData (sprintf("(cd \"%s\" && ./worker-scripts/%s -X -p %s)\n",
                               $dir,
                               basename($0),
-                              $ENV{'VDT_LOCATION'},
                               $metric{'metricName'}));
 }
 
@@ -336,10 +290,10 @@ sub normal_exit {
     runMeRoot();
   }
   ## Print metric, and we're all done!
-  if ($o{'human-readable'}) {
+  if ($options{'human-readable'}) {
     # Want human-readable results
     my $statusWord = metricStatusWord();
-    &printWorkerScriptXml (0, <<EOF, "");
+    workerScriptOutput(0, <<EOF, "");
 STATUS: $statusWord
 DETAILS:
 $metric{'detailsData'}
@@ -347,7 +301,7 @@ EOF
   } else {
     # Force the metric to always have a status; defaults to OK (0).
     exists $metric{'metricStatus'} or $metric{'metricStatus'} = 0;
-    &printWorkerScriptXml (0,"\n  <MetricStatus>$metric{'metricStatus'}</MetricStatus>\n  <DetailsData>$metric{'detailsData'}</DetailsData>\n","");
+    workerScriptOutput(0,"$metric{'metricStatus'}\n$metric{'detailsData'}\n","");
   }
 }
 
@@ -367,20 +321,24 @@ sub setUnknown {
 }
 
 sub metricStatusWord {
-  exists $metric{'metricStatus'} or $metric{'metricStatus'} = 0;
-  my $word;
-  if (0 == $metric{'metricStatus'}) {
-    $word = "OK";
-  } elsif (1 == $metric{'metricStatus'}) {
-    $word = "WARNING";
-  } elsif (2 == $metric{'metricStatus'}) {
-    $word = "CRITICAL";
-  } elsif (3 == $metric{'metricStatus'}) {
-    $word = "UNKNOWN";
-  } else {
-    # Fallback
-    $word = $metric{'metricStatus'};
-  }
+    exists $metric{'metricStatus'} or $metric{'metricStatus'} = 0;
+    
+    if (0 == $metric{'metricStatus'}) {
+        return "OK";
+    }
+    elsif (1 == $metric{'metricStatus'}) {
+        return "WARNING";
+    }
+    elsif (2 == $metric{'metricStatus'}) {
+        return "CRITICAL";
+    }
+    elsif (3 == $metric{'metricStatus'}) {
+        return "UNKNOWN";
+    }
+    else {
+        # Fallback
+        return $metric{'metricStatus'};
+    }
 }
 
 sub probe_specific_checks {
@@ -393,7 +351,12 @@ sub probe_specific_checks {
 }
 
 sub probe_check_condor() {
-  my $get_condor_config_cmd = ". $ENV{VDT_LOCATION}/setup.sh; condor_config_val PER_JOB_HISTORY_DIR";
+  my $get_condor_config_cmd = "condor_config_val PER_JOB_HISTORY_DIR";
+
+  if($ENV{OSG_LOCATION}) {
+      $get_condor_config_cmd = ". $ENV{OSG_LOCATION}/setup.sh; $get_condor_config_cmd";
+  }
+
   my $cmd_output = `$get_condor_config_cmd 2>&1`;
   my $status = $?;
   if ($status == 0) {
@@ -582,9 +545,9 @@ EOF
 
 sub getProbeConfigAttribute {
   my $probeDirPath = probeDirPath();
-  my $probeConfig_cmd = <<EOF;
-( source $ENV{VDT_LOCATION}/setup.sh; cd "$probeDirPath"; ../common/GetProbeConfigAttribute.py %s )
-EOF
+  my $probeConfig_cmd = $ENV{OSG_LOCATION} ? 
+      "( source $ENV{OSG_LOCATION}/setup.sh; cd \"$probeDirPath\"; ../common/GetProbeConfigAttribute.py %s )" : 
+      "( cd \"$probeDirPath\"; /usr/share/gratia/common/GetProbeConfigAttribute %s )";
 
   my @results = ();
 
@@ -602,11 +565,15 @@ EOF
 }
 
 sub gratiaProbeType {
+
   return $o{'gratiaProbeType'}; ## $o{'gratiaProbeTypes'}{$metric{'metricName'}} || "UNKNOWN";
 }
 
 sub probeDirPath {
-  return ($ENV{VDT_LOCATION} and $current_gratia_probe_type)?"$ENV{VDT_LOCATION}/gratia/probe/$current_gratia_probe_type":"<unknown>";
+    if($ENV{OSG_LOCATION}) {
+        return ($current_gratia_probe_type) ? "$ENV{OSG_LOCATION}/gratia/probe/$current_gratia_probe_type" : "<unknown>";
+    }
+    return ($current_gratia_probe_type) ? "/usr/share/gratia/$current_gratia_probe_type" : "<unknown>";
 }
 
 sub appendDetailsData {
@@ -617,17 +584,14 @@ sub appendDetailsData {
 sub discoverProbesToTest {
   my $output = undef;
 
-  unless ($ENV{VDT_LOCATION}) {
-    &printWorkerScriptXml (1,"",&tagError("gratia-config-probe-helper: VDT_LOCATION is not set!"));
-  }
-  my $probedir = "$ENV{VDT_LOCATION}/gratia/probe";
+  my $probedir = (defined $ENV{OSG_LOCATION}) ? "$ENV{OSG_LOCATION}/gratia/" : "/usr/share/gratia";
 
   unless (-d $probedir) {
-    &printWorkerScriptXml (1,"",&tagError("gratia-config-probe-helper: no directory $probedir!"));
+    workerScriptOutput(1,"", "ERROR: gratia-config-probe-helper: no directory $probedir!");
   }
 
   unless (opendir(DIR, $probedir)) {
-    &printWorkerScriptXml (1,"",&tagError("gratia-config-probe-helper: unable to open directory for $probedir!"));
+    workerScriptOutput(1,"", "ERROR: gratia-config-probe-helper: unable to open directory for $probedir!");
   }
 
   # Execute probe once per probe directory.
@@ -639,7 +603,7 @@ sub discoverProbesToTest {
     push @dirs, $dir;
   }
   closedir(DIR);
-  if ($o{'human-readable'}) {
+  if ($options{'human-readable'}) {
     $output = "Found probes: \n";
     foreach my $dir (@dirs) {
       $output = "${output}$dir\n";
@@ -652,41 +616,34 @@ sub discoverProbesToTest {
     }
     $output .= "</probes>";
   }
-  &printWorkerScriptXml (0,$output,"");
+  workerScriptOutput(0,$output,"");
 }
 
-sub tagError {
-  my $string = shift;
-  return $o{'human-readable'}?"ERROR: $string":"<Error>$string</Error>";
-}
 
 ## Print exit code, stdout, stderr in format expected by RSVProbeBase perl module
-sub printWorkerScriptXml {
-  if ($o{'human-readable'}) {
-    my $probe_dir = probeDirPath();
-    print <<EOF;
+sub workerScriptOutput {
+    if ($options{'human-readable'}) {
+        my $probe_dir = probeDirPath();
+        print <<EOF;
 Exit code: $_[0]
 EOF
-    if ($current_gratia_probe_type) {
-      print <<EOF;
+        if ($current_gratia_probe_type) {
+            print <<EOF;
 Probe type: $current_gratia_probe_type
 Probe dir: $probe_dir
 Diagnostic output:
 EOF
+        }
+        print "$_[1]" if $_[1];
+        print "$_[2]" if $_[2];
     }
-    print "$_[1]" if $_[1];
-    print "$_[2]" if $_[2];
-  } else {
-    print <<EOF;
-<?xml version="1.0" encoding="ISO8859-1" ?>
-<WorkerScriptOutput>
-<ExitCode>$_[0]</ExitCode>
-<StdOut>$_[1]</StdOut>
-<StdErr>$_[2]</StdErr>
-</WorkerScriptOutput>
-EOF
-  }
-  exit $_[0];
+    else {
+        print metricStatusWord();
+        print $_[1];
+        print STDERR $_[2];
+    }
+
+    exit 0;
 }
 
 use File::Find;
@@ -695,7 +652,7 @@ sub init_find_counts {
 }
 
 sub process_find_leaf {
-  -f or next;
+  -f or return;
   my $uncompress_arg;
   if (m&\.tar(?:\.(bz2|gz))?$&) {
     ++$archive_count;
