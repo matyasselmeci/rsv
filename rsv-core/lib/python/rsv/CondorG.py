@@ -16,6 +16,7 @@ class CondorG:
     log = None
     out = None
     err = None
+    metric = None
     tempdir = None
     cleanup = True
     cluster_id = None
@@ -38,6 +39,8 @@ class CondorG:
     def submit(self, metric, attrs=None, timeout=None):
         """ Form a grid submit file and submit the job to Condor """
 
+        self.metric = metric
+
         # Make a temporary directory to store submit file, input, output, and log
         parent_dir = os.path.join("/", "var", "tmp", "rsv")
         self.tempdir = tempfile.mkdtemp(prefix="condor_g-", dir=parent_dir)
@@ -50,7 +53,7 @@ class CondorG:
         # This is Globus specific.  When we support CREAM we need to modify this section
         jobmanager = metric.config_get("jobmanager")
         if not jobmanager:
-            rsv.log("CRITICAL", "CondorG->submit: jobmanager not defined in config")
+            self.rsv.log("CRITICAL", "CondorG->submit: jobmanager not defined in config")
             # TODO - this should not exit
             sys.exit(1)
 
@@ -75,13 +78,13 @@ class CondorG:
         if transfer_files:
             submit_file += "transfer_input_files = %s\n" % transfer_files
             
-        submit_file += "Log = %s\n" % log
-        submit_file += "Output = %s\n" % out
-        submit_file += "Error = %s\n\n" % err
+        submit_file += "Log = %s\n" % self.log
+        submit_file += "Output = %s\n" % self.out
+        submit_file += "Error = %s\n\n" % self.err
         submit_file += "WhenToTransferOutput = ON_EXIT_OR_EVICT\n\n"
         submit_file += "Queue\n"
 
-        condor = Condor.Condor(rsv)
+        condor = Condor.Condor(self.rsv)
         self.cluster_id = condor.submit_job(submit_file, metric.name, dir=self.tempdir, remove=0)
 
         if not self.cluster_id:
@@ -95,11 +98,11 @@ class CondorG:
         """ Wait for the job to complete """
         
         # Monitor the job's log and watch for it to finish
-        job_timeout = metric.get_timeout() or rsv.config.get("rsv", "job-timeout")
-        utils = Sysutils.Sysutils(rsv)
+        job_timeout = self.metric.get_timeout() or self.rsv.config.get("rsv", "job-timeout")
+        utils = Sysutils.Sysutils(self.rsv)
 
         try:
-            (keyword, log_contents) = utils.watch_log(log_file, KEYWORDS, job_timeout)
+            (keyword, log_contents) = utils.watch_log(self.log, KEYWORDS, job_timeout)
         except Sysutils.TimeoutError, err:
             self.remove()
             return 5
@@ -126,7 +129,7 @@ class CondorG:
 
         if self.cluster_id:
             constraint = "ClusterId==%s" % self.cluster_id
-            condor = Condor.Condor(rsv)
+            condor = Condor.Condor(self.rsv)
             if not condor.stop_jobs(constraint):
                 self.rsv.log("WARNING", "Could not stop Condor-G jobs.  Constraint: %s" % constraint)
                 return False
@@ -144,4 +147,4 @@ class CondorG:
 
     def get_log_contents(self):
         """ Return the log contents of the job """
-        return utils.slurp(log_file)
+        return utils.slurp(self.log)
