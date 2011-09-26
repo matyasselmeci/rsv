@@ -1,12 +1,12 @@
 [org.osg.gratia.sge]
 default-cron-interval = 24 * * * *
 
-execute = local
+execute = grid
+transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
 service-type = OSG-CE
-output-format = wlcg
-probe-spec = v3
+output-format = brief
 enable-by-default = false
 
 
 [org.osg.gratia.sge env]
-PERL5LIB = PREPEND | /usr/libexec/rsv/probes
+
