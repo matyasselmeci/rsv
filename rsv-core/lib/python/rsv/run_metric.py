@@ -254,7 +254,7 @@ def execute_condor_g_job(rsv, metric):
     os.environ = original_environment
 
     if not ret:
-        rsv.results.condor_g_submission_failed(metric)
+        rsv.results.condor_g_globus_submission_failed(metric)
         return
 
     ret = condorg.wait()
