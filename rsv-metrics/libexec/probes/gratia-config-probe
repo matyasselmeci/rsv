@@ -638,7 +638,7 @@ EOF
         print "$_[2]" if $_[2];
     }
     else {
-        print metricStatusWord();
+        print metricStatusWord() . "\n";
         print $_[1];
         print STDERR $_[2];
     }
