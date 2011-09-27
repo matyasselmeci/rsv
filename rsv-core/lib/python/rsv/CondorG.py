@@ -16,6 +16,7 @@ class CondorG:
     log = None
     out = None
     err = None
+    utils = None
     metric = None
     tempdir = None
     cleanup = True
@@ -25,6 +26,7 @@ class CondorG:
         """ Constructor """
         self.rsv = rsv
         self.cleanup = cleanup
+        self.utils = Sysutils.Sysutils(rsv)
 
     def __del__(self):
         """ Destructor - do filesystem cleanup """
@@ -99,10 +101,9 @@ class CondorG:
         
         # Monitor the job's log and watch for it to finish
         job_timeout = self.metric.get_timeout() or self.rsv.config.get("rsv", "job-timeout")
-        utils = Sysutils.Sysutils(self.rsv)
 
         try:
-            (keyword, log_contents) = utils.watch_log(self.log, KEYWORDS, job_timeout)
+            (keyword, log_contents) = self.utils.watch_log(self.log, KEYWORDS, job_timeout)
         except Sysutils.TimeoutError, err:
             self.remove()
             return 5
@@ -139,12 +140,12 @@ class CondorG:
 
     def get_stdout(self):
         """ Return the STDOUT of the job """
-        return utils.slurp(self.out)
+        return self.utils.slurp(self.out)
 
     def get_stderr(self):
         """ Return the STDERR of the job """
-        return utils.slurp(self.err)
+        return self.utils.slurp(self.err)
 
     def get_log_contents(self):
         """ Return the log contents of the job """
-        return utils.slurp(self.log)
+        return self.utils.slurp(self.log)
