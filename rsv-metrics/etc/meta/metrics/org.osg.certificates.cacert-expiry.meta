@@ -1,12 +1,12 @@
 [org.osg.certificates.cacert-expiry]
 default-cron-interval = 15 */6 * * *
 
-execute = local
+execute = grid
+transfer-files = /usr/libexec/rsv/probes/rsvprobe.py
 service-type = OSG-CE
 output-format = wlcg
-probe-spec = v3
 enable-by-default = true
 
 
 [org.osg.certificates.cacert-expiry env]
-PERL5LIB = PREPEND | /usr/libexec/rsv/probes
+
