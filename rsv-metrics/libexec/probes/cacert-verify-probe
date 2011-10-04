@@ -1,135 +1,425 @@
-#!/usr/bin/env perl
+import os
+import time
+import calendar
+# hashlib new in 2.5, md5 not in 2.6
+try:
+  import hashlib as mymd5
+except ImportError:
+  import md5 as mymd5
 
-###############################################################################
-##
-##
-## Original Author: Anand Padmanabhan
-##
-## This Perl script verifies local CA by comparing md5sum with OSG distribution
-## Type ./cacert-verify-local-probe -h for more information
-##
-##
-## REQUIRES
-##  'RSVProbeBase
-##  'RSVProbeCACert
-##
-################################################################################
+import sys
+sys.path.insert(0, ".")
 
-## Perl modules to use
-use strict;
-use RSVProbeBase;
-use RSVProbeCACert;
+import rsvprobe
 
-######## Global variables go here ################################
-our %o;         *o         = \%RSVProbeBase::o;
-our %metric;    *metric    = \%RSVProbeBase::metric;
+# Auxiliary functions
+def adler32(fname):
+    """Compute the adler32 checksum of the file, with seed value 1"""
+    BLOCKSIZE = 4096 * 1024
+    f = open(fname,'r')
+    checksum = 1 #Important - dCache uses seed of 1 not 0
+    while True:
+        data = f.read(BLOCKSIZE)
+        if not data: 
+	    break
+        checksum = zlib.adler32(data, checksum)
+    f.close()
+    # Work around problem with negative checksum
+    if checksum < 0:
+        checksum += 2**32
+    return hex(checksum)[2:10].zfill(8).lower()
 
-################## Local Variables for this probe #####################
+def md5sum(fname):
+    BLOCKSIZE = 4096 * 1024
+    f = open(fname,'r')
+    checksum = mymd5.md5()
+    while True:
+        data = f.read(BLOCKSIZE)
+        if not data:
+            break
+        checksum.update(data)
+    f.close()
+    return checksum.hexdigest().lower()
 
-&RSVProbeBase::Init();
-&RSVProbeBase::Run();
-
-## Main Program ends ##
-################################################################################
+# Unix commands used
+CMD_OPENSSL = "/usr/bin/openssl"
+CMD_WGET = "wget"
 
 
-################################################################################
-###### Local Sub routines begin ###########
-################################################################################
-sub Init {
-
-    ########## NOTE ##################################################
-    ##
-    ## Currently it is hard to guarantee all RSV clients, whose results are used for
-    ##  availibility calculations, will use the new name. Therefore, availability
-    ##  algorithms will stutter, or will need hacks. To avoid that, we are using
-    ##  the old name (which does not accurately describe the metric).
-    ##
-    ## Especially if the OSG management agrees that only GOC-run metric results 
-    ##   will be used for availability calculations, this will be easier to resolve.
-    ##
-    ###################################################################
-    ## &RSVProbeBase::Set_MetricName ("org.osg.certificates.verify"); ## New more accurate name to be used in the future
-    &RSVProbeBase::Set_MetricName ("org.osg.certificates.cacert-expiry"); ## Old metric name 
-
-    ## Pass "status" or "performance" depending on metric type
-        
-    &RSVProbeBase::Set_MetricType ("status");
-    &RSVProbeBase::Set_ServiceType ("OSG-CE");
-    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 1.0.0");
-    &RSVProbeBase::Set_ProbeType ("OSG-CE");
-
-    ## Should automating tools run this probe on above probeType by default?
-    &RSVProbeBase::Set_EnableByDefault ("true");
-    
-    ## Unix cron type metric interval
-    &RSVProbeBase::Set_MetricInterval ("15 */6 * * *");
-
-    ## Define this value from RCS/SVN version
+class CAcertProbe(rsvprobe.RSVProbe):
+  def __init__(self):
+    rsvprobe.RSVProbe.__init__(self)
+    self.metric = ""
+    metric = rsvprobe.RSVMetric("OSG-CE", "org.osg.certificates.cacert-expiry", rsvprobe.RSVMetric.STATUS)
+    metric.service_version = ">= OSG CE 1.0.0"
+    metric.probe_type = "OSG-CE"
     ## What version of the WLCG specification does this probe conform to?
-    &RSVProbeBase::Set_ProbeRevision ('3.0');
-    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+    metric.probe_revision = "3.0"
+    metric.probe_spec_version = "0.91"
+    metric.enable_by_default = False
+    ## Unix cron type metric interval
+    metric.cron_interval = "15 */6 * * *"
+    self.supported_metrics = [metric]
+    ## Specific options and defaults
+    self.ca_certs_dir = None
+    # default Error after 72 Hrs
+    self.errorHrs = 3*24 
+    self.tempdir = rsvprobe.get_temp_dir()
+    # $o{'errorFile'}  =  $o{'VDT_LOCATION_LOCAL'}."/osg-rsv/logs/probes/.$o{'hostName'}.cacert_verify.err" if (! $o{'errorFile'}) 
+    self.error_file = os.path.join(self.tempdir, "localhost.cacert_verify.err")
+    self.help_message = """IMPORTANT NOTE: This is a probe that verifies if the CA distribution at the site is upto date
+This probe downloads a file contains a list of md5sum from a central location.
+This list is compared against the md5sum of the files in the site CA install.
+Additionally it makes sure that all IGTF CAs are installed.
+"""
+    self.addopt("", "--error-file", "--error-file FILE_LOCATION \tLocation where errors should be recorded")
+    self.addopt("", "--error-hours", "--error-hours HOURS \t Number of hours elapsed before error is to be issued")
+    self.addopt("", "--type", "--type TYPE \tThis parameter determines whether the test should confrom to EGEE or OSG requirement.\n                                   (Accepted values: osg, egee) (Default: osg)")
+    self.addopt("", "--cacerts-dir ", "--cacerts-dir DIR \tLocation of CA certificate files")
+    ## unused_options from old perl probe
+    # " [--worker-script-file <file>     Worker script file to use.".
+    # " [--local-ce]          The verify test is run on localhost and not through globus gatekeeper."
+ 
+  def parseopt(self):
+    options, remainder = rsvprobe.RSVProbe.parseopt(self)
+    # All parameters ar passed to allow reprocessing of some of them
+    for opt, arg in options:
+      if opt == '--error-file':
+        self.error_file = arg
+      elif opt in ('-h', '--host'):
+        if not '--error-file' in options.keys():
+          self.error_file = os.path.join(self.tempdir, "%s.cacert_verify.err" % arg)
+      elif opt == '--error-hours':
+        try:
+          self.errorHrs = int(arg)
+        except ValueError:
+          self.return_unknown("Invalid error hours '%s', must be int. Aborting probe." % arg)      
+      elif opt == '--type':
+        if not arg in ['osg', 'egee']:
+          self.return_unknown("Invalid test type %s, must be 'osg' or 'egee'. Aborting probe." % arg)      
+        self.test_type = arg
+      elif opt == '--cacerts-dir':
+        self.ca_certs_dir = arg
+      #
+    return options, remainder
 
-    ## Basic intro for the probe; This string will be used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpIntro 
-	("IMPORTANT NOTE: This is a probe that verifies if the CA distribution at the site is upto date\n".
-	 "\n This probe downloads a file contains a list of md5sum from a central location.".
-	 "\n This list is compared against the md5sum of the files in the site level repository\n\n"
-	 );
-	
-    ## Additional options to print in Usage info used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpOptions 
-    (" [--error-file <file_location>]    Location where error should be recorded\n". 
-    " [--error-hours <\# hours>]    Number of hours elapsed before error is to be issued\n". 
-    " [--cacerts-dir <directory> ]      Location of CA certificate files\n".
-    "                                   (Default: \$VDT_LOCATION'/globus/TRUSTED_CA\n".
-    " [ --type <string> ]  This parameter determines whether the test should confrom to EGEE or OSG requirement.\n".
-    "                                   (Accepted values: osg, egee) (Default: osg)\n".
-    " [--worker-script-file <file>     Worker script file to use.".
-    " [--local-ce]          The verify test is run on localhost and not through globus gatekeeper."
-    );
+  def run(self):
+    if self.ca_certs_dir:
+      certdir = self.ca_certs_dir
+    else:
+      certdir = rsvprobe.get_ca_dir()
+    tempdir = self.tempdir # or create a job-specific temp dir?
+    self.Check_Local_CA(certdir, tempdir, self.errorHrs)
+
+  def verify_CA(self, certdir, tempdir, warnHrs):	
+    ## Step 1: Check for existence of CAcertfiles directory ... 
+    ##   return Unknown as metricsresult when directory does not exist
+    if not os.path.isdir(certdir):
+      #return or add?
+      self.return_unknown("ERROR: CA Certs Directory %s does not exist.. Setting metric to unknown." % certdir)
+
+    # Get all the certificates
+    cert_files = rsvprobe._listDirectory(certdir, ['0'])
+    if not cert_files:
+      self.return_unknown("ERROR: CA Certs Directory %s contains no certificate files (*.0).. Setting metric to unknown." % certdir)     
+    error_count = 0
+    warn_count = 0
+    ok_count = 0
+
+    for local_certs_file in cert_files:
+        #Step 2: Get the subject, Hash and dates associated with the certificate
+        cmd = "%s x509 -in %s -subject -hash -dates -noout" % (CMD_OPENSSL, local_certs_file)
+        ec, out = rsvprobe.run_command(cmd)
+        values =  out.split('\n')
+        subject = values[0].split("subject=")[1].strip()
+        chash = values[1].strip()
+        start_time = values[2].split("notBefore=")[1]
+        end_time = values[3].split("notAfter=")[1]
+
+        # Step 3: Verify certificate using openssl verify command
+        cmd = "%s verify -CApath %s %s"  % (CMD_OPENSSL, certdir, local_certs_file)
+        ec, out = rsvprobe.run_command(cmd)
+        verify_ca = out.split(':')[1].strip()
+        if not verify_ca == "OK":
+          self.add_critical("ERROR: Certificate with subject '%s' and hash '%s' failed to verify." % (subject, chash))
+          error_count += 1
+          continue
+
+        # Step 4: Check for expiry date on the cerrtificate and compare it with the current date
+        # Parsing string of form: Oct  5 08:00:00 2008 GMT ("%b %d %H:%M:%S %Y %Z")
+        utc_end_time = time.strptime(end_time, "%b %d %H:%M:%S %Y %Z")
+        unix_end_time = calendar.timegm(utc_end_time)
+        #gmt_to_unix_time($tmp_end_date[0],$tmp_end_date[1],$tmp_end_date[3], $tmp_end_time[0],  $tmp_end_time[1],  $tmp_end_time[2]);
+        now = time.time()
+        if now >= unix_end_time:
+          self.add_critical("ERROR: Certificate with subject '%s' and hash '%s' has expired on %s."  % (subject, chash, end_time))
+          error_count += 1
+        elif now + warnHrs*60*60 >= unix_end_time:
+          self.add_warning("Certificate with subject '%s' and hash '%s' is about to expire on %s."  % (subject, chash, end_time))
+          # &RSVProbeBase::Verbose("$status_out; [NOW: $now; warnHrs: $o{'warnHrs'}; unix_end_time: $unix_end_time]");
+          warn_count += 1
+        else:
+          #$status_out .= "OK: Certificate with subject '$subject' and hash '$hash' was verified\n" if ($o{'verbose'});
+          ok_count += 1
+
+    # Step 5: Recording the result for RSV output
+    self.add_ok("%s certificates found." % (error_count+warn_count+ok_count))
+    self.add_ok("\t%s failed varification/had expired;" % error_count)
+    self.add_ok("\t%s are about to expire/had warnings;" % warn_count)
+    self.add_ok("\t%s verified OK." % ok_count)
+    #&RSVProbeBase::Set_Summary_Metric_Results ($status_code,$status_out);
+    #return \%metric;
+
+
+  def Check_Local_CA(self, certdir, tempdir, errorHrs):
     
-    ## Uncomment if you want additional command line options
-    &RSVProbeBase::Extra_CLI_Option ("cacerts-dir=s","certDir");
-    &RSVProbeBase::Extra_CLI_Option ("error-hours=i","errorHrs");
-    &RSVProbeBase::Extra_CLI_Option ("error-file=s","errorFile");
-    &RSVProbeBase::Extra_CLI_Option ("type=s","type");
-    &RSVProbeBase::Extra_CLI_Option ("worker-script-file=s","workerScriptFile");
-    &RSVProbeBase::Extra_CLI_Option ("local-ce","localCE");
-   
-    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
-    &RSVProbeBase::Set_DetailsDataTrim ("False");
-}
+    #my $status_code = 0; # Return status code as expected by RSV for summaryData
+    #my $status_out = "Security Probe Version: $site_rsv_probe_version\n"; # Compile detailed data for output by RSV
+    source = {}
+    found_cas = {}
+    md5 = {}
+    file_md5sum = {}
+    error_hash = []
+    egee_error_hash = []
+    contents = []
+    itb=0;
+    ca_format_type=0;
 
-sub Run {
-    ## Get the remote environment variable
-    if (! $o{'localCE'}){
-        &RSVProbeBase::Get_Remote_Env();
+
+
+    # Step 0: Check for existence of CAcertfiles directory ... 
+    #   return Unknown as metricsresult when directory does not exist
+    if not os.path.isdir(certdir):
+      self.return_unknown("ERROR: CA Certs Directory %s does not exist.. Setting metric to unknown." % certdir)
+
+    # Step 1: Download the md5sums for CAs in the OSG/ITB
+    ## MM TODO tmp dir
+    startdir = os.path.abspath(os.path.curdir)
+    working_dir = tempdir
+    #chdir($working_dir);
+
+    #Check if the file CA cers are installed from ITB or OSG, new or old format
+    local_urls = [["http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt",
+                   "http://software-itb.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt"],
+                  ["http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum-new.txt",
+                   "http://software-itb.grid.iu.edu/pacman/cadist/cacerts_md5sum-new.txt"]
+                 ]
+    ca_format_type = 0
+    ca_index = os.path.join(certdir, "INDEX.txt")
+    if os.path.isfile(ca_index):
+      try: 
+        lines = open(ca_index).readlines()
+        for i in lines:
+          if i.find("IndexTypeVersion") >= 0:
+            try:
+              ca_format_type = int(i.split()[2])
+            except IndexError:
+              # When missing it is 0 (default value)
+              pass
+      except (OSError, ValueError):
+        pass
+    # 0 - osg; 1 - itb
+    grid_type = rsvprobe.get_grid_type()
+    if not grid_type in [0,1]:
+      self.return_unknown("ERROR: Unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type)) 
+    if ca_format_type==0:
+      cert_ext = ".0"
+      local_url = local_urls[0][grid_type]
+    elif ca_format_type==1:
+      cert_ext = ".pem"
+      local_url = local_urls[1][grid_type]
+    else:
+      self.return_unknown("ERROR: CA Certs Directory %s has unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type))
+    cert_files = rsvprobe._listDirectory(certdir, [cert_ext])
+    if not cert_files:
+      self.return_unknown("ERROR: CA Certs Directory %s contains no certificate files (*.%s).. Setting metric to unknown." % (certdir, cert_ext))     
+
+    # load md5 in a dictionary basename_without_extension->md5 (hash for v0, sitename v1)
+    for f in cert_files:
+      try:
+        file_md5sum[os.path.basename(f).split('.')[0]] = md5sum(f)
+      except IOError:
+        self.return_unknown("Could not calculate md5sums of your CA file %s." % f)
+        # eliminate error? file may have been deleted in the mean time, just skip?
+        pass
+    # replaced $ca_version_script= "$o{'PROBE_DIR_LOCAL'}/worker-scripts/ca_version.sh";
+
+    # Download the ms5sum file from OSG/ITB cache
+    cmd = "%s %s 2>&1" % (CMD_WGET, local_url)
+    ec, out = rsvprobe.run_command(cmd, workdir=working_dir)
+    #MM
+    print "CMD: %s %s: %s %s" % (cmd, working_dir, ec, out)
+    if ec != 0:
+      self.return_unknown("Could not download the md5sum for CA list from OSG (%s). Unable to verify CAs." % local_url)
+    downloaded_md5_file = os.path.join(working_dir, os.path.basename(local_url))
+    # change dir? now? chdir($cwd) 
+    ##MM ERROR? also in new format the key seems to be the hash.0, not the sitename.pem?
+    try:
+      lines = open(downloaded_md5_file).readlines()
+    except IOError:
+      self.return_unknown("The downloaded md5sum file from OSG could not be opened. Unable to verify CAs.")
+    if not lines:
+      self.return_unknown("The downloaded md5sum file from OSG is empty. Unable to verify CAs.")
+    for line in lines:
+        line.strip()
+        values = line.split()
+        local_hash = values[1].split('.')[0].strip()
+        md5[local_hash] = values[0]
+
+    # Step 2: Get the list of Certs included in OSG from GOC website.
+    #chdir($working_dir);
+    local_urls = [["http://software.grid.iu.edu/pacman/cadist/INDEX.txt",
+                   "http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt"],
+                  ["http://software.grid.iu.edu/pacman/cadist/INDEX-new.txt",
+                   "http://software-itb.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
+                 ]
+    local_url = local_urls[ca_format_type][grid_type]
+    cmd = "%s %s 2>&1" % (CMD_WGET, local_url)
+    ec, out = rsvprobe.run_command(cmd, workdir=working_dir)
+    if ec != 0:
+      self.return_unknown("Could not download the CA list from OSG (%s). Unable to verify CAs." % local_url)
+    ca_index_file = os.path.join(working_dir, os.path.basename(local_url))
+    try:
+      lines = open(ca_index_file).readlines()
+    except IOError:
+      self.return_unknown("The downloaded CA list from OSG could not be opened. Unable to verify CAs.")
+    if not lines:
+      self.return_unknown("The downloaded CA list from OSG is empty. Unable to verify CAs.")
+    ## Old format (remove 1 #):
+    ## Hash         Source                   URL                                      Accreditation
+    ##--------------------------------------------------------------------------------------------------------
+    #09ff08b7     CNRS2-Projets            http://igc.services.cnrs.fr/GRID-FR/       I
+    ## New format (remove 1 #):
+    ## OldHash      NewHash      CAfile                   CAURL                                       Version   Accreditation   
+    ##--------------------------------------------------------------------------------------------------------
+    #75680d2e     ee64a828     AAACertificateServices.pem https://www.terena.org/activities/tcs/         1.41   I
+
+    for line in lines:
+      if line.startswith('#'):
+        continue
+      # Rules from perl version: are these OK?
+      #next if($line =~ /^Hash/i);
+      #next if($line =~ /^--/i);
+      #next if($line =~ /^\s+$/i); #Empty lines
+      #next if($line =~ /^\#/i); #allow comments in future
+      #last if($line =~ /^Sources/i); #Reached end of file
+      line_content = line.split()  
+      hash = line_content[0]
+      if ca_format_type == 1:
+        # New CA format type we use file names
+        hash = line_content[2].split('.')[0]
+      source[hash] = line_content[-1]
+      old_parsing_code = """
+    foreach my $line (@contents) {
+        next if($line =~ /^Hash/i);
+        next if($line =~ /^--/i);
+        next if($line =~ /^\s+$/i); #Empty lines
+        next if($line =~ /^\#/i); #allow comments in future
+	last if($line =~ /^Sources/i); #Reached end of file
+
+	my @line_content = split /\s+/, $line;
+        my $hash = $line_content[0];
+	if ($ca_format_type == 1) {
+             # New CA format type we use file names
+	     $hash =  (split(/\./,$line_content[2]))[0];
+        }
+        $source{$hash}=$line_content[$#line_content];
     }
+"""
 
-    ## Initialize local variables
-    &Initialize_Local();
+    # Step 3: Check the CAs to ensure that md5sums matchup
+    status_code = 0
+    error_count = 0
+    warn_count = 0
+    ok_count = 0
+    missing_count = 0 # Missing IGTF CAs (for egee test only)
 
-    ## Real tests begin now - check for expired certs now 
-    &RSVProbeCACert::Check_Local_CA();
+    for i in file_md5sum.keys():
+      # List of CAs found.
+      found_cas[i] = i
+      # TODO egee
+      #next if (!exists $source{$local_hash}); # Ignore CAs not from OSG.
+      #next if ($o{'type'} =~ /egee/i && $source{$local_hash} !~ m/I/ ); #For EGEE test we want to check only IGTF CAs
+      try:
+        if file_md5sum[i] != md5[i]:
+          # We have detected atleast a warning
+          status_code = 1
+          # warn/err count?
+          error_hash.append(i)
+      except KeyError:
+        pass # Ignore CAs not from OSG.
 
-    ## Print metric, and we're all done!
-    &RSVProbeBase::Print_Metric ();
-}
-
-## Initialize local variables
-sub Initialize_Local{
-    if (! $o{'certDir'}) {
-	if (!defined $o{'localCE'}){
-	    $o{'certDir'} =  $o{'REMOTE_ENV'}{'OSG_LOCATION'}."/globus/TRUSTED_CA";
-	} else {
-	    $o{'certDir'} =  $o{'VDT_LOCATION_LOCAL'}."/globus/TRUSTED_CA";
-	}
+    # Step 4: Special Case: For EGEE tests we want to notify of errors if any IGTF CAs are missing.
+    # TODO egee
+    todo_egee="""my $missing_count = 0;
+    if ($o{'type'} =~ /^egee$/i){
+        for my $local_hash ( keys %source ) {
+            next if ($source{$local_hash} !~ /I/ ); # Ignore non IGTF CAs
+            next if (exists $found_cas{$local_hash}); # CA was present. 
+            $status_code = 1;
+            push @egee_error_hash, $local_hash;
+            $missing_count++;
+        }
     }
-    $o{'errorFile'}  =  $o{'VDT_LOCATION_LOCAL'}."/osg-rsv/logs/probes/.$o{'hostName'}.cacert_verify.err" if (! $o{'errorFile'}) ;
-    $o{'errorHrs'} = 3*24 if (! $o{'errorHrs'}); ## Error after 72 Hrs
-    $o{'type'} = 'osg' if (! $o{'type'}); 
-    $o{'workerScriptFile'} = "$o{'PROBE_DIR_LOCAL'}/worker-scripts/md5sum-ca-verify.sh" if (!defined($o{'workerScriptFile'}));
-}
+"""    
+    # Step 6: See if the warning should be an error
+    now = time.time()
+    last_update = 0
+    out_msg = "Few of the files in your installations are out of sync with the OSG distribution.\n"
+    out_msg += "\tThe CA that are out of sync are: %s \n" % error_hash
+    out_msg += "\tPlease ensure that your CA update process (e.g. vdt-update-certs or yum update) is configured and running \n\n"
+    #out_msg += "\t%s IGTF CAs are missing and is required for sites that need to conform to EGEE policy.\n" % missing_count
+    #out_msg += "\tList of missing CAs include: %s.\n" % egee_error_hash
+     
+    if status_code==0:
+      # Remove error file if exists 
+      if os.path.isfile(self.error_file):
+        try:
+          os.remove(f)
+        except OSError:
+          self.add_message("Could not delete the error file (%s). Please delete it by hand to avoid potential future problems." % 
+                           self.error_file)
+      self.return_ok("CAs are in sync with OSG distribution\n")
+    elif status_code==1:
+      if os.path.isfile(self.error_file):
+        lines = None
+        try:
+          lines = open(self.error_file).readlines()
+        except IOError:
+          self.add_warning("Could not open error file (%s) indicating CA file is out of sync. This probe may never escalate to an error stage." % self.error_file)
+        if not lines:
+          #self.return_unknown("The downloaded CA list from OSG is empty. Unable to verify CAs.")
+          pass 
+        else:
+          last_update = lines[0].strip()
+          if last_update and now > last_update + errorHrs*60*60:
+            # Escalate warning to error
+            self.return_error("ERROR: "+out_msg)
+          else:
+            self.return_warning("WARNING: "+out_msg)
+      else:
+        # Out of sync for the first time. Create error record. Return Warning.
+        try:
+          lines = open(self.error_file, 'w').write("%s" % now)
+        except IOError:
+          self.add_warning("Could not record error file (%s) indicating CA file is out of sync. This probe may never escalate to an error stage." % self.error_file)
+        self.return_warning("WARNING: "+out_msg)
 
-## None for now
+    # Step ?6?: Recording the result for RSV output
+    # already done
+    # As it is now it should never end up here
+    if status_code>1:
+      self.return_error("ERROR: Probe ended with unexpected error condition")
+    self.return_unknown("Probe ended with unexpected status")
+
+    # This code is not checking for cert validity or expiration
+    # only comparing to the recorded MD5 signatures
+
+def main():  
+  p = CAcertProbe()
+  p.parseopt()
+  p.run()
+
+if __name__ == "__main__":
+    main()
+
