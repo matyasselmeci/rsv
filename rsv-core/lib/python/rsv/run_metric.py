@@ -110,15 +110,18 @@ def parse_job_output_brief(rsv, metric, stdout, stderr):
 
         # We want to display the trimmed output
         # TODO - display non-trimmed output if we are in -v3 mode?
+        trim_length = rsv.config.get("rsv", "details-data-trim-length")
         if not rsv.quiet:
-            trim_length = rsv.config.get("rsv", "details-data-trim-length")
-            rsv.echo("Displaying first %s bytes of output (use -v3 for full output)" %
-                    trim_length, 1)
+            rsv.echo("Displaying first %s bytes of output" % trim_length, 1)
             stdout = stdout[:trim_length]
         else:
             rsv.log("DEBUG", "Displaying full output received from command:")
-            
+
         rsv.echo(stdout)
+
+        rsv.echo("STDERR from metric:")
+        rsv.echo(stderr[:trim_length])
+
         sys.exit(1)
 
 

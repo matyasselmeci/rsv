@@ -337,7 +337,7 @@ class Results:
         data   = "Failed to run job via Condor-G\n\n"
         data  += "Stdout:\n%s\n" % stdout
         data  += "Stderr:\n%s\n" % stderr
-        data  += "Log:\n%s\n" % log_contents
+        data  += "Log:\n%s\n" % log
         
         self.brief_result(metric, status, data, stderr="")
 
