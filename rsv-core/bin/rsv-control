@@ -1,5 +1,5 @@
-#!/bin/sh
-python_path=$(
-python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())"
-)
-python $python_path/rsv/rsv-control.py $@
+#!/usr/bin/python
+
+import rsv.rsv_control
+
+rsv.rsv_control.main()

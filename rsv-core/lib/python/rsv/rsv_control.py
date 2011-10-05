@@ -192,8 +192,8 @@ def main_rsv_control():
     return False
 
 
-signal.signal(signal.SIGINT, sigint_handler)
-if __name__ == "__main__":
+def main():
+    signal.signal(signal.SIGINT, sigint_handler)
     PROGNAME = os.path.basename(sys.argv[0])
     if PROGNAME == 'rsv-control' or PROGNAME == 'rsv-control.py':
         if not main_rsv_control():
