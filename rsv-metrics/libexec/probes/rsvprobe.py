@@ -11,8 +11,11 @@ import os
 import sys
 import commands
 import getopt
+import urllib
+import urllib2
 # re for config.ini parsing
 import re
+
 
 # Find the correct certificate directory
 def get_ca_dir():
@@ -38,6 +41,20 @@ def run_command(cmd, timeout=0, workdir=None):
   if olddir:
     os.chdir(olddir)
   return ec, out
+
+def get_http_doc(url, quote=True):
+  if quote:
+    u = url.split('/',3)
+    u[-1] = urllib.quote(u[-1]) 
+    u = '/'.join(u)
+  else:
+    u = url
+  try:
+    f = urllib2.urlopen(u)
+  except urllib2.URLError:
+    return None
+  ret = f.readlines()
+  return ret
 
 def get_config_val(req_key, req_section=None): 
   if os.getenv("OSG_LOCATION"):
@@ -287,6 +304,11 @@ class RSVProbe:
         # TODO: options not implemented
         pass
     return options, remainder 
+
+  def out_debug(self, text):
+    # output the text to stderr
+    #print >> sys.stderr, text
+    sys.stderr.write("%s\n" % test)
 
   def add_message(self, text):
     self.detailed.append("MSG: %s" % text)

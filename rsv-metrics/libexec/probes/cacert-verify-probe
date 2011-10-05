@@ -1,3 +1,6 @@
+#!/usr/bin/python
+# First version Sep 2011, Marco Mambelli marco@hep.uchicago.edu
+
 import os
 import time
 import calendar
@@ -43,7 +46,7 @@ def md5sum(fname):
 
 # Unix commands used
 CMD_OPENSSL = "/usr/bin/openssl"
-CMD_WGET = "wget"
+#CMD_WGET = "wget"
 
 
 class CAcertProbe(rsvprobe.RSVProbe):
@@ -67,15 +70,16 @@ class CAcertProbe(rsvprobe.RSVProbe):
     self.tempdir = rsvprobe.get_temp_dir()
     # $o{'errorFile'}  =  $o{'VDT_LOCATION_LOCAL'}."/osg-rsv/logs/probes/.$o{'hostName'}.cacert_verify.err" if (! $o{'errorFile'}) 
     self.error_file = os.path.join(self.tempdir, "localhost.cacert_verify.err")
+    self.test_type = 'osg'
     self.help_message = """IMPORTANT NOTE: This is a probe that verifies if the CA distribution at the site is upto date
 This probe downloads a file contains a list of md5sum from a central location.
 This list is compared against the md5sum of the files in the site CA install.
 Additionally it makes sure that all IGTF CAs are installed.
 """
-    self.addopt("", "--error-file", "--error-file FILE_LOCATION \tLocation where errors should be recorded")
-    self.addopt("", "--error-hours", "--error-hours HOURS \t Number of hours elapsed before error is to be issued")
-    self.addopt("", "--type", "--type TYPE \tThis parameter determines whether the test should confrom to EGEE or OSG requirement.\n                                   (Accepted values: osg, egee) (Default: osg)")
-    self.addopt("", "--cacerts-dir ", "--cacerts-dir DIR \tLocation of CA certificate files")
+    self.addopt("", "error-file=", "--error-file FILE_LOCATION \tLocation where errors should be recorded")
+    self.addopt("", "error-hours=", "--error-hours HOURS \t Number of hours elapsed before error is to be issued")
+    self.addopt("", "type=", "--type TYPE \tThis parameter determines whether the test should confrom to EGEE or OSG requirement.\n                                   (Accepted values: osg, egee) (Default: osg)")
+    self.addopt("", "cacerts-dir=", "--cacerts-dir DIR \tLocation of CA certificate files")
     ## unused_options from old perl probe
     # " [--worker-script-file <file>     Worker script file to use.".
     # " [--local-ce]          The verify test is run on localhost and not through globus gatekeeper."
@@ -176,7 +180,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     #my $status_code = 0; # Return status code as expected by RSV for summaryData
     #my $status_out = "Security Probe Version: $site_rsv_probe_version\n"; # Compile detailed data for output by RSV
     source = {}
-    found_cas = {}
+    found_cas = []
     md5 = {}
     file_md5sum = {}
     error_hash = []
@@ -232,8 +236,7 @@ Additionally it makes sure that all IGTF CAs are installed.
       self.return_unknown("ERROR: CA Certs Directory %s has unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type))
     cert_files = rsvprobe._listDirectory(certdir, [cert_ext])
     if not cert_files:
-      self.return_unknown("ERROR: CA Certs Directory %s contains no certificate files (*.%s).. Setting metric to unknown." % (certdir, cert_ext))     
-
+      self.return_unknown("ERROR: CA Certs Directory %s contains no certificate files (*.%s).. Setting metric to unknown." % (certdir, cert_ext))
     # load md5 in a dictionary basename_without_extension->md5 (hash for v0, sitename v1)
     for f in cert_files:
       try:
@@ -242,24 +245,10 @@ Additionally it makes sure that all IGTF CAs are installed.
         self.return_unknown("Could not calculate md5sums of your CA file %s." % f)
         # eliminate error? file may have been deleted in the mean time, just skip?
         pass
-    # replaced $ca_version_script= "$o{'PROBE_DIR_LOCAL'}/worker-scripts/ca_version.sh";
-
     # Download the ms5sum file from OSG/ITB cache
-    cmd = "%s %s 2>&1" % (CMD_WGET, local_url)
-    ec, out = rsvprobe.run_command(cmd, workdir=working_dir)
-    #MM
-    print "CMD: %s %s: %s %s" % (cmd, working_dir, ec, out)
-    if ec != 0:
-      self.return_unknown("Could not download the md5sum for CA list from OSG (%s). Unable to verify CAs." % local_url)
-    downloaded_md5_file = os.path.join(working_dir, os.path.basename(local_url))
-    # change dir? now? chdir($cwd) 
-    ##MM ERROR? also in new format the key seems to be the hash.0, not the sitename.pem?
-    try:
-      lines = open(downloaded_md5_file).readlines()
-    except IOError:
-      self.return_unknown("The downloaded md5sum file from OSG could not be opened. Unable to verify CAs.")
+    lines = rsvprobe.get_http_doc(local_url)
     if not lines:
-      self.return_unknown("The downloaded md5sum file from OSG is empty. Unable to verify CAs.")
+      self.return_unknown("Could not download the md5sum for CA list from OSG (%s) or the file is empty. Unable to verify CAs." % local_url)
     for line in lines:
         line.strip()
         values = line.split()
@@ -274,17 +263,9 @@ Additionally it makes sure that all IGTF CAs are installed.
                    "http://software-itb.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
                  ]
     local_url = local_urls[ca_format_type][grid_type]
-    cmd = "%s %s 2>&1" % (CMD_WGET, local_url)
-    ec, out = rsvprobe.run_command(cmd, workdir=working_dir)
-    if ec != 0:
-      self.return_unknown("Could not download the CA list from OSG (%s). Unable to verify CAs." % local_url)
-    ca_index_file = os.path.join(working_dir, os.path.basename(local_url))
-    try:
-      lines = open(ca_index_file).readlines()
-    except IOError:
-      self.return_unknown("The downloaded CA list from OSG could not be opened. Unable to verify CAs.")
+    lines = rsvprobe.get_http_doc(local_url)
     if not lines:
-      self.return_unknown("The downloaded CA list from OSG is empty. Unable to verify CAs.")
+      self.return_unknown("Could not download the CA list from OSG (%s) or the list is empty. Unable to verify CAs." % local_url)
     ## Old format (remove 1 #):
     ## Hash         Source                   URL                                      Accreditation
     ##--------------------------------------------------------------------------------------------------------
@@ -336,7 +317,7 @@ Additionally it makes sure that all IGTF CAs are installed.
 
     for i in file_md5sum.keys():
       # List of CAs found.
-      found_cas[i] = i
+      found_cas.append(i) 
       # TODO egee
       #next if (!exists $source{$local_hash}); # Ignore CAs not from OSG.
       #next if ($o{'type'} =~ /egee/i && $source{$local_hash} !~ m/I/ ); #For EGEE test we want to check only IGTF CAs
@@ -351,25 +332,26 @@ Additionally it makes sure that all IGTF CAs are installed.
 
     # Step 4: Special Case: For EGEE tests we want to notify of errors if any IGTF CAs are missing.
     # TODO egee
-    todo_egee="""my $missing_count = 0;
-    if ($o{'type'} =~ /^egee$/i){
-        for my $local_hash ( keys %source ) {
-            next if ($source{$local_hash} !~ /I/ ); # Ignore non IGTF CAs
-            next if (exists $found_cas{$local_hash}); # CA was present. 
-            $status_code = 1;
-            push @egee_error_hash, $local_hash;
-            $missing_count++;
-        }
-    }
-"""    
+    todo_egee="""my $missing_count = 0;"""
+    if self.test_type.lower() == 'egee':
+      for i in source.keys():
+        if source[i].find('I') < 0:
+          continue  # Ignore non IGTF CAs
+        if i in found_cas: 
+          continue  # CA was present. 
+        #self.add_warning("Certficate %s mssing" % i)
+        status_code = 1
+        egee_error_hash.append(i)
+        missing_count += 1
+
     # Step 6: See if the warning should be an error
     now = time.time()
     last_update = 0
     out_msg = "Few of the files in your installations are out of sync with the OSG distribution.\n"
     out_msg += "\tThe CA that are out of sync are: %s \n" % error_hash
-    out_msg += "\tPlease ensure that your CA update process (e.g. vdt-update-certs or yum update) is configured and running \n\n"
-    #out_msg += "\t%s IGTF CAs are missing and is required for sites that need to conform to EGEE policy.\n" % missing_count
-    #out_msg += "\tList of missing CAs include: %s.\n" % egee_error_hash
+    out_msg += "\tPlease ensure that your CA update process (e.g. vdt-update-certs or yum update) is configured and running \n"
+    out_msg += "\t%s IGTF CAs are missing and is required for sites that need to conform to EGEE policy.\n" % missing_count
+    out_msg += "\tList of missing CAs include: %s.\n" % egee_error_hash
      
     if status_code==0:
       # Remove error file if exists 
@@ -388,22 +370,25 @@ Additionally it makes sure that all IGTF CAs are installed.
         except IOError:
           self.add_warning("Could not open error file (%s) indicating CA file is out of sync. This probe may never escalate to an error stage." % self.error_file)
         if not lines:
-          #self.return_unknown("The downloaded CA list from OSG is empty. Unable to verify CAs.")
-          pass 
+          self.add_warning("The error file (%s) is empty. This probe may never escalate to an error stage." % self.error_file)
         else:
           last_update = lines[0].strip()
-          if last_update and now > last_update + errorHrs*60*60:
-            # Escalate warning to error
-            self.return_error("ERROR: "+out_msg)
-          else:
-            self.return_warning("WARNING: "+out_msg)
+          try:
+            if last_update and now > float(last_update) + errorHrs*60*60:
+              # Escalate warning to error
+              self.return_error(out_msg)
+            else:
+              self.return_warning(out_msg)
+          except ValueError:
+            self.add_warning("The error file (%s) is malformed. This probe may never escalate to an error stage." % self.error_file)
+            self.return_warning(out_msg)
       else:
         # Out of sync for the first time. Create error record. Return Warning.
         try:
           lines = open(self.error_file, 'w').write("%s" % now)
         except IOError:
           self.add_warning("Could not record error file (%s) indicating CA file is out of sync. This probe may never escalate to an error stage." % self.error_file)
-        self.return_warning("WARNING: "+out_msg)
+        self.return_warning(out_msg)
 
     # Step ?6?: Recording the result for RSV output
     # already done
