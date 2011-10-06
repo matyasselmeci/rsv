@@ -4,7 +4,7 @@ default-cron-interval = 15 */6 * * *
 execute = grid
 transfer-files = /usr/libexec/rsv/probes/rsvprobe.py
 service-type = OSG-CE
-output-format = wlcg
+output-format = brief
 enable-by-default = true
 
 
