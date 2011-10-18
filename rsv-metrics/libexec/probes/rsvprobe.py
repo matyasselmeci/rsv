@@ -19,6 +19,7 @@ import re
 
 # Find the correct certificate directory
 def get_ca_dir():
+  "Find the CA certificate directory in both Pacman and RPM installations"
   if os.getenv("OSG_LOCATION"):
     cadir =  os.path.join(os.getenv("OSG_LOCATION"),"globus/TRUSTED_CA")
   elif os.getenv("VDT_LOCATION"):
@@ -30,6 +31,7 @@ def get_ca_dir():
 
 # Wrapper around commands (add timeout in the future)
 def run_command(cmd, timeout=0, workdir=None):
+  "Run an external command in the workdir directory. Timeout is not implemented yet."
   olddir=None
   if workdir: 
     olddir = os.getcwd()
@@ -43,6 +45,7 @@ def run_command(cmd, timeout=0, workdir=None):
   return ec, out
 
 def get_http_doc(url, quote=True):
+  "Retrieve a document using HTTP and return all lines"
   if quote:
     u = url.split('/',3)
     u[-1] = urllib.quote(u[-1]) 
@@ -57,6 +60,7 @@ def get_http_doc(url, quote=True):
   return ret
 
 def get_config_val(req_key, req_section=None): 
+  "Get the value of an option from a section of OSG configuration in both Pacman and RPM installations."
   if os.getenv("OSG_LOCATION"):
     confini_fname =  os.path.join(os.getenv("OSG_LOCATION"), "osg/etc/config.ini")
   elif os.getenv("VDT_LOCATION"):
@@ -64,13 +68,17 @@ def get_config_val(req_key, req_section=None):
   else:    
     # NEW osg-configure code/API 
     from osg_configure.modules import configfile
+    # necassary for exception raised by osg_configure
+    import ConfigParser
     try:                                                                                                                                     
       config = configfile.read_config_files()                                                                                                 
     except IOError, e:                                                                                                                       
-      # error_exit("Can't read configuration files: %s" % e) 
       return None
     if req_section:
-      config.get(req_section, req_key)
+      try:
+        ret = config.get(req_section, req_key)
+      except ConfigParser.NoSectionError:
+        return None
     else:
       for section in config.sections():
         if config.has_option(section, req_key):
@@ -79,7 +87,7 @@ def get_config_val(req_key, req_section=None):
         ret = config.defaults()[req_key]
       except KeyError:
         return None
-      return ret
+    return ret
   # Continue old Pacman installation
   # Behaves like the old probe: no variable substitution in config.ini
   try:
@@ -124,7 +132,8 @@ def get_config_val(req_key, req_section=None):
 # 1 for itb (OSG-ITB)
 # 0 for production (OSG) or anything else
 def get_grid_type():
-  # config.ini parsing in perl probe
+  "Return 1 for OSG-ITB sites, 0 otherwise (production sites)"
+  # Equivalent of config.ini parsing in perl probe:
   # cat $1/osg/etc/config.ini | sed -e's/ //g'| grep '^group=OSG-ITB' &>/dev/null
   grid_type = get_config_val("group", "Site Information")
   if grid_type:
@@ -133,6 +142,7 @@ def get_grid_type():
   return 0 
 
 def get_temp_dir():
+  "Return the a temporary directory to store data across executions."
   # Should I create a directory per user?
   # /var/tmp/osgrsv, /tmp/osgrsv or at least /tmp (or "")?
   if os.path.isdir('/var/tmp/osgrsv'):
@@ -163,20 +173,16 @@ def get_temp_dir():
  
  
 def _listDirectory(directory, fileExtList):                                         
-    "get list of file info objects for files of particular extensions"
+    "Get the list of file info objects for files of particular extensions"
     fileList = [os.path.normcase(f) for f in os.listdir(directory)]
     fileList = [os.path.join(directory, f) for f in fileList
                   if os.path.splitext(f)[1] in fileExtList]
     return fileList
  
 
-# equivalent of which in python
-# wrapper around commands.getstatusoutput (eventually timedcommand)
-# Options parser
+# TODO: equivalent of which in python to help with external commands
 
-def process_command_line(extra_opts):
-  return
-
+# Valid probe status (according to specification)
 OK = 0
 WARNING = 1
 CRITICAL = 2
@@ -191,10 +197,21 @@ status_dict = {
 
 status_list = status_dict.keys()
 status_val_list = status_dict.values()
-    
+
 class RSVProbe:
+  """Base class for RSV probes. Probes are executables performing tests and returning a specific output.
+A single probe can run multiple tests, metrics.
+Possible output statuses are: 
+OK - the test was successful
+WARNING - the probe found some problems demanding attention (and raised a warning)
+CRITICAL - the service tested is not passing the test
+UNKNOWN - the probe was unable to run
+The behavior is specified in a WLCG document:
+https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
+"""
   def __init__(self):
     self.status = OK
+    self.select_wlcg_output = False
     self.summary = ""
     self.detailed = []
     self.warning_count = 0
@@ -207,6 +224,7 @@ class RSVProbe:
     ## options and default values
     self.host = "localhost"
     self.uri = None
+    self.verbose = False
     self.options_short = 'm:lu:h:t:x:V?v'
     self.options_long = ['metric=', 
       'list', 
@@ -233,19 +251,20 @@ class RSVProbe:
   #  return fileList
   
   def run(self):
+    "Probe execution - replaced by the specific probes"
     pass
 
-  def init(self, args):
-    self.parseopt(args)
-
   def invalid_option_handler(self, msg):
+    "By default a probe aborts if an unvalid option is received. This can be changed replacing this handler."
     self.return_unknown("Invalid option. Aborting probe")      
     
   def get_version(self):
+    "Returns the probe's name and version."
     ret = "Probe %s: version %s" % (self.name, self.version)
     return ret
 
   def get_usage(self):
+    "Usage string."
     ret = "Usage: %s [opts] \n" % sys.argv[0]
     if self.help_message:
       ret += "%s\n" % self.help_message
@@ -254,24 +273,33 @@ class RSVProbe:
     return ret
 
   def get_metrics(self):
+    "Returns a list of the supported metrics, described according to specification."
     ret = ""
     for m in self.supported_metrics:
       ret += m.describe()
     ret += "EOT\n"
     return ret
 
-  def get_metric(self,  metric):
+  def get_metric(self,  metric_name):
+    "Returns the metric named. None if it is not supported by the probe."
     for m in self.supported_metrics:
-      if metric == m.name:
+      if metric_name == m.name:
         return m
     return None
 
   def addopt(self, short_str, long_str, help_str):
+    "Helper function to add options supported by subclasses."
     self.options_short += short_str
     self.options_long.append(long_str)
     self.options_help.append(help_str)
 
   def parseopt(self):
+    """Parse the command line options and arguments. Options and parameters are retrieved from sys.argv[1:], 
+validated and processed with getopt, using self.options_short and self.options_long. Actions on some options are taken.
+Finally all processed options and reminder are returned to daisy chain the processing in subclasses.
+Define parseopt(self) and first call the one of the parent 'options, remainder = rsvprobe.RSVProbe.parseopt(self)'
+then process the options as desired and at the end return all of them for processing in subclasses: 'return options, remainder'
+"""
     # using sys.argv, no real usecase to pass different args
     try:
       options, remainder = getopt.getopt(sys.argv[1:], self.options_short, self.options_long)
@@ -306,14 +334,17 @@ class RSVProbe:
     return options, remainder 
 
   def out_debug(self, text):
+    "Debug messages are sent to stderr."
     # output the text to stderr
     #print >> sys.stderr, text
     sys.stderr.write("%s\n" % test)
 
   def add_message(self, text):
+    "Add a message to the probe detailed output. The status is not affected."
     self.detailed.append("MSG: %s" % text)
 
   def add(self, what, text, exit_code):
+    "All the add_... functions add messages to the probe output and affect its return status."
     if not what in status_list:
       self.return_unknown("Invalid probe status: %s" % what, 1)
     self.detailed.append(status_dict[what]+": %s" % text)
@@ -329,6 +360,10 @@ class RSVProbe:
       self.ecode = exit_code
       self.summary = status_dict[what]+": %s" % text
 
+  def trim_detailed(self, number=1):
+    "detailed normally contains a copy of te summary, trim_detailed allows to remove it"
+    self.detailed = self.detailed[:-number]
+
   def add_ok(self, text, exit_code=-1):
     self.add(OK, text, exit_code)
 
@@ -338,11 +373,12 @@ class RSVProbe:
   def add_critical(self, text, exit_code=-1):
     self.add(CRITICAL, text, exit_code)
 
-
-  # add_unknown make no sense because it is exit condition
+  # add_unknown makes no sense because UNKNOWN is an exit condition
 
   def probe_return(self, what, text, exit_code=-1):
+    "All the return_... functions add messages to the probe output, affect the status and terminate the probe"
     self.add(what, text, exit_code)
+    self.trim_detailed()
     self.print_output()
     sys.exit(self.ecode)
 
@@ -359,6 +395,7 @@ class RSVProbe:
     self.probe_return(UNKNOWN, text, exit_code)
 
   def print_short_output(self):
+    "Print the probe output in the short format (RSV short format)"
     outstring = "RSV BRIEF RESULTS:\n"
     outstring += "%s\n" % status_dict[self.status]
     outstring += "%s\n" % self.summary
@@ -366,6 +403,7 @@ class RSVProbe:
     print outstring
 
   def print_wlcg_output(self):
+    "Print the probe output in the extended format (WLCG standard)"
     metric = self.get_metric(self.metric)
     out_detailed = '\n'.join(self.detailed)
     ## Trim detailsData if it is too long
@@ -400,9 +438,12 @@ class RSVProbe:
     print outstring;
     ## Print to file missing
 
-
-
-  print_output = print_short_output
+  def print_output(self):
+    "Select the output format"
+    if self.select_wlcg_output:
+      self.print_wlcg_output()
+    else:
+      self.print_short_output()
 
 
 class RSVMetric:
@@ -412,7 +453,7 @@ name - metricName	 The name of the metric
 mtype - metricType	 This should be the constant value 'performance' or 'status'
 dtype - dataType	 The type of the data: float, int, string, boolean (only 'performance' probes)
 """
-
+  # Metric type constants
   STATUS='status'
   PERFORMANCE='performance'
 
@@ -425,10 +466,10 @@ dtype - dataType	 The type of the data: float, int, string, boolean (only 'perfo
     self.dtype = dtype
  
   def describe(self):
+    "Return a metric description in the standard WLCG format"
     ret = "serviceType:	%s\nmetricName: %s\nmetricType: %s\n" % (self.stype, self.name, self.mtype)
     if self.mtype == 'performance':
       ret += "dataType: %s\n" % self.dtype # The type of the data: float, int, string, boolean
     return ret
-
 
 

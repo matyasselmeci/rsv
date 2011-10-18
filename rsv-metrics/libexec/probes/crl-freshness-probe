@@ -1,3 +1,6 @@
+#!/usr/bin/python
+# First version Sep 2011, Marco Mambelli marco@hep.uchicago.edu
+
 import os
 import time
 import calendar
@@ -7,103 +10,176 @@ try:
 except ImportError:
   import md5 as mymd5
 
+# Add the current directory to the path:
+# auxiliary files are staged in the same directory during remote execution
 import sys
 sys.path.insert(0, ".")
 
 import rsvprobe
 
-# Auxiliary functions
-def adler32(fname):
-    """Compute the adler32 checksum of the file, with seed value 1"""
-    BLOCKSIZE = 4096 * 1024
-    f = open(fname,'r')
-    checksum = 1 #Important - dCache uses seed of 1 not 0
-    while True:
-        data = f.read(BLOCKSIZE)
-        if not data: 
-	    break
-        checksum = zlib.adler32(data, checksum)
-    f.close()
-    # Work around problem with negative checksum
-    if checksum < 0:
-        checksum += 2**32
-    return hex(checksum)[2:10].zfill(8).lower()
-
-def md5sum(fname):
-    BLOCKSIZE = 4096 * 1024
-    f = open(fname,'r')
-    checksum = mymd5.md5()
-    while True:
-        data = f.read(BLOCKSIZE)
-        if not data:
-            break
-        checksum.update(data)
-    f.close()
-    return checksum.hexdigest().lower()
 
 # Unix commands used
 CMD_OPENSSL = "/usr/bin/openssl"
-CMD_WGET = "wget"
+#CMD_WGET = "wget"
+
+# Auxiliary functions
+def md5sum(fname):
+  "Return the md5 checksum of the file."
+  BLOCKSIZE = 4096 * 1024
+  f = open(fname,'r')
+  checksum = mymd5.md5()
+  while True:
+    data = f.read(BLOCKSIZE)
+    if not data:
+      break
+    checksum.update(data)
+  f.close()
+  return checksum.hexdigest().lower()
 
 
 class CRLProbe(rsvprobe.RSVProbe):
   def __init__(self):
     rsvprobe.RSVProbe.__init__(self)
+    self.metric = ""
+    metric = rsvprobe.RSVMetric("OSG-CE", "org.osg.certificates.crl-expiry", rsvprobe.RSVMetric.STATUS)
+    metric.service_version = ">= OSG CE 1.0.0"
+    metric.probe_type = "OSG-CE"
+    ## What version of the WLCG specification does this probe conform to?
+    metric.probe_revision = "3.0"
+    metric.probe_spec_version = "0.91"
+    metric.enable_by_default = True
+    ## Unix cron type metric interval
+    metric.cron_interval = "30 */6 * * *"
+    self.supported_metrics = [metric]
+    ## Specific options and defaults
+    self.ca_certs_dir = None
+    # default Warning after 9 Hrs
+    self.warningHrs = 9
+    # default Error after 72 Hrs
+    self.errorHrs = 3*24 
+    self.tempdir = rsvprobe.get_temp_dir()
+    self.error_file = os.path.join(self.tempdir, "localhost.crl_verify.err")
+    self.test_type = 'osg'
+    self.help_message = """IMPORTANT NOTE: This is a site-level probe that checks if the CRLs have been updated recently.
+This probe downloads a file contains a list of md5sum from a central location.
+This list is compared against the md5sum of the files in the site CA install.
+Additionally it makes sure that all IGTF CAs are installed.
+"""
+    self.addopt("", "error-file=", "--error-file FILE_LOCATION \tLocation where errors should be recorded")
+    self.addopt("", "warning-hours=", "--warning-hours HOURS \t Number of hours elapsed before a warning is to be issued")
+    self.addopt("", "error-hours=", "--error-hours HOURS \t Number of hours elapsed before an error is to be issued")
+    self.addopt("", "type=", "--type TYPE \tThis parameter determines whether the test should confrom to EGEE or OSG requirement.\n                                   (Accepted values: osg, egee) (Default: osg)")
+    self.addopt("", "cacerts-dir=", "--cacerts-dir DIR \tLocation of CA certificate and CRL files")
+    ## unused_options from old perl probe
+    # " [--worker-script-file <file>     Worker script file to use.".
+    # " [--local-ce]          The verify test is run on localhost and not through globus gatekeeper."
+
+  def parseopt(self):
+    "parse options specific to CAcertProbe and return options and reminder to allow further processing"
+    options, remainder = rsvprobe.RSVProbe.parseopt(self)
+    for opt, arg in options:
+      if opt == '--error-file':
+        self.error_file = arg
+      elif opt in ('-h', '--host'):
+        if not '--error-file' in options.keys():
+          self.error_file = os.path.join(self.tempdir, "%s.cacert_verify.err" % arg)
+      elif opt == '--warning-hours':
+        try:
+          self.warningHrs = int(arg)
+        except ValueError:
+          self.return_unknown("Invalid warning hours '%s', must be int. Aborting probe." % arg)      
+      elif opt == '--error-hours':
+        try:
+          self.errorHrs = int(arg)
+        except ValueError:
+          self.return_unknown("Invalid error hours '%s', must be int. Aborting probe." % arg)      
+      elif opt == '--type':
+        if not arg in ['osg', 'egee']:
+          self.return_unknown("Invalid test type %s, must be 'osg' or 'egee'. Aborting probe." % arg)      
+        self.test_type = arg
+      elif opt == '--cacerts-dir':
+        self.ca_certs_dir = arg
+      #
+    return options, remainder
 
   def run(self):
-    certdir = rsvprobe.get_ca_dir()
-    tempdir = rsvprobe.get_temp_dir()
-    self.error_file = os.path.join(tempdir, "cacert-error.txt")
-    errorHrs = 3*24 ##TODO add par default Error after 72 Hrs
-    self.Check_Local_CA(certdir, tempdir, errorHrs)
+    "Probe actions"
+    self.parseopt()
+    if self.ca_certs_dir:
+      certdir = self.ca_certs_dir
+    else:
+      certdir = rsvprobe.get_ca_dir()
+    tempdir = self.tempdir 
+    self.verify_CRL(certdir, tempdir, self.warningHrs, self.errorHrs)
 
-  def verify_CRL(self, certdir, tempdir, warnHrs, errHrs):
-    """##############################Site Level Probes ###############################
-##---------------------------------------------------------------------
-##  
-## Check_Freshness_Local_CRL: Checks the last time when the CRLs were successfully downloaded
-##  
-## parameters :
-##  First:  
-##   %Probe hash 
-##  Second: 
-##   %metric hash 
-##  Third: 
-##   %local hash containing 
-##      'certDir'   Directory where CA certs (*.0) can be found 
-##      'errorHrs'  Number hours since the failing downloads before an error is issued
-##      'warnHrs'   Number hours since the failing downloads before a warning is issued
-##      'type'      Value can be 'osg' or 'egee', to identify the OSG and EGEE CRL Mertics
-##     
-## Returns 
-##   Pointer to metric hash with all the details set
-##
-##---------------------------------------------------------------------
-sub Check_Freshness_Local_CRL{
-"""    
-    status_code = 0; # Return status code as expected by RSV for summaryData
-    status_out = "Security Probe Version: $site_rsv_probe_version\n"; # Compile detailed data for output by RSV
-    source = {} list of crl files md5 -> fname
-    my %source_newhash;
-    found_crls = []
-    my $itb = 0;
-    my $ca_format_type = 0;
-    my $cmd;
-    my @contents;
-    my $type = 0; #openssl v < 1.
-
-
-    # Step 1: Get the list of Certs included in OSG from GOC website.
-    #  chomp(my $cwd = `pwd`);
-    #  my $working_dir = tempdir("osgrsv-crl`-XXXXXX", TMPDIR => 1, CLEANUP => 1);
-    #  chdir($working_dir);
-    local_url="http://software.grid.iu.edu/pacman/cadist/INDEX.txt";
-    #Check if the file CA certs are installed from ITB
+  def get_osg_CAs(self, ca_format_type, grid_type):
+    "Download and parce the CA list from OSG GOC"
+    if not grid_type in [0,1]:
+      self.return_unknown("ERROR: Unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type)) 
+    if not ca_format_type in [0,1]:
+      self.return_unknown("ERROR: CA Certs Directory %s has unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type))
+    source_name = {} # list of crl files name -> data (hash0, hash1, accreditation)
+    source_hash0 = {} # Old hash -> accreditation
+    source_hash1 = {} # New hash -> accreditation
     local_urls = [["http://software.grid.iu.edu/pacman/cadist/INDEX.txt",
                    "http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt"],
                   ["http://software.grid.iu.edu/pacman/cadist/INDEX-new.txt",
                    "http://software-itb.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
                  ]
+    local_url = local_urls[ca_format_type][grid_type]
+    # Download the CA list file from OSG/ITB cache
+    lines = rsvprobe.get_http_doc(local_url)
+    if not lines:
+      self.return_unknown("Could not download the CA list from OSG (%s) or the file is empty. Unable to verify CRLs." % local_url)
+    ## Parsing of the CA list
+    ## type 1 format:
+    ## OldHash      NewHash      CAfile                   CAURL                                       Version   Accreditation   
+    ##--------------------------------------------------------------------------------------------------------
+    #75680d2e     ee64a828     AAACertificateServices.pem https://www.terena.org/activities/tcs/         1.41   I
+    #3c58f906     157753a5     AddTrust-External-CA-Root.pem http://www.comodo.com/                         1.41   I
+    ## type 0 format:
+    ## Hash         Source                   URL                                      Accreditation
+    ##--------------------------------------------------------------------------------------------------------
+    #09ff08b7     CNRS2-Projets            http://igc.services.cnrs.fr/GRID-FR/       I
+    #0a12b607     UGRID                    https://ca.ugrid.org/                      I
+    for line in lines:
+      if not line or line.startswith('#'):
+        continue
+      line_content = line.split()  
+      if ca_format_type == 1:
+        # New CA format type, both old hash (hash0) and new hash (hash1), source name has extension (filename)
+        source_hash0[line_content[0]] = line_content[-1]
+        source_hash1[line_content[1]] = line_content[-1]
+        source_name[line_content[2].split('.')[0]] = { 'hash': line_content[0],
+                                                       'newhash': line_content[1],
+                                                       'accreditation': line_content[-1]
+                                                     }
+      else: # assuming type 0
+        # Assuming CA format type (type 0), only old hash (hash0), source name has no extension
+        source_hash0[line_content[0]] = line_content[-1]
+        source_name[line_content[1]] = { 'hash': line_content[0],
+                                         'newhash': None,
+                                         'accreditation': line_content[-1]
+                                       }
+    return source_name, source_hash0, source_hash1 
+
+  def parse_ca_index(self, certdir):
+    return catype
+ 
+  def verify_CRL(self, certdir, tempdir, warnHrs, errHrs):
+    """Check_Freshness_Local_CRL: Checks the last time when the CRLs were successfully downloaded
+parameters :
+certdir:   Directory where CA certs (*.0) and CRLs (*.r0) can be found 
+tempdir:   Temporary directory to save working files
+warnHrs:   Number hours since the failing downloads before a warning is issued
+errHrs:    Number hours since the failing downloads before an error is issued
+"""    
+    status_code = 0; # Return status code as expected by RSV for summaryData
+    status_out = "Security Probe Version: $site_rsv_probe_version\n"; # Compile detailed data for output by RSV
+    found_crls = []
+    ca_format_type = 0;
+
+    # Step 1: Get the list of Certs included in OSG from GOC website.
     ca_format_type = 0
     ca_index = os.path.join(certdir, "INDEX.txt")
     if os.path.isfile(ca_index):
@@ -119,452 +195,95 @@ sub Check_Freshness_Local_CRL{
       except (OSError, ValueError):
         # If I don't find the index file or don't find the keyword IndexTypeVersion assume type 0
         pass
+    #Check if the file CA certs are installed from ITB
     # grid_type: 0 - osg; 1 - itb
     grid_type = rsvprobe.get_grid_type()
-    if not grid_type in [0,1]:
-      self.return_unknown("ERROR: Unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type)) 
-    if not ca_format_type in [0,1]:
-      self.return_unknown("ERROR: CA Certs Directory %s has unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type))
-    local_url = local_urls[ca_format_type][grid_type]
-    cmd = "%s %s 2>&1" % (CMD_WGET, local_url)
-    ec, out = rsvprobe.run_command(cmd, workdir=tempdir)
-    if ec != 0:
-      self.return_unknown("Could not download the CA list from OSG (%s). Unable to verify CAs." % local_url)
-    ca_index_file = os.path.join(tempdir, os.path.basename(local_url))
-    try:
-      lines = open(ca_index_file).readlines()
-    except IOError:
-      self.return_unknown("The downloaded CA list from OSG could not be opened. Unable to verify CAs.")
-    if not lines:
-      self.return_unknown("The downloaded CA list from OSG is empty. Unable to verify CAs.")
- 
-    for line in lines:
-      if line.startswith('#'):
-        continue
-      line_content = line.split()  
-      #if ca_format_type == 1:
-      #  # New CA format type we use file names
-      #  hash = line_content[2].split('.')[0]
-      #else:
-      #  hash = line_content[0]
-      #source[hash] = line_content[-1]
-      if ca_format_type == 1:
-        # New CA format type we use file names
-        hash = line_content[1]
-        source_newhash[hash] = line_content[-1]
-      else:
-        hash = line_content[0]
-      source[hash] = line_content[-1]
-      old_parsing_code="""   @contents = <FILE>;  
-    foreach my $line (@contents) {
-        next if($line =~ /^Hash/i);
-        next if($line =~ /^--/i);
-        next if($line =~ /^\s+$/i); #Empty lines
-        next if($line =~ /^#/i); #allow comments in future
-        last if($line =~ /^Sources/i); #Reached end of file
-        my @line_content = split /\s+/, $line;
-        my $hash = $line_content[0];
-        $source{$hash}=$line_content[$#line_content];
-        if ($ca_format_type==1){
-	     # New format. Also consider a new hash
-             my $new_hash=$line_content[1];
-             $source_newhash{$new_hash}=$line_content[$#line_content];
-        }
-    }
-"""
- 
+    source_name, source_hash0, source_hash1 = self.get_osg_CAs(ca_format_type, grid_type)
+
     # Step 2: Get and Check time stamps on the CRL files to ensure that it has been recently downloaded
-    # run script doing lstat? check new one if doing md5
-    old_script = """
-#!/bin/bash 
-/usr/bin/stat -L -c "%n %Y" $*
-echo $?
-"""
-    if (!$o{'localCE'}){
-        $cmd = "-s  $o{'workerScriptFile'} \"$o{'certDir'}/*.r0\" 2>/dev/null";
-        &RSVProbeBase::Globus_Job_Run ($cmd, "backtick");
-    }else{
-        $cmd = "$o{'workerScriptFile'} \"$o{'certDir'}/*.r0\" 2>/dev/null";
-        &RSVProbeBase::Run_Command ($cmd, "backtick");
-    }
-
-    
-    #$cmd = "ls -1 $o{'certDir'}/*.r0";
-    #&RSVProbeBase::Run_Command ($cmd, "backtick");
-    my @crl_files = split /\n/, $o{'cmdOut'};
-    if ($crl_files[$#crl_files] != 0){
-        &RSVProbeBase::Set_Summary_Metric_Results (3,"Could not calculate md5sums of your CA file at $o{'hostName'}:$o{'certDir'}/*.r0.");
-        return \%metric;
-    }
-
     error_count = 0
     warn_count = 0
     ok_count = 0;
     crl_files = rsvprobe._listDirectory(certdir, [".r0"])
     if not crl_files:
-      self.return_unknown("ERROR: CA Certs Directory %s contains no CRL files (*.r0). Setting metric to unknown." % certdir)     
+      self.return_unknown("ERROR: CA Certs Directory %s contains no CRL files (*.r0). Aborting the probe (UNKOWN status)." % certdir)     
+    source_hash_list = source_hash0.keys()
+    if ca_format_type==1:
+      source_hash_list += source_hash1.keys()
     for i in crl_files:  
-      local_hash = os.path.baseame(i).split('.')[0] #remove the extension
-(split(/\.r0/,basename($local_crl_file)))[0]);
+      local_hash = os.path.basename(i).split('.')[0] #remove the extension
       # List of CRLs found.
       found_crls.append(local_hash)
-
-      #next if (!exists $source{$local_hash}); 
       # Ignore CRLs not from OSG.
-      if ca_format_type==0 and !exists $source{$local_hash});
-      if ca_format_type==1 and !(exists $source{$local_hash} || exists $source_newhash{$local_hash}));
-
-        #next if ($o{'type'} =~ /egee/i && $source{$local_hash} !~ m/I/ ); 
+      if not local_hash in source_hash_list:
+        if self.verbose:
+          self.add_ok("CRL file for CA with hash %s that is not from OSG, ignored." % local_hash)
+        continue
+        # if self.test_type.lower() == 'egee' and : =~ /egee/i && $source{$local_hash} !~ m/I/ ); 
         #For EGEE test we want to check only IGTF CAs
-        if (exists $source_newhash{$local_hash}){
-            # Assuming that the hash for CRL files will be either md5 or sha1 not both
-            $type=1;
-            next if ($o{'type'} =~ /egee/ &&  $source_newhash{$local_hash} !~ m/I/ ); 
-        }
-        if (exists $source{$local_hash}){
-            next if ($o{'type'} =~ /egee/ && $source{$local_hash} !~ m/I/ );
-        }
-        
-
+      if self.test_type.lower() == 'egee':
+        is_igtf_cert = False
+        try:
+          if source_hash0[local_hash].find('I') >= 0:
+            is_igtf_cert = True
+        except KeyError:
+          pass # not in hash0
+        # keep the following outside form the except to cover the case when the hash h1 is the old hash of CA cert c1
+        # and new hash of CA cert c2. Is this possible?
+        if not is_igtf_cert and ca_format_type==1:
+          try:
+            if source_hash1[local_hash].find('I') >= 0:
+              is_igtf_cert = True
+          except KeyError:
+            pass # not in hash1
+        if not is_igtf_cert:
+          if self.verbose:
+            self.add_ok("EGEE test and CRL file for CA with hash %s that is not in IGTF, ignored." % local_hash)
+          continue       
       last_update = os.stat(i)[os.path.stat.ST_MTIME] #(stat($local_crl_file))[9];
       now = time.time()
-      if now >= last_update + errorHrs*60*60:
-        self.add_critical("ERROR: CRL file for CA with hash %s has not been updated for since %s" % (local_hash, time.localtime(last_update)))
+      if now >= last_update + errHrs*60*60:
+        self.add_critical("CRL file for CA with hash %s has not been updated for since %s" % (local_hash, time.localtime(last_update)))
         error_count +=1
       elif now >= last_update + warnHrs*60*60:
-        self.add_critical("WARNING: CRL file for CA with hash %s has not been updated for since %s" % (local_hash, time.localtime(last_update)))
+        self.add_warning("CRL file for CA with hash %s has not been updated for since %s" % (local_hash, time.localtime(last_update)))
         warn_count +=1
       else:
-        #$status_out .= "OK: CRL file for CA with hash '$local_hash' was last downloaded on ".localtime($last_update)."\n" if ($o{'verbose'});
+        if self.verbose:
+          self.add_ok("CRL file for CA with hash %s was last downloaded on %s UTC" % (local_hash, time.asctime(time.gmtime(last_update))))
         ok_count +=1
 
     # Step 3: Check if any CRLs are missing.
     missing_count = 0;
-    if ($type==0){
-      #MD5 hashes observed
-      for my $local_hash ( keys %source ) {
-        next if ($o{'type'} =~ /^egee$/i &&  $source{$local_hash} !~ /I/ ); # Ignore non IGTF CAs for wlcg probe
-        next if (exists $found_crls{$local_hash}); # CRL was present. 
-        next if (! -e "$o{'certDir'}/$local_hash.0"); # CA is not present 
-            $status_code = 1 if($status_code!=2);
-            $status_out .= "MISSING: CRL file for '$local_hash' is missing. OSG policy requires CRL for every CA distributed by OSG.\n";
-            $missing_count++;
-        }
-    }elsif($type == 1){
-        #Sha1 hashes observed
-       for my $local_hash ( keys %source_newhash ) {
-            next if ($o{'type'} =~ /^egee$/i &&  $source_newhash{$local_hash} !~ /I/ ); # Ignore non IGTF CAs for wlcg probe
-            next if (exists $found_crls{$local_hash}); # CRL was present. 
-            next if (! -e "$o{'certDir'}/$local_hash.0"); # CA is not present 
-            $status_code = 1 if($status_code!=2);
-            $status_out .= "MISSING: CRL file for '$local_hash' is missing. OSG policy requires CRL for every CA distributed by OSG.\n";
-            $missing_count++;
-        }
-
-    }
-    
-	# Step 4: See if the warning should be escalated to an error
-    my $now = time();
-    my $last_update;
-    if ($status_code==0){
-        # Remove error file if exists 
-        if (-e $o{'errorFile'}){
-            $cmd = "rm  $o{'errorFile'}";
-            &RSVProbeBase::Run_Command ($cmd, "backtick");
-            if ($o{'cmdExitValue'} !=0){
-                $status_out .= "Could not delete the error file (".$o{'errorFile'}."). Please delete it by hand to avoid potential future problems.\n";
-            }
-        }
-    }elsif ($status_code==1){
-        if (-e $o{'errorFile'}){
-            open FILE, "< $o{'errorFile'}" or $status_out .= "Could not record error file ('".$o{'errorFile'}."') indicating CA file is out of sync. This probe may never escalate to an error stage. \n";
-            my @tmp_lines = <FILE>;
-            chomp($last_update = $tmp_lines[0]);
-            close FILE;
-            if ($last_update != "" && $now > $last_update + $o{'errorHrs'}*60*60){
-                # Escalate warning to error
-                $status_code = 2;
-                $status_out .= "Escalating WARNING to ERROR.";
-            }
-        }else{
-            # Out of sync for the first time. Create error record.
-            open FILE, "> $o{'errorFile'}" or $status_out .= "Could not record error file indicating CA file is out of sync. This probe may never escalate to an error stage. \n";
-            print FILE time;
-            close FILE;
-        }   
-    }
-    
-    # Step 5: Recording the result for RSV output
-    $status_out .= "OK: All CRLs have been recently updated\n" if ($status_code==0);
-    $status_out .= ($error_count+$warn_count+$ok_count)." CRLs tested.\n\t$error_count had not been updated for atleast $o{'errorHrs'} hours;\n\t$warn_count CRLs have not been updated for atleast $o{'warnHrs'} hours;\n\t$ok_count CRLs have been updated with the last $o{'warnHrs'} hours.\n";
-	$status_out .="\t $missing_count CRLs are missing.\n" if ($missing_count !=0);
-	&RSVProbeBase::Set_Summary_Metric_Results ($status_code,$status_out);
-    return \%metric;
-}
-
-  def verify_CA(self, certdir, tempdir, warnHrs):	
-    ## Step 1: Check for existence of CAcertfiles directory ... 
-    ##   return Unknown as metricsresult when directory does not exist
-    if not os.path.isdir(certdir):
-      #return or add?
-      self.return_unknown("ERROR: CA Certs Directory %s does not exist.. Setting metric to unknown." % certdir)
-
-    # Get all the certificates
-    cert_files = rsvprobe._listDirectory(certdir, ['0'])
-    if not cert_files:
-      self.return_unknown("ERROR: CA Certs Directory %s contains no certificate files (*.0).. Setting metric to unknown." % certdir)     
-    error_count = 0
-    warn_count = 0
-    ok_count = 0
-
-    for local_certs_file in cert_files:
-        #Step 2: Get the subject, Hash and dates associated with the certificate
-        cmd = "%s x509 -in %s -subject -hash -dates -noout" % (CMD_OPENSSL, local_certs_file)
-        ec, out = rsvprobe.run_command(cmd)
-        values =  out.split('\n')
-        subject = values[0].split("subject=")[1].strip()
-        chash = values[1].strip()
-        start_time = values[2].split("notBefore=")[1]
-        end_time = values[3].split("notAfter=")[1]
-
-        # Step 3: Verify certificate using openssl verify command
-        cmd = "%s verify -CApath %s %s"  % (CMD_OPENSSL, certdir, local_certs_file)
-        ec, out = rsvprobe.run_command(cmd)
-        verify_ca = out.split(':')[1].strip()
-        if not verify_ca == "OK":
-          self.add_critical("ERROR: Certificate with subject '%s' and hash '%s' failed to verify." % (subject, chash))
-          error_count += 1
-          continue
-
-        # Step 4: Check for expiry date on the cerrtificate and compare it with the current date
-        # Parsing string of form: Oct  5 08:00:00 2008 GMT ("%b %d %H:%M:%S %Y %Z")
-        utc_end_time = time.strptime(end_time, "%b %d %H:%M:%S %Y %Z")
-        unix_end_time = calendar.timegm(utc_end_time)
-        #gmt_to_unix_time($tmp_end_date[0],$tmp_end_date[1],$tmp_end_date[3], $tmp_end_time[0],  $tmp_end_time[1],  $tmp_end_time[2]);
-        now = time.time()
-        if now >= unix_end_time:
-          self.add_critical("ERROR: Certificate with subject '%s' and hash '%s' has expired on %s."  % (subject, chash, end_time))
-          error_count += 1
-        elif now + warnHrs*60*60 >= unix_end_time:
-          self.add_warning("Certificate with subject '%s' and hash '%s' is about to expire on %s."  % (subject, chash, end_time))
-          # &RSVProbeBase::Verbose("$status_out; [NOW: $now; warnHrs: $o{'warnHrs'}; unix_end_time: $unix_end_time]");
-          warn_count += 1
-        else:
-          #$status_out .= "OK: Certificate with subject '$subject' and hash '$hash' was verified\n" if ($o{'verbose'});
-          ok_count += 1
-
-    # Step 5: Recording the result for RSV output
-    self.add_ok("%s certificates found." % (error_count+warn_count+ok_count))
-    self.add_ok("\t%s failed varification/had expired;" % error_count)
-    self.add_ok("\t%s are about to expire/had warnings;" % warn_count)
-    self.add_ok("\t%s verified OK." % ok_count)
-    #&RSVProbeBase::Set_Summary_Metric_Results ($status_code,$status_out);
-    #return \%metric;
-
-
-  def Check_Local_CA(self, certdir, tempdir, errorHrs):
-    
-    #my $status_code = 0; # Return status code as expected by RSV for summaryData
-    #my $status_out = "Security Probe Version: $site_rsv_probe_version\n"; # Compile detailed data for output by RSV
-    source = {}
-    found_cas = {}
-    md5 = {}
-    file_md5sum = {}
-    error_hash = []
-    egee_error_hash = []
-    contents = []
-    itb=0;
-    ca_format_type=0;
-
-
-
-    # Step 0: Check for existence of CAcertfiles directory ... 
-    #   return Unknown as metricsresult when directory does not exist
-    if not os.path.isdir(certdir):
-      self.return_unknown("ERROR: CA Certs Directory %s does not exist.. Setting metric to unknown." % certdir)
-
-    # Step 1: Download the md5sums for CAs in the OSG/ITB
-    ## MM TODO tmp dir
-    startdir = os.path.abspath(os.path.curdir)
-    working_dir = tempdir
-    #chdir($working_dir);
-
-    #Check if the file CA cers are installed from ITB or OSG, new or old format
-    local_urls = [["http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt",
-                   "http://software-itb.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt"],
-                  ["http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum-new.txt",
-                   "http://software-itb.grid.iu.edu/pacman/cadist/cacerts_md5sum-new.txt"]
-                 ]
-    ca_format_type = 0
-    ca_index = os.path.join(certdir, "INDEX.txt")
-    if os.path.isfile(ca_index):
-      try: 
-        lines = open(ca_index).readlines()
-        for i in lines:
-          if i.find("IndexTypeVersion") >= 0:
-            try:
-              ca_format_type = int(i.split()[2])
-            except IndexError:
-              # When missing it is 0 (default value)
-              pass
-      except (OSError, ValueError):
-        # If I don't find the index file or don't find the keyword IndexTypeVersion assume type 0
-        pass
-    # grid_type: 0 - osg; 1 - itb
-    grid_type = rsvprobe.get_grid_type()
-    if not grid_type in [0,1]:
-      self.return_unknown("ERROR: Unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type)) 
-    if ca_format_type==0:
-      cert_ext = ".0"
-      local_url = local_urls[0][grid_type]
-    elif ca_format_type==1:
-      cert_ext = ".pem"
-      local_url = local_urls[1][grid_type]
-    else:
-      self.return_unknown("ERROR: CA Certs Directory %s has unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type))
-    cert_files = rsvprobe._listDirectory(certdir, [cert_ext])
-    #MM print "Looking for %s %s" % (cert_ext, cert_files)
-    if not cert_files:
-      self.return_unknown("ERROR: CA Certs Directory %s contains no certificate files (*.%s).. Setting metric to unknown." % (certdir, cert_ext))     
-
-    # load md5 in a dictionary basename_without_extension->md5 (hash for v0, sitename v1)
-    for f in cert_files:
-      try:
-        file_md5sum[os.path.basename(f).split('.')[0]] = md5sum(f)
-      except IOError:
-        self.return_unknown("Could not calculate md5sums of your CA file %s." % f)
-        # eliminate error? file may have been deleted in the mean time, just skip?
-        pass
-    # replaced $ca_version_script= "$o{'PROBE_DIR_LOCAL'}/worker-scripts/ca_version.sh";
-
-    # Download the ms5sum file from OSG/ITB cache
-    cmd = "%s %s 2>&1" % (CMD_WGET, local_url)
-    ec, out = rsvprobe.run_command(cmd, workdir=working_dir)
-    #MM
-    print "CMD: %s %s: %s %s" % (cmd, working_dir, ec, out)
-    if ec != 0:
-      self.return_unknown("Could not download the md5sum for CA list from OSG (%s). Unable to verify CAs." % local_url)
-    downloaded_md5_file = os.path.join(working_dir, os.path.basename(local_url))
-    # change dir? now? chdir($cwd) 
-    ##MM ERROR? also in new format the key seems to be the hash.0, not the sitename.pem?
-    try:
-      lines = open(downloaded_md5_file).readlines()
-    except IOError:
-      self.return_unknown("The downloaded md5sum file from OSG could not be opened. Unable to verify CAs.")
-    if not lines:
-      self.return_unknown("The downloaded md5sum file from OSG is empty. Unable to verify CAs.")
-    for line in lines:
-        line.strip()
-        values = line.split()
-        local_hash = values[1].split('.')[0].strip()
-        md5[local_hash] = values[0]
-
-    # Step 2: Get the list of Certs included in OSG from GOC website.
-    #chdir($working_dir);
-    local_urls = [["http://software.grid.iu.edu/pacman/cadist/INDEX.txt",
-                   "http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt"],
-                  ["http://software.grid.iu.edu/pacman/cadist/INDEX-new.txt",
-                   "http://software-itb.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
-                 ]
-    local_url = local_urls[ca_format_type][grid_type]
-    cmd = "%s %s 2>&1" % (CMD_WGET, local_url)
-    ec, out = rsvprobe.run_command(cmd, workdir=working_dir)
-    if ec != 0:
-      self.return_unknown("Could not download the CA list from OSG (%s). Unable to verify CAs." % local_url)
-    ca_index_file = os.path.join(working_dir, os.path.basename(local_url))
-
-    try:
-      lines = open(ca_index_file).readlines()
-    except IOError:
-      self.return_unknown("The downloaded CA list from OSG could not be opened. Unable to verify CAs.")
-    if not lines:
-      self.return_unknown("The downloaded CA list from OSG is empty. Unable to verify CAs.")
-    ## Old format (remove 1 #):
-    ## Hash         Source                   URL                                      Accreditation
-    ##--------------------------------------------------------------------------------------------------------
-    #09ff08b7     CNRS2-Projets            http://igc.services.cnrs.fr/GRID-FR/       I
-    ## New format (remove 1 #):
-    ## OldHash      NewHash      CAfile                   CAURL                                       Version   Accreditation   
-    ##--------------------------------------------------------------------------------------------------------
-    #75680d2e     ee64a828     AAACertificateServices.pem https://www.terena.org/activities/tcs/         1.41   I
-
-    for line in lines:
-      if line.startswith('#'):
+    for name, ca_info in source_name.items():
+      if self.test_type.lower() == 'egee' and ca_info['accreditation'].find('I') < 0:
+        # Ignore non IGTF CAs for wlcg probe
         continue
-      # Rules from perl version: are these OK?
-      #next if($line =~ /^Hash/i);
-      #next if($line =~ /^--/i);
-      #next if($line =~ /^\s+$/i); #Empty lines
-      #next if($line =~ /^\#/i); #allow comments in future
-      #last if($line =~ /^Sources/i); #Reached end of file
-      line_content = line.split()  
-      hash = line_content[0]
-      if ca_format_type == 1:
-        # New CA format type we use file names
-	hash = line_content[2].split('.')[0]
-      source[hash] = line_content[-1]
-      old_parsing_code = """
-    foreach my $line (@contents) {
-        next if($line =~ /^Hash/i);
-        next if($line =~ /^--/i);
-        next if($line =~ /^\s+$/i); #Empty lines
-        next if($line =~ /^\#/i); #allow comments in future
-	last if($line =~ /^Sources/i); #Reached end of file
+      # continue if found CRL
+      if ca_format_type==1 and ca_info['newhash'] in found_crls:
+        continue
+      if ca_info['hash'] in found_crls:
+        continue
+      # continue if the CA file has been removed
+      if ca_format_type==1:
+        local_hash = ca_info['newhash']
+      else:
+        local_hash = ca_info['hash']
+      if not os.path.isfile(os.path.join(certdir, "%s.0" % local_hash)):
+        self.add_warning("MISSING: CRL file for %s (type %s) is missing. OSG policy requires CRL for every CA distributed by OSG." % (local_hash, ca_format_type))
+        missing_count += 1
 
-	my @line_content = split /\s+/, $line;
-        my $hash = $line_content[0];
-	if ($ca_format_type == 1) {
-             # New CA format type we use file names
-	     $hash =  (split(/\./,$line_content[2]))[0];
-        }
-        $source{$hash}=$line_content[$#line_content];
-    }
-"""
-
-    # Step 3: Check the CAs to ensure that md5sums matchup
-    status_code = 0
-    error_count = 0
-    warn_count = 0
-    ok_count = 0
-    missing_count = 0 # Missing IGTF CAs (for egee test only)
-
-    for i in file_md5sum.keys():
-      # List of CAs found.
-      found_cas[i] = i
-      # TODO egee
-      #next if (!exists $source{$local_hash}); # Ignore CAs not from OSG.
-      #next if ($o{'type'} =~ /egee/i && $source{$local_hash} !~ m/I/ ); #For EGEE test we want to check only IGTF CAs
-      try:
-        if file_md5sum[i] != md5[i]:
-          # We have detected atleast a warning
-          status_code = 1
-          # warn/err count?
-          error_hash.append(i)
-      except KeyError:
-        pass # Ignore CAs not from OSG.
-
-    # Step 4: Special Case: For EGEE tests we want to notify of errors if any IGTF CAs are missing.
-    # TODO egee
-    todo_egee="""my $missing_count = 0;
-    if ($o{'type'} =~ /^egee$/i){
-        for my $local_hash ( keys %source ) {
-            next if ($source{$local_hash} !~ /I/ ); # Ignore non IGTF CAs
-            next if (exists $found_cas{$local_hash}); # CA was present. 
-            $status_code = 1;
-            push @egee_error_hash, $local_hash;
-            $missing_count++;
-        }
-    }
-"""    
-    # Step 6: See if the warning should be an error
+    # Step 4: See if the warning should be escalated to an error
     now = time.time()
     last_update = 0
-    out_msg = "Few of the files in your installations are out of sync with the OSG distribution.\n"
-    out_msg += "\tThe CA that are out of sync are: %s \n" % error_hash
-    out_msg += "\tPlease ensure that your CA update process (e.g. vdt-update-certs or yum update) is configured and running \n\n"
-    #out_msg += "\t%s IGTF CAs are missing and is required for sites that need to conform to EGEE policy.\n" % missing_count
-    #out_msg += "\tList of missing CAs include: %s.\n" % egee_error_hash
-     
+
+    out_msg = "%s CRLs tested.\n" % (error_count+warn_count+ok_count) 
+    out_msg += "\t%s had not been updated for at least %s hours;\n" % (error_count, errHrs)
+    out_msg += "\t%s CRLs have not been updated for at least %s hours;\n" % (warn_count,  warnHrs)
+    out_msg += "\t%s CRLs have been updated with the last %s hours.\\n" % (ok_count,  warnHrs)
+    #only if missing_count>0? 
+    if missing_count>0:
+      out_msg += "\t%s CRLs are missing.\n" % missing_count
     if status_code==0:
       # Remove error file if exists 
       if os.path.isfile(self.error_file):
@@ -573,47 +292,51 @@ echo $?
         except OSError:
           self.add_message("Could not delete the error file (%s). Please delete it by hand to avoid potential future problems." % 
                            self.error_file)
-      self.return_ok("OK: CAs are in sync with OSG distribution\n")
+      self.return_ok("All %s CRLs have been recently updated." % (error_count+warn_count+ok_count))
     elif status_code==1:
       if os.path.isfile(self.error_file):
         lines = None
         try:
           lines = open(self.error_file).readlines()
         except IOError:
-          self.add_warning("Could not open error file (%s) indicating CA file is out of sync. This probe may never escalate to an error stage." % self.error_file)
+          self.add_warning("Could not open error file (%s) indicating CRL files out of sync. This probe may never escalate to an error stage." % self.error_file)
         if not lines:
-          #self.return_unknown("The downloaded CA list from OSG is empty. Unable to verify CAs.")
-          pass 
+          self.add_warning("The error file (%s) is empty. This probe may never escalate to an error stage." % self.error_file)
         else:
           last_update = lines[0].strip()
-          if last_update and now > last_update + errorHrs*60*60:
-            # Escalate warning to error
-            self.return_error("ERROR: "+out_msg)
-          else:
-            self.return_warning("WARNING: "+out_msg)
+          try:
+            if last_update and now > float(last_update) + errHrs*60*60:
+              # Escalate warning to error
+              self.add_error("Warning messages persisted too long. Escalating WARNING to ERROR.")
+              self.return_error(out_msg)
+            else:
+              self.return_warning(out_msg)
+          except ValueError:
+            self.add_warning("The error file (%s) is malformed. Please delete the file. This probe may never escalate to an error stage." % self.error_file)
+            self.return_warning(out_msg)
       else:
         # Out of sync for the first time. Create error record. Return Warning.
         try:
           lines = open(self.error_file, 'w').write("%s" % now)
         except IOError:
-          self.add_warning("Could not record error file (%s) indicating CA file is out of sync. This probe may never escalate to an error stage." % self.error_file)
-        self.return_warning("WARNING: "+out_msg)
+          self.add_warning("Could not record error file (%s) indicating that CRL files are out of sync. This probe may never escalate to an error stage." % self.error_file)
+        self.return_warning(out_msg)
 
-    # Step ?6?: Recording the result for RSV output
+
+
+    # Step ?5?: Recording the result for RSV output
     # already done
     # As it is now it should never end up here
     if status_code>1:
-      self.return_error("ERROR: Probe ended with unexpected error condition")
+      self.return_error("Probe ended with unexpected error condition")
     self.return_unknown("Probe ended with unexpected status")
 
-    # This code is not checking for cert validity or expiration
-    # only comparing to the recorded MD5 signatures
 
-def main(args):  
-  p = CAcertProbe()
-  p.parseopts(args)
+##### Main code #####
+def main():
+  p = CRLProbe()
   p.run()
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()
 

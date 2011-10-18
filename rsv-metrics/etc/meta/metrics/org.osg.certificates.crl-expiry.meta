@@ -5,7 +5,7 @@ execute = grid
 transfer-files = /usr/libexec/rsv/probes/rsvprobe.py
 service-type = OSG-CE
 output-format = brief
-enable-by-default = false
+enable-by-default = true
 
 
 [org.osg.certificates.crl-expiry env]

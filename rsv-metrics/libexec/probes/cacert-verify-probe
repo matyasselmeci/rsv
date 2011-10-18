@@ -10,46 +10,41 @@ try:
 except ImportError:
   import md5 as mymd5
 
+# Add the current directory to the path:
+# auxiliary files are staged in the same directory during remote execution
 import sys
 sys.path.insert(0, ".")
 
 import rsvprobe
 
-# Auxiliary functions
-def adler32(fname):
-    """Compute the adler32 checksum of the file, with seed value 1"""
-    BLOCKSIZE = 4096 * 1024
-    f = open(fname,'r')
-    checksum = 1 #Important - dCache uses seed of 1 not 0
-    while True:
-        data = f.read(BLOCKSIZE)
-        if not data: 
-	    break
-        checksum = zlib.adler32(data, checksum)
-    f.close()
-    # Work around problem with negative checksum
-    if checksum < 0:
-        checksum += 2**32
-    return hex(checksum)[2:10].zfill(8).lower()
-
-def md5sum(fname):
-    BLOCKSIZE = 4096 * 1024
-    f = open(fname,'r')
-    checksum = mymd5.md5()
-    while True:
-        data = f.read(BLOCKSIZE)
-        if not data:
-            break
-        checksum.update(data)
-    f.close()
-    return checksum.hexdigest().lower()
-
 # Unix commands used
 CMD_OPENSSL = "/usr/bin/openssl"
-#CMD_WGET = "wget"
+
+# Auxiliary functions
+def md5sum(fname):
+  "Return the md5 checksum of the file."
+  BLOCKSIZE = 4096 * 1024
+  f = open(fname,'r')
+  checksum = mymd5.md5()
+  while True:
+    data = f.read(BLOCKSIZE)
+    if not data:
+      break
+    checksum.update(data)
+  f.close()
+  return checksum.hexdigest().lower()
 
 
 class CAcertProbe(rsvprobe.RSVProbe):
+  """Probe verifying the CA certificates. It runs the same tests as the old perl probe:
+- Compare the CA certs with the list of CA and md5 checksums at GOC
+- flag a warning if the md5 checksum differs from the one in the list
+- flag a warning is one of the IGTF CA is missing (flag --type EGEE)
+- warnings become critical errors after some hours (option --error-hours 72 as default)
+Certificates not included in the GOC list are not verified.
+Expiration date and validity are not checked.
+"""
+
   def __init__(self):
     rsvprobe.RSVProbe.__init__(self)
     self.metric = ""
@@ -85,8 +80,8 @@ Additionally it makes sure that all IGTF CAs are installed.
     # " [--local-ce]          The verify test is run on localhost and not through globus gatekeeper."
  
   def parseopt(self):
+    "parse options specific to CAcertProbe and return options and reminder to allow further processing"
     options, remainder = rsvprobe.RSVProbe.parseopt(self)
-    # All parameters ar passed to allow reprocessing of some of them
     for opt, arg in options:
       if opt == '--error-file':
         self.error_file = arg
@@ -108,6 +103,8 @@ Additionally it makes sure that all IGTF CAs are installed.
     return options, remainder
 
   def run(self):
+    "Probe actions"
+    self.parseopt()
     if self.ca_certs_dir:
       certdir = self.ca_certs_dir
     else:
@@ -115,7 +112,8 @@ Additionally it makes sure that all IGTF CAs are installed.
     tempdir = self.tempdir # or create a job-specific temp dir?
     self.Check_Local_CA(certdir, tempdir, self.errorHrs)
 
-  def verify_CA(self, certdir, tempdir, warnHrs):	
+  def verify_CA(self, certdir, tempdir, warnHrs):
+    "function to check certificate validity - not used"
     ## Step 1: Check for existence of CAcertfiles directory ... 
     ##   return Unknown as metricsresult when directory does not exist
     if not os.path.isdir(certdir):
@@ -176,7 +174,7 @@ Additionally it makes sure that all IGTF CAs are installed.
 
 
   def Check_Local_CA(self, certdir, tempdir, errorHrs):
-    
+    "function to compare CA certificates against the list at GOC"
     #my $status_code = 0; # Return status code as expected by RSV for summaryData
     #my $status_out = "Security Probe Version: $site_rsv_probe_version\n"; # Compile detailed data for output by RSV
     source = {}
@@ -197,10 +195,9 @@ Additionally it makes sure that all IGTF CAs are installed.
       self.return_unknown("ERROR: CA Certs Directory %s does not exist.. Setting metric to unknown." % certdir)
 
     # Step 1: Download the md5sums for CAs in the OSG/ITB
-    ## MM TODO tmp dir
+    ## No tmp files are used. Is tmp subdirectory preferred?
     startdir = os.path.abspath(os.path.curdir)
     working_dir = tempdir
-    #chdir($working_dir);
 
     #Check if the file CA cers are installed from ITB or OSG, new or old format
     local_urls = [["http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt",
@@ -218,11 +215,10 @@ Additionally it makes sure that all IGTF CAs are installed.
             try:
               ca_format_type = int(i.split()[2])
             except IndexError:
-              # When missing it is 0 (default value)
+              # When the line with IndexTypeVersion is missing, the type is 0 (default value)
               pass
       except (OSError, ValueError):
         pass
-    # 0 - osg; 1 - itb
     grid_type = rsvprobe.get_grid_type()
     if not grid_type in [0,1]:
       self.return_unknown("ERROR: Unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type)) 
@@ -276,7 +272,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     #75680d2e     ee64a828     AAACertificateServices.pem https://www.terena.org/activities/tcs/         1.41   I
 
     for line in lines:
-      if line.startswith('#'):
+      if not line or line.startswith('#'):
         continue
       # Rules from perl version: are these OK?
       #next if($line =~ /^Hash/i);
@@ -318,9 +314,9 @@ Additionally it makes sure that all IGTF CAs are installed.
     for i in file_md5sum.keys():
       # List of CAs found.
       found_cas.append(i) 
-      # TODO egee
-      #next if (!exists $source{$local_hash}); # Ignore CAs not from OSG.
-      #next if ($o{'type'} =~ /egee/i && $source{$local_hash} !~ m/I/ ); #For EGEE test we want to check only IGTF CAs
+      if self.test_type.lower() == 'egee' and source[i].find('I') < 0:
+        #For EGEE test we want to check only IGTF CAs
+        continue
       try:
         if file_md5sum[i] != md5[i]:
           # We have detected atleast a warning
@@ -331,7 +327,6 @@ Additionally it makes sure that all IGTF CAs are installed.
         pass # Ignore CAs not from OSG.
 
     # Step 4: Special Case: For EGEE tests we want to notify of errors if any IGTF CAs are missing.
-    # TODO egee
     todo_egee="""my $missing_count = 0;"""
     if self.test_type.lower() == 'egee':
       for i in source.keys():
@@ -400,9 +395,10 @@ Additionally it makes sure that all IGTF CAs are installed.
     # This code is not checking for cert validity or expiration
     # only comparing to the recorded MD5 signatures
 
+
+##### Main code #####
 def main():  
   p = CAcertProbe()
-  p.parseopt()
   p.run()
 
 if __name__ == "__main__":
