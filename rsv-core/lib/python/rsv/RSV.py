@@ -467,13 +467,13 @@ class RSV:
         Condor-G.  We will default to true because it is the better behavior. """
 
         try:
-            value = self.config.get("rsv", "use_condor_g")
+            value = self.config.get("rsv", "use-condor-g")
             if value.lower() == "true":
                 return True
             else:
                 return False
         except ConfigParser.NoOptionError:
-            self.log("INFO", "use_condor_g is not defined in Condor config file.  Defaulting to true.")
+            self.log("INFO", "use-condor-g is not defined in Condor config file.  Defaulting to true.")
             return True
 
         return True
