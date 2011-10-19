@@ -1,0 +1,12 @@
+[org.osg.general.yum-check-update]
+default-cron-interval = 0 20 * * *
+
+execute = grid
+transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
+service-type = OSG-CE
+output-format = brief
+enable-by-default = true
+description = Check for any available package updates.
+
+[org.osg.general.yum-check-update env]
+

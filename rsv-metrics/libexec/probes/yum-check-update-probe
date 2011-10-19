@@ -1,0 +1,35 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use RSVMetric;
+
+print_output_header();
+
+my %options = process_command_line();
+
+if(defined $ENV{OSG_LOCATION}) {
+    print "OK\n";
+    print "probe not applicable to non-rpm system\n";
+}
+else {
+    my $check_update_out = `/usr/bin/yum check-update -q`;
+    my $err = $? >> 8;
+    if ($err == 0) {
+        print "OK\n";
+        print "All packages are up to date\n";
+    }
+    elsif ($err == 100) {
+        my @packages = split /\n/, $check_update_out;
+        print "WARNING\n";
+        print "There are $#packages package updates available\n";
+    }
+    else {
+        print "CRITICAL\n";
+        print "Unknown error occurred\n";
+        print $check_update_out;
+        dump_debug();
+    }
+}
+
+exit 0;
