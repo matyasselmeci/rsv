@@ -1,11 +1,13 @@
 # First version Sep 2011, Marco Mambelli marco@hep.uchicago.edu
-# Probes are specified in:
-# https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
-# Other useful URLS:
-# https://twiki.grid.iu.edu/bin/view/ReleaseDocumentation/ValidateRSVProbes
-# https://twiki.grid.iu.edu/bin/view/SoftwareTools/RsvControl
-# https://twiki.grid.iu.edu/bin/view/MonitoringInformation/ConfigureRSV
-# https://twiki.grid.iu.edu/bin/view/MonitoringInformation/InstallAndConfigureRsvAdvanced
+"""Base class for RSV probes
+Probes are specified in:
+https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
+Other useful URLS:
+https://twiki.grid.iu.edu/bin/view/ReleaseDocumentation/ValidateRSVProbes
+https://twiki.grid.iu.edu/bin/view/SoftwareTools/RsvControl
+https://twiki.grid.iu.edu/bin/view/MonitoringInformation/ConfigureRSV
+https://twiki.grid.iu.edu/bin/view/MonitoringInformation/InstallAndConfigureRsvAdvanced
+"""
 
 import os
 import sys
@@ -32,7 +34,7 @@ def get_ca_dir():
 # Wrapper around commands (add timeout in the future)
 def run_command(cmd, timeout=0, workdir=None):
   "Run an external command in the workdir directory. Timeout is not implemented yet."
-  olddir=None
+  olddir = None
   if workdir: 
     olddir = os.getcwd()
     try:
@@ -47,7 +49,7 @@ def run_command(cmd, timeout=0, workdir=None):
 def get_http_doc(url, quote=True):
   "Retrieve a document using HTTP and return all lines"
   if quote:
-    u = url.split('/',3)
+    u = url.split('/', 3)
     u[-1] = urllib.quote(u[-1]) 
     u = '/'.join(u)
   else:
@@ -70,9 +72,9 @@ def get_config_val(req_key, req_section=None):
     from osg_configure.modules import configfile
     # necassary for exception raised by osg_configure
     import ConfigParser
-    try:                                                                                                                                     
-      config = configfile.read_config_files()                                                                                                 
-    except IOError, e:                                                                                                                       
+    try:
+      config = configfile.read_config_files() 
+    except IOError:
       return None
     if req_section:
       try:
@@ -163,24 +165,17 @@ def get_temp_dir():
     return '/tmp/osgrsv'
   return '/tmp'
 
-    #TORM old perl tempdir function
-    #tempdir = os.path.join(rsvprobe.get_temp_dir(), 'osgrsv-ca') # tempdir("osgrsv-ca`-XXXXXX", TMPDIR => 1, CLEANUP => 1);
-    #try:
-    #  os.mkdir(tempdir)
-    #except:
-    #  if not os.path.isdir(tempdir):
-    #    self.return_unknown("Unable to create temporary directory: %s" % tempdir)
- 
- 
-def _listDirectory(directory, fileExtList):                                         
-    "Get the list of file info objects for files of particular extensions"
-    fileList = [os.path.normcase(f) for f in os.listdir(directory)]
-    fileList = [os.path.join(directory, f) for f in fileList
-                  if os.path.splitext(f)[1] in fileExtList]
-    return fileList
+
+def _listDirectory(directory, file_ext_list):                                         
+  "Get the list of file info objects for files of particular extensions"
+  filelist = [os.path.normcase(f) for f in os.listdir(directory)]
+  filelist = [os.path.join(directory, f) for f in filelist
+               if os.path.splitext(f)[1] in file_ext_list]
+  return filelist
  
 
 # TODO: equivalent of which in python to help with external commands
+# to help verify external commands
 
 # Valid probe status (according to specification)
 OK = 0
@@ -188,15 +183,15 @@ WARNING = 1
 CRITICAL = 2
 UNKNOWN = 3
 
-status_dict = {
+STATUS_DICT = {
   OK:"OK",
   WARNING:"WARNING",
   CRITICAL:"CRITICAL",
   UNKNOWN:"UNKNOWN"
   }
 
-status_list = status_dict.keys()
-status_val_list = status_dict.values()
+STATUS_LIST = STATUS_DICT.keys()
+STATUS_VAL_LIST = STATUS_DICT.values()
 
 class RSVProbe:
   """Base class for RSV probes. Probes are executables performing tests and returning a specific output.
@@ -210,6 +205,9 @@ The behavior is specified in a WLCG document:
 https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
 """
   def __init__(self):
+    self.name = "Base probe"
+    self.version = "1.0"
+    self.timestamp = None
     self.status = OK
     self.select_wlcg_output = False
     self.summary = ""
@@ -221,10 +219,12 @@ https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
     self.detailsDataMaxLength = -1
     self.supported_metrics = []
     self.metric = None # Requested metric
+    self.vo_name = None
     ## options and default values
     self.host = "localhost"
     self.uri = None
     self.verbose = False
+    self.output_filename = None
     self.options_short = 'm:lu:h:t:x:V?v'
     self.options_long = ['metric=', 
       'list', 
@@ -242,21 +242,14 @@ https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
       '-?,--help \t print help message and exit',
       '-v,--verbose \tverbose output']
     self.help_message = ""
-  #@staticmethod
-  #def _listDirectory(directory, fileExtList):                                         
-  #  "get list of file info objects for files of particular extensions"
-  #  fileList = [os.path.normcase(f) for f in os.listdir(directory)]           
-  #  fileList = [os.path.join(directory, f) for f in fileList
-  #                if os.path.splitext(f)[1] in fileExtList]
-  #  return fileList
-  
+
   def run(self):
     "Probe execution - replaced by the specific probes"
     pass
 
   def invalid_option_handler(self, msg):
     "By default a probe aborts if an unvalid option is received. This can be changed replacing this handler."
-    self.return_unknown("Invalid option. Aborting probe")      
+    self.return_unknown("Invalid option (%s). Aborting probe" % msg)      
     
   def get_version(self):
     "Returns the probe's name and version."
@@ -303,12 +296,12 @@ then process the options as desired and at the end return all of them for proces
     # using sys.argv, no real usecase to pass different args
     try:
       options, remainder = getopt.getopt(sys.argv[1:], self.options_short, self.options_long)
-    except getopt.GetoptError, e:
+    except getopt.GetoptError, emsg:
       #invalid option
-      self.return_unknown("Invalid option (%s). Aborting probe" % e)      
+      self.invalid_option_handler(emsg) 
     for opt, arg in options:
       if opt in ('-o', '--output'):
-        output_filename = arg
+        self.output_filename = arg
       elif opt in ('-v', '--verbose'):
         self.verbose = True
       elif opt in ('-V', '--version'):
@@ -337,7 +330,7 @@ then process the options as desired and at the end return all of them for proces
     "Debug messages are sent to stderr."
     # output the text to stderr
     #print >> sys.stderr, text
-    sys.stderr.write("%s\n" % test)
+    sys.stderr.write("%s\n" % text)
 
   def add_message(self, text):
     "Add a message to the probe detailed output. The status is not affected."
@@ -345,9 +338,9 @@ then process the options as desired and at the end return all of them for proces
 
   def add(self, what, text, exit_code):
     "All the add_... functions add messages to the probe output and affect its return status."
-    if not what in status_list:
+    if not what in STATUS_LIST:
       self.return_unknown("Invalid probe status: %s" % what, 1)
-    self.detailed.append(status_dict[what]+": %s" % text)
+    self.detailed.append(STATUS_DICT[what]+": %s" % text)
     if what == WARNING:
       self.warning_count += 1
     elif what == CRITICAL:
@@ -355,22 +348,26 @@ then process the options as desired and at the end return all of them for proces
     # Change only status code to warning, only if an error has not been recorded   
     if what >= self.status: # and what != UNKNOWN:
       if what == UNKNOWN and self.status != OK:
-        self.detailed.append(status_dict[what]+": bad probe. Status UNKNOWN should never happen after the probe has been evaluated and returned CRITICAL/WARNING")
+        self.detailed.append(STATUS_DICT[what]+
+          ": bad probe. Status UNKNOWN should never happen after the probe has been evaluated and returned CRITICAL/WARNING")
       self.status = what
       self.ecode = exit_code
-      self.summary = status_dict[what]+": %s" % text
+      self.summary = STATUS_DICT[what]+": %s" % text
 
   def trim_detailed(self, number=1):
     "detailed normally contains a copy of te summary, trim_detailed allows to remove it"
     self.detailed = self.detailed[:-number]
 
   def add_ok(self, text, exit_code=-1):
+    "OK message"
     self.add(OK, text, exit_code)
 
   def add_warning(self, text, exit_code=-1):
+    "WARNING mesage"
     self.add(WARNING, text, exit_code)
 
   def add_critical(self, text, exit_code=-1):
+    "CRITICAL message"
     self.add(CRITICAL, text, exit_code)
 
   # add_unknown makes no sense because UNKNOWN is an exit condition
@@ -383,32 +380,45 @@ then process the options as desired and at the end return all of them for proces
     sys.exit(self.ecode)
 
   def return_ok(self, text):
+    "return OK"
     self.probe_return(OK, text, 0)
 
   def return_critical(self, text, exit_code=1):
+    "return CRITICAL"
     self.probe_return(CRITICAL, text, exit_code)
 
   def return_warning(self, text, exit_code=-1):
+    "return WARNING"
     self.probe_return(WARNING, text, exit_code)
 
   def return_unknown(self, text, exit_code=-1):
+    "return UNKNOWN"
     self.probe_return(UNKNOWN, text, exit_code)
 
   def print_short_output(self):
     "Print the probe output in the short format (RSV short format)"
     outstring = "RSV BRIEF RESULTS:\n"
-    outstring += "%s\n" % status_dict[self.status]
+    outstring += "%s\n" % STATUS_DICT[self.status]
     outstring += "%s\n" % self.summary
     outstring += '\n'.join(self.detailed)
-    print outstring
+    if self.output_filename:
+      try:
+        #with open(self.output_filename, 'w') as f:
+        #  f.write(outstring)
+        open(self.output_filename, 'w').write(outstring)
+      except IOError:
+        print "UNKNOWN: Unable to open output file: %s" % self.output_filename
+    else:
+      print outstring
 
   def print_wlcg_output(self):
     "Print the probe output in the extended format (WLCG standard)"
     metric = self.get_metric(self.metric)
     out_detailed = '\n'.join(self.detailed)
     ## Trim detailsData if it is too long
-    if self.detailsDataTrim and len(out_detailed) > detailsDataMaxLength:
-      out_detailed = out_detailed[0:detailsDataMaxLength] + "\n... Truncated ...\nFor more details, use --verbose 3"
+    if self.detailsDataTrim and len(out_detailed) > self.detailsDataMaxLength:
+      out_detailed = out_detailed[0:self.detailsDataMaxLength]
+      out_detailed += "\n... Truncated ...\nFor more details, use --verbose"
     ## Append proxy warning if applicable
     #self.append_proxy_validity_warning()
 
@@ -419,24 +429,28 @@ then process the options as desired and at the end return all of them for proces
 	
     ## Print metric in WLCG standard output format to STDOUT; 
     ##  detailsData has to be last field before EOT
-    outstring = "metricName: %s\n" + \
-	    "metricType: %s\n" + \
-	    "timestamp: %s\n" % (metric.name, metric.mtype, self.timestamp);
+    outstring = "metricName: %s\n" % metric.name
+    outstring += "metricType: %s\n" % metric.mtype
+    outstring += "timestamp: %s\n" % self.timestamp
     #optional output
     if self.vo_name:
       outstring += "voName: %s\n" % self.vo_name
     # siteName is used for Pigeon Tools
-    if self.site_name:
-      outstring += "siteName: %s\n" % self.site_name
+    if self.host:
+      outstring += "siteName: %s\n" % self.host
     # status
-    outstring += "metricStatus: %s\n" + \
-	    "serviceType: %sn" % (status_dict[self.status], metric.stype);
+    outstring += "metricStatus: %s\nserviceType: %s\n" % (STATUS_DICT[self.status], metric.stype)
     # not menitoning host/URI
     outstring += "summaryData: %s\n" % self.summary
     outstring += "detailsData: %s\n" % out_detailed
-    outstring += "EOT\n";
-    print outstring;
-    ## Print to file missing
+    outstring += "EOT\n"
+    if self.output_filename:
+      try:
+        open(self.output_filename, 'w').write(outstring)
+      except IOError:
+        print "UNKNOWN: Unable to open output file: %s" % self.output_filename
+    else:
+      print outstring
 
   def print_output(self):
     "Select the output format"
@@ -454,8 +468,8 @@ mtype - metricType	 This should be the constant value 'performance' or 'status'
 dtype - dataType	 The type of the data: float, int, string, boolean (only 'performance' probes)
 """
   # Metric type constants
-  STATUS='status'
-  PERFORMANCE='performance'
+  STATUS = 'status'
+  PERFORMANCE = 'performance'
 
   def __init__(self, stype, name, mtype=STATUS, dtype=None):
     self.stype = stype
