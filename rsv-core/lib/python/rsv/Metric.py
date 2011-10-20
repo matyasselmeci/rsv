@@ -314,8 +314,7 @@ class Metric:
 
 
     def get_transfer_files(self):
-        """ Return the list of required files to transfer for a probe.  This
-        is only """
+        """ Return the list of required files to transfer for a probe. """
         try:
             transfer_files = self.config.get(self.name, "transfer-files")
             self.rsv.log("INFO", "List of files to transfer: %s" % transfer_files)

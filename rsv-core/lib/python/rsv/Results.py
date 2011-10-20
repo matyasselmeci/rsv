@@ -382,3 +382,22 @@ class Results:
         data  += "Log:\n%s\n" % log
 
         self.brief_result(metric, status, data, stderr="")
+
+
+    def shar_not_installed(self, metric):
+        """ Trying to use globus-job-run but shar is not installed """
+        status = "UNKNOWN"
+        data   = "The 'shar' program is not installed.\n"
+        data  += "This program is necessary when using globus-job-run"
+
+        self.brief_result(metric, status, data, stderr="")
+
+
+    def shar_creation_failed(self, metric, stdout, stderr):
+        """ Creation of the shar file failed """
+        status = "UNKNOWN"
+        data   = "Failed to create the shar file to be used with globus-job-run.\n"""
+        data  += "shar STDOUT:\n%s\n\n" % stdout
+        data  += "shar STDERR:\n%s\n\n" % stderr
+
+        self.brief_result(metric, status, data, stderr="")

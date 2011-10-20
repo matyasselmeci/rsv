@@ -5,6 +5,8 @@ import re
 import os
 import sys
 import copy
+import shutil
+import tempfile
 import ConfigParser
 from optparse import OptionParser
 
@@ -188,8 +190,8 @@ def execute_local_job(rsv, metric):
 
 
 def execute_grid_job(rsv, metric):
-    """ Execute a job using globus-job-run.  This is an old method and we will likely
-    replace all uses of this with Condor-G in the future. """
+    """ Execute a job using globus-job-run.  This is an old method and we use Condor-G
+    by default now, but some people might want to use globus-job-run instead. """
 
     # Build the custom parameters to the script
     args = metric.get_args_string()
@@ -200,6 +202,12 @@ def execute_grid_job(rsv, metric):
         rsv.log("CRITICAL", "ej1: jobmanager not defined in config")
         sys.exit(1)
 
+    # If the probe depends on any modules we need to prepare a SHAR file to send
+    # because globus-job-run can only send one file (it can't send supporting libraries)
+    (shar_dir, shar_file) = prepare_shar_file(rsv, metric)
+    if not shar_dir:
+        return
+
     # Anthony Tiradani uses extra RSL to get his jobs to run with priority at Fermi
     # This is done by passing -x to globus-job-run
     extra_globus_rsl = ""
@@ -209,7 +217,7 @@ def execute_grid_job(rsv, metric):
     job = "globus-job-run %s/jobmanager-%s %s -s %s -- -m %s -u %s %s" % (metric.host,
                                                                           jobmanager,
                                                                           extra_globus_rsl,
-                                                                          metric.executable,
+                                                                          shar_file,
                                                                           metric.name,
                                                                           metric.host,
                                                                           args)
@@ -226,10 +234,12 @@ def execute_grid_job(rsv, metric):
         (ret, out, err) = rsv.run_command(job, job_timeout)
     except Sysutils.TimeoutError, err:
         os.environ = original_environment
+        shutil.rmtree(shar_dir)
         rsv.results.job_timed_out(metric, job, err)
         return
 
     os.environ = original_environment
+    shutil.rmtree(shar_dir)
 
     if ret:
         rsv.results.grid_job_failed(metric, job, out, err)
@@ -237,6 +247,63 @@ def execute_grid_job(rsv, metric):
     parse_job_output(rsv, metric, out, err)
     return
 
+
+def prepare_shar_file(rsv, metric):
+    """ Create a shar file wrapped in a perl script to be used with globus-job-run.
+
+    globus-job-run can only send one file, so we will wrap up all the files into a
+    sh archive.  But after unshar'ing we need to execute one of the files so we will
+    use a perl script to do the extraction followed by executing the necessary script """
+
+    # Check for shar
+    (ret, out, err) = rsv.run_command("which shar")
+    if ret != 0:
+        rsv.results.shar_not_installed(metric)
+        return (None, None)
+
+    # Make a temporary path to create the shar file
+    parent_dir = os.path.join("/", "var", "tmp", "rsv")
+    tempdir = tempfile.mkdtemp(prefix="shar-", dir=parent_dir)
+    shar_file = os.path.join(tempdir, "shar.pl")
+
+    # Make a perl header for the shar file
+    f = open(shar_file, 'w')
+    f.write("""#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+my $out_file = "shar.sh";
+
+my $shar = join "", <DATA>;
+open(OUT, '>', "$out_file") or die("cannot write to $out_file: $!");
+print OUT $shar;
+close(OUT);
+
+my $ret = system("/bin/sh shar.sh >shar.out 2>&1");
+if($ret != 0) {
+print "RSV BRIEF RESULTS:\n";
+print "UNKNOWN\n";
+print "Failed to extract shar file.\n";
+    system("cat shar.out");
+}
+else {
+    system("./%s @ARGV");
+}
+
+__DATA__""" % metric.name)
+    f.close()
+
+    # Create the shar file
+    transfer_files = metric.get_transfer_files()
+    cmd = "shar -f %s %s >> %s" % (metric.executable, transfer_files, shar_file)
+    (ret, out, err) = rsv.run_command(cmd)
+    if ret != 0:
+        rsv.results.shar_creation_failed(metric, out, err)
+        return (None, None)
+
+    return (tempdir, shar_file)
+    
 
 def execute_condor_g_job(rsv, metric):
     """ Execute a remote job via Condor-G.  This is the preferred format so that we

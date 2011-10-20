@@ -64,9 +64,7 @@ class CondorG:
         #
         submit_file = "Universe = grid\n"
         submit_file += "grid_resource = gt2 %s/jobmanager-%s\n\n" % (metric.host, jobmanager)
-
-        metric_path = os.path.join("/", "usr", "libexec", "rsv", "metrics", metric.name)
-        submit_file += "Executable = %s\n" % metric_path
+        submit_file += "Executable = %s\n" % metric.executable
 
         args = "-m %s -u %s %s" % (metric.name, metric.host, metric.get_args_string())
         submit_file += "Arguments  = %s\n" % args
