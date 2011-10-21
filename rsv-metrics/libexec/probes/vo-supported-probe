@@ -13,7 +13,7 @@ if(defined $ENV{OSG_LOCATION}) {
     $file = "$ENV{OSG_LOCATION}/monitoring/osg-supported-vo-list.txt";
 }
 else {
-    $file = "/etc/osg/osg-supported-vo-list.txt";
+    $file = "/var/lib/osg/supported-vo-list";
 }
 
 if(-e $file) {
