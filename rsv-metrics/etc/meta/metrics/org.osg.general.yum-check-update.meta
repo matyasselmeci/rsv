@@ -5,7 +5,7 @@ execute = grid
 transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
 service-type = OSG-CE
 output-format = brief
-enable-by-default = true
+enable-by-default = false
 description = Check for any available package updates.
 
 [org.osg.general.yum-check-update env]
