@@ -33,7 +33,8 @@ if(!-e $test_file) {
 }
 
 my $time = time;
-my $remote_file = basename($test_file) . ".$time.$$";
+my $filename = basename($test_file) . ".$time.$$";
+my $remote_file = "$filename.remote";
 my $remote_uri = "gsiftp://$options{u}/$options{'destination-dir'}/$remote_file";
 
 
@@ -62,7 +63,7 @@ sleep($options{delay});
 #
 # Transfer from
 #
-my $new_local_path = "/tmp/$remote_file";
+my $new_local_path = "/tmp/$filename.local";
 my $new_local_uri = "file://$new_local_path";
 $cmd = "globus-url-copy $remote_uri $new_local_uri 2>&1";
 $out = `$cmd`;
