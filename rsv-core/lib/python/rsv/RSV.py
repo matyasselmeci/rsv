@@ -265,7 +265,6 @@ class RSV:
                         consumers.append(consumer)
             return consumers
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
-            self.log("WARNING", "No enabled consumers defined in consumers.conf")
             return []
 
 
