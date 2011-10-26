@@ -11,8 +11,8 @@ my %extra_opts = ("ping-timeout=i" => "<Timeout in seconds>",
 
 my %options = process_command_line(%extra_opts);
 
-$options{'ping-timeout'} |= 3;
-$options{'ping-count'} |= 1;
+$options{'ping-timeout'} ||= 3;
+$options{'ping-count'} ||= 1;
 
 find_binaries("ping");
 

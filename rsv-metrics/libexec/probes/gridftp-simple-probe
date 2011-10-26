@@ -13,8 +13,8 @@ my %extra_opts = ( "destination-dir=s" => "Directory to place remote file",
 my %options = process_command_line(%extra_opts);
 
 # Set defaults
-$options{'destination-dir'} |= "/tmp";
-$options{'delay'} |= 30;
+$options{'destination-dir'} ||= "/tmp";
+$options{'delay'} ||= 30;
 
 find_binaries("globus-url-copy", "uberftp");
 

@@ -29,8 +29,8 @@ my %extra_opts = ("discover"       => "<Show available probes on this system>",
 
 my %options = process_command_line(%extra_opts);
 
-$options{'discover'} |= 0;
-$options{'human-readable'} |= 0;
+$options{'discover'} ||= 0;
+$options{'human-readable'} ||= 0;
 
 ($o{'gratiaProbeType'} = $options{'m'}) =~ s/^org\.osg\.gratia\.//;
 

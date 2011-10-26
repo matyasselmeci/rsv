@@ -13,7 +13,7 @@ my %extra_opts = ("srm-destination-dir=s"  => "Required: Remote destination to p
 
 my %options = process_command_line(%extra_opts);
 
-$options{'srm-protocol-version'} |= 2;
+$options{'srm-protocol-version'} ||= 2;
 
 if(!defined($options{'srm-destination-dir'}) or !defined($options{'srm-webservice-path'})) {
     print "ERROR: You must pass both --srm-destination-dir and --srm-webservice-path\n\n";

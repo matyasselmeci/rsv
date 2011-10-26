@@ -11,7 +11,7 @@ my %extra_opts = ("srm-webservice-path=s"  => "Required: Remote webservice path,
 
 my %options = process_command_line(%extra_opts);
 
-$options{'srm-protocol-version'} |= 2;
+$options{'srm-protocol-version'} ||= 2;
 
 if(not defined($options{'srm-webservice-path'})) {
     print "ERROR: You must pass --srm-webservice-path\n\n";

@@ -18,7 +18,7 @@ my %extra_opts = ("some-option=s"     => "Option description",
 my %options = process_command_line(%extra_opts);
 
 # Set defaults for your custom arguments if they are optional
-$options{'some-option'} |= 3;
+$options{'some-option'} ||= 3;
 
 # Validate custom options if they are required
 if(!defined($options{'another-options'})) {
