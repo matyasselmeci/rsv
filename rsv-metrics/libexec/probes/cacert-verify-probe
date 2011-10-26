@@ -111,8 +111,8 @@ Additionally it makes sure that all IGTF CAs are installed.
       certdir = self.ca_certs_dir
     else:
       certdir = rsvprobe.get_ca_dir()
-    tempdir = self.tempdir # or create a job-specific temp dir?
-    self.Check_Local_CA(certdir, tempdir, self.errorHrs)
+    #tempdir = self.tempdir # or create a job-specific temp dir? - no temp files
+    self.Check_Local_CA(certdir, self.errorHrs)
 
   def verify_CA(self, certdir, warnHrs):
     "function to check certificate validity - not used"
@@ -123,7 +123,7 @@ Additionally it makes sure that all IGTF CAs are installed.
       self.return_unknown("ERROR: CA Certs Directory %s does not exist.. Setting metric to unknown." % certdir)
 
     # Get all the certificates
-    cert_files = rsvprobe._listDirectory(certdir, ['0'])
+    cert_files = rsvprobe.list_directory(certdir, ['0'])
     if not cert_files:
       self.return_unknown("ERROR: CA Certs Directory %s contains no certificate files (*.0).. Setting metric to unknown." % 
                           certdir)     
@@ -180,7 +180,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     else:
       self.return_ok(out_msg)
 
-  def Check_Local_CA(self, certdir, tempdir, errorHrs):
+  def Check_Local_CA(self, certdir, errorHrs):
     "Function to compare CA certificates against the list at GOC"
     source = {}
     found_cas = []
@@ -230,7 +230,7 @@ Additionally it makes sure that all IGTF CAs are installed.
       local_url = local_urls[1][grid_type]
     else:
       self.return_unknown("ERROR: CA Certs Directory %s has unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type))
-    cert_files = rsvprobe._listDirectory(certdir, [cert_ext])
+    cert_files = rsvprobe.list_directory(certdir, [cert_ext])
     if not cert_files:
       self.return_unknown("ERROR: CA Certs Directory %s contains no certificate files (*.%s).. Setting metric to unknown." % (certdir, cert_ext))
     # load md5 in a dictionary basename_without_extension->md5 (hash for v0, sitename v1)

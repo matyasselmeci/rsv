@@ -193,7 +193,7 @@ tempdir:   Temporary directory to save working files
 warnHrs:   Number hours since the failing downloads before a warning is issued
 errHrs:    Number hours since the failing downloads before an error is issued
 """    
-    status_code = 0 # Return status code as expected by RSV for summaryData
+    #status_code = 0 # Return status code as expected by RSV for summaryData
     found_crls = []
     ca_format_type = 0
 
@@ -209,7 +209,7 @@ errHrs:    Number hours since the failing downloads before an error is issued
     error_count = 0
     warn_count = 0
     ok_count = 0
-    crl_files = rsvprobe._listDirectory(certdir, [".r0"])
+    crl_files = rsvprobe.list_directory(certdir, [".r0"])
     if not crl_files:
       self.return_unknown("ERROR: CA Certs Directory %s contains no CRL files (*.r0). Aborting the probe (UNKOWN status)." % 
                           certdir)     
@@ -273,15 +273,19 @@ errHrs:    Number hours since the failing downloads before an error is issued
       if ca_info['hash'] in found_crls:
         continue
       # continue if the CA file has been removed
-      if ca_format_type == 1:
-        local_hash = ca_info['newhash']
-      else:
-        local_hash = ca_info['hash']
-      if not os.path.isfile(os.path.join(certdir, "%s.0" % local_hash)):
-        self.add_warning(
-          "MISSING: CRL file for %s (type %s) is missing. OSG policy requires CRL for every CA distributed by OSG." % 
-          (local_hash, ca_format_type))
-        missing_count += 1
+      # if ca_format_type == 1 then both CA files must have been removed to continue
+      if not os.path.isfile(os.path.join(certdir, "%s.0" % ca_info['hash'])):
+        if ca_format_type != 1 or not os.path.isfile(os.path.join(certdir, "%s.0" % ca_info['newhash'])):
+          continue
+      #if ca_format_type == 1:
+      #  local_hash = ca_info['newhash']
+      #else:
+      #  local_hash = ca_info['hash']
+      #if not os.path.isfile(os.path.join(certdir, "%s.0" % local_hash)):
+      self.add_warning(
+        "MISSING: CRL file for %s (type %s) is missing. OSG policy requires CRL for every CA distributed by OSG." % 
+        (local_hash, ca_format_type))
+      missing_count += 1
 
     # Step 4: See if the warning should be escalated to an error
     now = time.time()
@@ -290,11 +294,13 @@ errHrs:    Number hours since the failing downloads before an error is issued
     out_msg = "%s CRLs tested.\n" % (error_count+warn_count+ok_count) 
     out_msg += "\t%s had not been updated for at least %s hours;\n" % (error_count, errHrs)
     out_msg += "\t%s CRLs have not been updated for at least %s hours;\n" % (warn_count,  warnHrs)
-    out_msg += "\t%s CRLs have been updated with the last %s hours.\\n" % (ok_count,  warnHrs)
+    out_msg += "\t%s CRLs have been updated with the last %s hours.\n" % (ok_count,  warnHrs)
     #only if missing_count>0? 
     if missing_count > 0:
-      out_msg += "\t%s CRLs are missing.\n" % missing_count
-    if status_code == 0:
+      out_msg += "\t%s CRL/s is/are missing.\n" % missing_count
+
+    #if status_code == 0:
+    if self.status == rsvprobe.OK:
       # Remove error file if exists 
       if os.path.isfile(self.error_file):
         try:
@@ -302,8 +308,8 @@ errHrs:    Number hours since the failing downloads before an error is issued
         except OSError:
           self.add_message("Could not delete the error file (%s). Please delete it by hand to avoid potential future problems." % 
                            self.error_file)
-      self.return_ok("All %s CRLs have been recently updated." % (error_count+warn_count+ok_count))
-    elif status_code == 1:
+      self.return_ok("All %s CRLs have been recently updated and none is missing." % (error_count+warn_count+ok_count))
+    elif self.status == rsvprobe.WARNING:
       if os.path.isfile(self.error_file):
         lines = None
         try:
@@ -343,7 +349,7 @@ errHrs:    Number hours since the failing downloads before an error is issued
     # Step ?5?: Recording the result for RSV output
     # already done
     # As it is now it should never end up here
-    if status_code > 1:
+    if self.status > rsvprobe.WARNING:
       self.return_critical("Probe ended with unexpected error condition")
     self.return_unknown("Probe ended with unexpected status")
 

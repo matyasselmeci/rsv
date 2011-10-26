@@ -165,8 +165,22 @@ def get_temp_dir():
     return '/tmp/osgrsv'
   return '/tmp'
 
+def which(program):
+  "Python replacement for which"
+  def is_exe(fpath):
+    return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+  fpath, fname = os.path.split(program)
+  if fpath:
+    if is_exe(program):
+      return program
+  else:
+    for path in os.environ["PATH"].split(os.pathsep):
+      exe_file = os.path.join(path, program)
+      if is_exe(exe_file):
+        return exe_file
+  return None
 
-def _listDirectory(directory, file_ext_list):                                         
+def list_directory(directory, file_ext_list):                                         
   "Get the list of file info objects for files of particular extensions"
   filelist = [os.path.normcase(f) for f in os.listdir(directory)]
   filelist = [os.path.join(directory, f) for f in filelist
@@ -193,6 +207,8 @@ STATUS_DICT = {
 STATUS_LIST = STATUS_DICT.keys()
 STATUS_VAL_LIST = STATUS_DICT.values()
 
+DEFAULT_ECODE = -2
+
 class RSVProbe:
   """Base class for RSV probes. Probes are executables performing tests and returning a specific output.
 A single probe can run multiple tests, metrics.
@@ -201,6 +217,9 @@ OK - the test was successful
 WARNING - the probe found some problems demanding attention (and raised a warning)
 CRITICAL - the service tested is not passing the test
 UNKNOWN - the probe was unable to run
+The return code from the probe can take on either one of two values, and should be syncronized with the value provided in metricStatus
+0 If the probe could gather the metric successfully - metricStatus is OK, WARNING, CRITICAL.
+1. The probe could not gather the metric successfully. metricStatus must be UNKNOWN. More details on the problem can be in the summaryData and detailsData fields of the metric data.
 The behavior is specified in a WLCG document:
 https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
 """
@@ -214,9 +233,10 @@ https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
     self.detailed = []
     self.warning_count = 0
     self.critical_count = 0
-    self.ecode = 0
+    self.ecode = DEFAULT_ECODE
     self.detailsDataTrim = False
     self.detailsDataMaxLength = -1
+    self.force_wlcg_ecode = False
     self.supported_metrics = []
     self.metric = None # Requested metric
     self.vo_name = None
@@ -337,7 +357,9 @@ then process the options as desired and at the end return all of them for proces
     self.detailed.append("MSG: %s" % text)
 
   def add(self, what, text, exit_code):
-    "All the add_... functions add messages to the probe output and affect its return status."
+    """All the add_... functions add messages to the probe output and affect its return status. 
+Retuns True if status and summary have been updated, False otherwise.
+"""
     if not what in STATUS_LIST:
       self.return_unknown("Invalid probe status: %s" % what, 1)
     self.detailed.append(STATUS_DICT[what]+": %s" % text)
@@ -353,45 +375,53 @@ then process the options as desired and at the end return all of them for proces
       self.status = what
       self.ecode = exit_code
       self.summary = STATUS_DICT[what]+": %s" % text
+      return True
+    return False
 
   def trim_detailed(self, number=1):
     "detailed normally contains a copy of te summary, trim_detailed allows to remove it"
     self.detailed = self.detailed[:-number]
 
-  def add_ok(self, text, exit_code=-1):
+  def add_ok(self, text, exit_code=DEFAULT_ECODE):
     "OK message"
     self.add(OK, text, exit_code)
 
-  def add_warning(self, text, exit_code=-1):
+  def add_warning(self, text, exit_code=DEFAULT_ECODE):
     "WARNING mesage"
     self.add(WARNING, text, exit_code)
 
-  def add_critical(self, text, exit_code=-1):
+  def add_critical(self, text, exit_code=DEFAULT_ECODE):
     "CRITICAL message"
     self.add(CRITICAL, text, exit_code)
 
   # add_unknown makes no sense because UNKNOWN is an exit condition
 
-  def probe_return(self, what, text, exit_code=-1):
+  def probe_return(self, what, text, exit_code=DEFAULT_ECODE):
     "All the return_... functions add messages to the probe output, affect the status and terminate the probe"
-    self.add(what, text, exit_code)
-    self.trim_detailed()
+    updated = self.add(what, text, exit_code)
+    if updated:
+      self.trim_detailed()
     self.print_output()
+    if self.force_wlcg_ecode:
+      if self.status == UNKNOWN:
+        self.ecode = 1
+      else:
+        self.ecode = 0
     sys.exit(self.ecode)
 
   def return_ok(self, text):
     "return OK"
     self.probe_return(OK, text, 0)
 
-  def return_critical(self, text, exit_code=1):
+  def return_critical(self, text, exit_code=0):
     "return CRITICAL"
     self.probe_return(CRITICAL, text, exit_code)
 
-  def return_warning(self, text, exit_code=-1):
+  def return_warning(self, text, exit_code=0):
     "return WARNING"
     self.probe_return(WARNING, text, exit_code)
 
-  def return_unknown(self, text, exit_code=-1):
+  def return_unknown(self, text, exit_code=1):
     "return UNKNOWN"
     self.probe_return(UNKNOWN, text, exit_code)
 
