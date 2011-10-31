@@ -1,13 +1,8 @@
 #!/usr/bin/env perl
 
-###############################################################################
-##
-## Copyright 2009, The Trustees of Indiana University. 
-##
-## Open Science Grid Operations Team, Indiana University
-## Original RSV Author: Arvind Gopu (http://peart.ucs.indiana.edu)
-## Probe created: Doug Strain (dstrain@fnal.gov)
-##
+# Rewrite of the srm-client probes by Doug Strain
+# Created 2009, refactored 2011
+#
 ## This Perl script tests if srm client commands work correctly 
 ## Contains the following tests:
 ##
@@ -22,625 +17,400 @@
 ## org.osg.srm.srmclient-releasespace: Test srm-reserve-space then release
 ## org.osg.srm.srmclient-rm: srmcp a file to the server then remove it (srmrm).
 ##
-## See below for more in-depth code comments.
-## Requires either fermi or lbl SRM client installed.
-## 
-## REQUIRES
-##  'RSV::Probe_Base'
 ################################################################################
 
 ######## Perl modules to use ######################################
 use strict;
-use RSVProbeBase;
+use warnings;
+use RSVMetric;
+
+
+######## Retrieve Global variables ################################
+########   and begin setup         ################################
+
+print_output_header();
+
+my %extra_opts = ("srm-webservice-path=s"  => "Required: Remote webservice path, e.g. srm/v2/server",
+                  "srm-destination-dir=s" => "Destination directory on server",
+                  "srm-client-type=s" => "Client type, fermi or lbnl",
+                  "sitename=s" => "Sitename for pigeon",
+                  "x=s" => "proxy value",
+                  "verbose" => "Verbosity level",
+                  "srm-protocol-version=i" => "1 or 2");
+my %metric=();
+our %options = process_command_line(%extra_opts);
+my $local_file = "/usr/share/rsv/probe-helper-files/storage-probe-test-file";
+my $local_uri = "file://$local_file";
+
+$options{'srm-protocol-version'} ||= 2;
+if (!defined($options{'srm-destination-dir'})) 
+	{$options{'srm-destination-dir'}="/tmp";}
+if (!defined($options{'srm-client-type'})) 
+	{$options{'srm-client-type'}="lbnl";}
+if (!defined($options{'srm-webservice-path'})) 
+	{$options{'srm-webservice-path'}="srm/v2/server";}
+
+if(not defined($options{'srm-webservice-path'})) {
+    print "ERROR: You must pass --srm-webservice-path\n\n";
+    usage(%extra_opts);
+}
+
+
 
 ######## Retrieve Global variables ################################
 ## And alias to RSV::Probe_Base variables
-our %o;         *o         = \%RSVProbeBase::o;      
-our %metric;    *metric    = \%RSVProbeBase::metric;
+our %o;         
+my $timestamp=`date +\%s`;
+chomp $timestamp;
 our @job_managers = ("ping","put","get","copy",
                 "reservespace","releasespace",
                 "rm","mkdir", "rmdir", "mv");
 our $cmd_output="";
-&RSVProbeBase::Init();
-&RSVProbeBase::Run();
+my $out_value=2;
+my $out_desc="";
+my $out="";
+my $ret=0;
 
-################################################################################
-## Main Program ends ##
-################################################################################
-
-
-################################################################################
-## Local Sub-Routines
-################################################################################
-
-## Init
-## 
-## This function uses RSVProbeBase.pm functions to initialize 
-## probe parameters.
-## Service type is OSG-SRM i
-## (This to enables probes on configure_osg_rsv with --srm-probes option)
-## Probes do not start by default.
-sub Init {
-
-    &RSVProbeBase::Set_MultiMetric ("true");
-
-    ## Pass "status" or "performance" depending on metric type
-    &RSVProbeBase::Set_MetricType ("status");
-    &RSVProbeBase::Set_ServiceType ("OSG-SRM");
-    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 1.0.0");
-    &RSVProbeBase::Set_ProbeType ("OSG-SRM");
-
-    ## Should automating tools run this probe on above probeType by default?
-    &RSVProbeBase::Set_EnableByDefault ("true");
-    
-    ## Unix cron type metric interval
-    &RSVProbeBase::Set_MetricInterval (int(rand(60)). " * * * *");
-
-    ## Define this value from RCS/SVN version
-    ## What version of the WLCG specification does this probe conform to?
-    &RSVProbeBase::Set_ProbeRevision ('3.0');
-    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
-
-    ## Basic intro for the probe; This string will be used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpIntro 
-	("IMPORTANT NOTE: This probe tests different aspects of a storage element\n".
-	 " it is REQUIRED to specify a metric using the -m argument as shown below.\n\n".
-	 ".\n");
-
-    ## Additional options to print in Usage info used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpOptions 
-	("                                  To list all the possible metric names you\n".
-	 "                                   can specify as value to this switch, type\n".
-	 ".");
-
-    ## Uncomment if you want additional command line options
-    &RSVProbeBase::Extra_CLI_Option ("srm-client-type=s","srmClientType");
-    &RSVProbeBase::Extra_CLI_Option ("srm-client-loc=s","srmClientDir");
-    &RSVProbeBase::Extra_CLI_Option ("srm-protocol-version=i","srmProtocolVersion");
-    &RSVProbeBase::Extra_CLI_Option ("srm-webservice-path=s","srmWebservicePath");
-    &RSVProbeBase::Extra_CLI_Option ("srm-destination-dir=s","srmcpDestinationDir" );
-    &RSVProbeBase::Extra_CLI_Option ("test-file=s","srmcpTestfile" );
-    &RSVProbeBase::Extra_CLI_Option ("sitename=s","siteName");
-
-    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
-    &RSVProbeBase::Set_DetailsDataTrim ("False");
-}
-
-
-
-## Setup_Srm_Metric
-## 
-## This function sets default options for the probe.
-## (ie. RSVProbeBase defines default behavior for srmping, etc
-##  but not srm-reserve-space, etc)
-sub Setup_Srm_Metric {
-    $o{'srmPortNumber'}  = $o{'portNumber'} if ($o{'portNumber'});
-    $o{'srmServiceType'} = $o{'serviceType'} if ($o{'serviceType'});
-    if ($o{'srmClientType'} eq "lbnl") 
-    {
-	$o{'srmmkdirCmd'}="$o{'srmClientDir'}/bin/srm-mkdir";
-	$o{'srmrmdirCmd'}="$o{'srmClientDir'}/bin/srm-rmdir";
-	$o{'srmmvCmd'}="$o{'srmClientDir'}/bin/srm-mv";
-	$o{'srmreserveCmd'}="$o{'srmClientDir'}/bin/srm-reserve-space";
-	$o{'srmreleaseCmd'}="$o{'srmClientDir'}/bin/srm-release-space";
+### Get correct probe
+ my $probe_name = $options{"m"};
+ my $probe_match=0;
+ $probe_name    =~ /.*\.srmclient-(.*)$/;
+ $probe_name    = $1;
+ my $srm_probe_name="";
+    foreach $srm_probe_name (@job_managers) {
+        if ($srm_probe_name eq $probe_name) { $probe_match=1; }
     }
-    else
-    {
-	$o{'srmmkdirCmd'}="$o{'srmClientDir'}/bin/srmmkdir";
-	$o{'srmrmdirCmd'}="$o{'srmClientDir'}/bin/srmrmdir";
-	$o{'srmmvCmd'}="$o{'srmClientDir'}/bin/srmmv";
-	$o{'srmreserveCmd'}="$o{'srmClientDir'}/bin/srm-reserve-space";
-	$o{'srmreleaseCmd'}="$o{'srmClientDir'}/bin/srm-release-space";
-    }
-}
-
-
-## copy_file
-##
-## This helper function uses Run_Command to copy a file from @_[0] to @_[1].
-## Adds output to cmd_output
-sub copy_file {
-#  Arguments
-#  @_[0] - src file
-#  @_[1] - dest file
-
-   my $srmcp_cmd = "$o{'srmcpCmd'} -srm_protocol_version=".
-        "$o{'srmProtocolVersion'} -retry_num=1 $_[0] ".
-        "$_[1] 2>&1";
-    &RSVProbeBase::Run_Command ($srmcp_cmd, "backtick");
-    $cmd_output .= $o{'cmdOut'}; 
-    return $o{'cmdExitValue'};
-}
-
-
-
-## Setup_Srmcp_Metric
-##
-## Does some setup to construct Uris for srmcp destinations.
-## Based on analogous function from srmcp-readwrite probe
-sub Setup_Srmcp_Metric {
-    $o{'srmPortNumber'}  = $o{'portNumber'} if ($o{'portNumber'});
-    $o{'srmServiceType'} = $o{'serviceType'} if ($o{'serviceType'});
-
-    ## First below, file that'll be copied TO remote host
-    $o{'srmcpTestfileUri'} = "file:///".$o{'srmcpTestfile'};
-
-    $o{'srmcpRemoteTestdirectoryUri'} =
-        $o{'srmServiceType'} . "://" .
-        $o{'hostName'} . ":".
-        $o{'srmPortNumber'} . "/". $o{'srmWebservicePath'} .
-        "?SFN=". $o{'srmcpDestinationDir'}. "/".
-        $o{'timestampUnixSeconds'}.
-        "-srmclient-probe-test-directory.$$";
-
-
-    ## File that''ll be created ON remote host
-    $o{'srmcpRemoteTestfileUri'} =
-        $o{'srmServiceType'} . "://" .
-        $o{'hostName'} . ":".
-        $o{'srmPortNumber'} . "/". $o{'srmWebservicePath'} .
-        "?SFN=". $o{'srmcpDestinationDir'}. "/".
-        $o{'timestampUnixSeconds'}.
-        "-srmclient-probe-test-file-remote.$$";
-    $o{'srmcpRemoteCopyTestfileUri'} = $o{'srmcpRemoteTestfileUri'} . ".copy";
-    ## File that'll be copied back for comparison
-    $o{'srmcpBackTestfile'}    = $o{'slashTmp'} . "/".
-        $o{'timestampUnixSeconds'}.
-        "-srmclient-probe-test-file-copy.$$";
-    $o{'srmcpBackTestfileUri'} = "file:///".$o{'srmcpBackTestfile'};
-	RSVProbeBase::Verbose ("Setup_Srmcp_Metric:\n\tsrmServiceType: $o{'srmServiceType'}\tsrmPortNumber:$o{'srmPortNumber'}\n\tsrmcpTestfileUri: $o{'srmcpTestfileUri'}\n\tsrmcpRemoteTestfileUri: $o{'srmcpRemoteTestfileUri'}\n\tsrmcpBackTestfileUri: $o{'srmcpBackTestfileUri'}\n");
-}
-
-
-## Run
-##
-## The main part of the program.
-## This runs the probe.  Each metric has a section below based on $probe_name
-## Each section populates the variables:
-## $output_value: 0 if success, 1 if warning, 2 if error, 3 if unknown.
-## $output_desc: A short description of the issue
-## $cmd_output: the output of the srm commands
-sub Run {
-    ##### Begin special section since this is a multi metric probe ##### 
-    ## Process some simple options, and exit if they're specified after acting
-    &Process_Multi_Metrics ();
-    ## If we this far then probe is in normal operation
-
-    $metric{'siteName'}=$o{'siteName'};
-
-    ## Extract probe name from metric name 
-    my $probe_name = &RSVProbeBase::Get_MetricName();
-    $probe_name    =~ /.*\.srmclient-(.*)$/;
-    $probe_name    = $1;
-
-    # First, sanity check: make sure the probe requested is a supported op
-    my $probe_match=0;
-    foreach my $srm_probe_name (@job_managers) {
-	if ($srm_probe_name eq $probe_name)
-	{
-		$probe_match=1;
-	}
-    }
-
     if ($probe_match != 1)
     {
-	&RSVProbeBase::Exit_Error (3, "The operation $probe_name is not a supported option.  Please see the options to see all valid operations.\n");	
+    print "CRITICAL\n";
+    print "$probe_name is not a supported option.  See rsv-control for valid operations.\n";
+    exit 0;
     }
 
-    &Setup_Srm_Metric();
-####  Begin operations 
-    my $out_value=2;
-    my $out_desc="";
 
 
-###
-###	srm-client-ping
+# TODO - might need '-x509_user_proxy=' included in here
+my $defaults="";
+my $cmd_line="";
+my $ping_bin="srm-ping";
+my $ls_bin="srm-ls";
+my $copy_bin="srm-copy";
+my $rm_bin="srm-rm";
+my $mv_bin="srm-mv";
+my $mkdir_bin="srm-mkdir";
+my $rmdir_bin="srm-rmdir";
+my $release_bin="srm-sp-release";
+my $reserve_bin="srm-sp-reserve";
+if ($options{'srm-client-type'} eq "fermi")
+  {
+	$ping_bin="srmping";
+	$copy_bin="srmcp";
+	$ls_bin="srmls";
+	$rm_bin="srmrm";
+        $mv_bin="srmmv";
+	$mkdir_bin="srmmkdir";
+	$rmdir_bin="srmrmdir";
+	$release_bin="srm-release-space";
+	$reserve_bin="srm-reserve-space";
+	$defaults="-retry_num=1 -debug -$options{'srm-protocol-version'} -webservice_path=$options{'srm-webservice-path'}";
+  }
+# find_binaries($binary_file);
+
+my $srm_uri="srm://".$options{'u'}."/".$options{'srm-webservice-path'};
+$srm_uri = $srm_uri . "?SFN=".$options{'srm-destination-dir'};
+
+###     srm-client-ping
 ###
 ###  Performs a srm-ping on a host and records the result
    if ($probe_name eq "ping")
    {
-	&RSVProbeBase::Check_Proxy_Validity ();
-## -2 or -1 can be used as shortcut for -srm_protocol_version=
-    my $srm_ping_cmd = "$o{'srmpingCmd'} -retry_num=0 -debug -" . $o{'srmProtocolVersion'}. " -x509_user_proxy=" . $o{'proxyFile'} . " " . $o{'srmServiceType'} .  "://". $o{'hostName'}. ":" . $o{'srmPortNumber'}. " -webservice_path=$o{'srmWebservicePath'} 2>&1 " ;
-    &RSVProbeBase::Run_Command($srm_ping_cmd, "backtick");
-    $cmd_output.=$o{'cmdOut'};
+    $cmd_line = "$ping_bin srm://$options{u} $defaults 2>&1";
+    $out = `$cmd_line`;
+    $ret = $? >> 8;
     ## Set metric status based on srmping command's exit value
-    if ($o{'cmdExitValue'} == 0) 
+    if ($ret == 0)
     {
-	$out_value=0;
-	$out_desc="SRM server running on $metric{'hostName'} is alive and responding to the srmping command.\n";
-    } elsif ($o{'cmdExitValue'} == 1) {
-	$out_value=2;
-	$out_desc="SRM server running on $metric{'hostName'} is not responding to the srmping command. \n";
+        $out_value=0;
+        $out_desc="SRM server running on $options{'u'} is alive and responding to the srmping command.\n";
+    } elsif ($ret == 1) {
+        $out_value=2;
+        $out_desc="SRM server running on $options{'u'} is not responding to the srmping command. \n";
     } else {
-	$out_value=3;
-	$out_desc="SRM server running on $metric{'hostName'} returned unknown exit code upon runnnig [$srm_ping_cmd]. \n";
+        $out_value=3;
+        $out_desc="SRM server running on $options{'u'} returned unknown exit code upon runnnig [$cmd_line]. \n";
     }
     ## Special parsing for dcache and no mapping
-    if ($o{'cmdOut'} =~/backend_type=dCache/)
+    if ($out =~/backend_type=dCache/)
         {
-                if ($o{'cmdOut'} =~/backend_version=/)
+                if ($out =~/backend_version=/)
                 { $out_value=0;}
                 else
-                {
-			$out_value=2;
+                { 
+                        $out_value=2;
                         $out_desc="dCache did not provide backend type.";
                 }
-        }
+        } 
         else
         {
-                if ($o{'cmdOut'} =~/gumsIDMapped=null/)
+                if ($out =~/gumsIDMapped=null/)
                 {
-			$out_value=1;
+                        $out_value=1;
                         $out_desc="Srm Ping worked, but did not authenticate to a gums id.";
                 }
         }
    }
 
-###
-###	srm-client-put
-###
-### Performs a srm-copy to the host then uses an srm-ls to verify
    if ($probe_name eq "put")
    {
-	&Setup_Srmcp_Metric;
-	## File that''ll be created ON remote host
-	my $exit_value=copy_file($o{'srmcpTestfileUri'},$o{'srmcpRemoteTestfileUri'});
-	# check value with ls
-	my $srmls_cmd = "$o{'srmlsCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestfileUri'} 2>&1";
-	&RSVProbeBase::Run_Command ($srmls_cmd, "backtick");
-	$cmd_output .= $o{'cmdOut'}; 
-
-	if ($o{'cmdExitValue'} ==0)
-	{
-		$out_value=0;
-		$out_desc="SRM server $metric{'hostName'} able to receive an example file via srm-cp and list example test file";
-
-		# Cleanup
-		my $srmrm_cmd =  "$o{'srmrmCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestfileUri'} 2>&1";
-		&RSVProbeBase::Run_Command ($srmrm_cmd, "backtick");
-	}
-	else
-	{
-		$out_value=2;
-		$out_desc="SRM server could not list file on $metric{'hostName'} could not list file copied by srm-cp.";
-	}
-	
+     $srm_uri .= "/".$timestamp."-srmclient-probe-test-file-put.$$";
+     $out=`$copy_bin $defaults $local_uri $srm_uri 2>&1`; 
+     my $srmls_cmd = "$ls_bin $defaults $srm_uri 2>&1";
+     $out.=`$srmls_cmd`;
+     $ret = $? >> 8;
+     if ($ret ==0)
+        {
+                $out_value=0;
+                $out_desc="SRM server $options{'u'} able to receive an example file via srm-cp and list example test file";
+        }
+        else
+        {
+                $out_value=2;
+                $out_desc="SRM server could not list file copied by srm-cp on $options{'u'}.";
+        }
+      $out.=`$rm_bin $srm_uri 2>&1`;
    }
 
-###
-### srm-client-get 
-###
-### Performs a srm-cp to the server, then performs a srm-cp to retrieve the
-### file.  Compares the two files to verify that the data is the same
-   if ($probe_name eq "get")
+
+
+
+   if ($probe_name eq "mv")
    {
-	&Setup_Srmcp_Metric;
-	my $exit_value=copy_file($o{'srmcpTestfileUri'},$o{'srmcpRemoteTestfileUri'});
-	my $exit_value2=copy_file($o{'srmcpRemoteTestfileUri'},$o{'srmcpBackTestfileUri'});
-
-	#Now compare files
-	my $diff_files_cmd = "$o{'diffCmd'} $o{'srmcpTestfile'} $o{'srmcpBackTestfile'} 2>&1";
-    	&RSVProbeBase::Run_Command ($diff_files_cmd, "backtick");
-
-	if (($o{'cmdOut'} eq '') &&($o{'cmdExitValue'} == 0 ))
-	{
-		$out_value=0;
-		$out_desc="SRM write/read was succesfully tested using SRM protocol $o{'srmProtocolVersion'};\n Upload to and download from SRM server $o{'hostName'} succeeded; Received file is valid.";
-	}
-	else
-	{
-		$out_value=2;
-		$out_desc="ERROR: Either file copied to $o{'hostName'} was different from our testfile or $o{'diffCmd'} could not be found; Absolute error message was: $cmd_output";
-	}
-
-	#Cleanup
-	my $srmrm_cmd =  "$o{'srmrmCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestfileUri'} 2>&1";
-	&RSVProbeBase::Run_Command ($srmrm_cmd, "backtick");
-	my $rm_cmd =  "$o{'rmCmd'} $o{'srmcpBackTestfile'} 2>&1";
-	&RSVProbeBase::Run_Command ($rm_cmd, "backtick");
+     $srm_uri .= "/".$timestamp."-srmclient-probe-test-file-mv.$$";
+     my $srm_uri_mv .= "/".$timestamp."-srmclient-probe-test-file-moved.$$";
+     $out=`$copy_bin $defaults $local_uri $srm_uri 2>&1`;
+     $out.=`$mv_bin $defaults $srm_uri $srm_uri_mv 2>&1`;
+     my $srmls_cmd = "$ls_bin $defaults $srm_uri_mv 2>&1";
+     $out.=`$srmls_cmd`;
+     $ret = $? >> 8;
+     if ($ret ==0)
+        {
+                $out_value=0;
+                $out_desc="SRM server $options{'u'} able to move and list a file via srm-mv";
+      		$out.=`$rm_bin $srm_uri_mv 2>&1`;
+        }
+        else
+        {
+                $out_value=2;
+                $out_desc="SRM server could not list file moved by srm-mv on $options{'u'}.";
+      		$out.=`$rm_bin $srm_uri 2>&1`;
+        }
    }
-
-
-
-
-###
-### srm-client-copy
-###
-### Puts a file onto the server with srm-copy then srm-copy's the
-### file to a different location on the server.  Uses srm-ls to verify
-   if ($probe_name eq "copy")
-   {
-	&Setup_Srmcp_Metric;
-	my $exit_value=copy_file($o{'srmcpTestfileUri'},$o{'srmcpRemoteTestfileUri'});
-	my $exit_value=copy_file($o{'srmcpRemoteTestfileUri'},$o{'srmcpRemoteCopyTestfileUri'});
-	my $srmls_cmd = "$o{'srmlsCmd'} -srm_protocol_version=2 $o{'srmcpRemoteCopyTestfileUri'} 2>&1";
-	&RSVProbeBase::Run_Command ($srmls_cmd, "backtick");
-	$cmd_output .= $o{'cmdOut'}; 
-	if ($o{'cmdExitValue'} == 0) 
-	{
-		$out_value=0;
-		$out_desc="SRM server $metric{'hostName'} received files and was able to copy to a different location: $cmd_output";
-    	}
-	else
-	{
-		$out_value=2;
-		$out_desc="SRM server $metric{'hostName'} either failed to receive the file, to copy file, or would not list the file.\nGot this from srm-ls command: $cmd_output";
-	}
-
-
-	#Clean up
-	my $srmrm_cmd =  "$o{'srmrmCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestfileUri'} 2>&1";
-	&RSVProbeBase::Run_Command ($srmrm_cmd, "backtick");
-	 $srmrm_cmd =  "$o{'srmrmCmd'} -srm_protocol_version=2 $o{'srmcpRemoteCopyTestfileUri'} 2>&1";
-	&RSVProbeBase::Run_Command ($srmrm_cmd, "backtick");
-   }
-
-
-## srm-reserve-space
-## srm-release-space
-##
-## These two probes share the same section.  They both 
-## reserve a space and then release it.
-## Depending on which probe is executed, they report the status
-## of the relevant option
-   if (($probe_name eq "reservespace")||($probe_name eq "releasespace"))
-   {
-	my $srm_reserve_cmd="$o{'srmreserveCmd'} " .
-        	"--retention_policy=REPLICA " .
-        	"--access_latency=ONLINE " .
-        	"-retry_num=0 " .
-        	"-desired_size=1024 " .
-        	"-guaranteed_size=1024 " .
-		"-webservice_path=$o{'srmWebservicePath'} " .
-        	"-lifetime=600 " .
-        	$o{'srmServiceType'} . "://" .
-        	$o{'hostName'} . ":".
-        	$o{'srmPortNumber'} .
-		" 2>&1";
-	&RSVProbeBase::Run_Command ($srm_reserve_cmd, "backtick");
-	$cmd_output .= $o{'cmdOut'}; 
-	if ($probe_name eq "reservespace")
-	{
-		if ($o{'cmdExitValue'} == 0) 
-		{
-			$out_value=0;
-			$out_desc="SRM server $metric{'hostName'} reserved space with token output.";
-		}
-		else
-		{
-			$out_value=2;
-			$out_desc="SRM server $metric{'hostName'} was not able to reserve space.";
-		}
-	}
-	# Now try release
-	if ($o{'cmdExitValue'} == 0) 
-	{
-		my $token=$o{'cmdOut'};
-		$token=~s/Space token =//;
-		my $srm_release_cmd="$o{'srmreleaseCmd'} " .
-                "-space_token=$token " .
-		"-webservice_path=$o{'srmWebservicePath'} " .
-                $o{'srmServiceType'} . "://" .
-                $o{'hostName'} . ":".
-                $o{'srmPortNumber'} .
-		" 2>&1";
-		&RSVProbeBase::Run_Command ($srm_release_cmd, "backtick");
-		$cmd_output .= $o{'cmdOut'}; 
-   		if ($probe_name eq "releasespace")
-		{
-                 if ($o{'cmdExitValue'} == 0)
-                 {
-			$out_value=0;
-			$out_desc="SRM server $metric{'hostName'} reserved space and then release space with output: $cmd_output";
-                 }
-                 else
-                 {
-			$out_value=2;
-			$out_desc="SRM server $metric{'hostName'} was not able to release a reserved space.";
-                 }
-		}
-	}
-	else
-	{
-   		if ($probe_name eq "releasespace")
-		{
-                        $out_value=2;
-			$out_desc="SRM server $metric{'hostName'} was not able to reserve a space.";
-		}
-	}
-   }
-
-###
-###	srm-client-rm
-###	
-### Perform an srm-copy to the remote system.  Then, attempt to delete the file
-### This will return success only if srm-ls detects the file after the copy
-### and no longer detects it after the srm-rm
-   if ($probe_name eq "rm")
-   {
-	&Setup_Srmcp_Metric;
-	my $exit_value=copy_file($o{'srmcpTestfileUri'},$o{'srmcpRemoteTestfileUri'});
-	my $srmrm_cmd =  "$o{'srmrmCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestfileUri'} 2>&1";
-	my $srmls_cmd = "$o{'srmlsCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestfileUri'} 2>&1";
-        &RSVProbeBase::Run_Command ($srmls_cmd, "backtick");
-	$cmd_output .= $o{'cmdOut'}; 
-	my $rm1_result=$o{'cmdExitValue'};
-	&RSVProbeBase::Run_Command ($srmrm_cmd, "backtick");
-	$cmd_output .= $o{'cmdOut'}; 
-        &RSVProbeBase::Run_Command ($srmls_cmd, "backtick");
-        if (($rm1_result==0)&&($o{'cmdExitValue'} !=0))
-	{
-		$out_value=0;
-		$out_desc="SRM server $metric{'hostName'} was able to create and remove a file.";
-	}
-	else
-	{
-		$out_value=2;
-		if ($rm1_result!=0)
-		{
-			$out_desc="SRM server $metric{'hostName'} was either not able to create a file to delete or was not able to list that file.";
-		}
-		if ($o{'cmdExitValue'} !=0)
-		{
-			$out_desc="SRM server $metric{'hostName'} was able to create a file but could not delete it.";
-		}
-	}
-   }
-
-###
-###	srm-client-mkdir
-###	srm-client-rmdir
-###	
-### Both metrics perform a srm-mkdir on the remote system, then perform
-### a srm-mkdir.  The mkdir probe tests to see the directory existed.
-### The rmdir metric tests to see that it was removed.
 
    if (($probe_name eq "mkdir")|| ($probe_name eq "rmdir"))
    {
-	&Setup_Srmcp_Metric;
-	my $srmmkdir_cmd = "$o{'srmmkdirCmd'} $o{'srmcpRemoteTestdirectoryUri'} 2>&1";
-	&RSVProbeBase::Run_Command ($srmmkdir_cmd, "backtick");
-	$cmd_output .= $o{'cmdOut'}; 
-	my $srmls_cmd = "$o{'srmlsCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestdirectoryUri'} 2>&1";
-        &RSVProbeBase::Run_Command ($srmls_cmd, "backtick");
-	my $ls1_result=$o{'cmdExitValue'};
-	if ($probe_name eq "mkdir")
+	$srm_uri .= "/".$timestamp."-srmclient-probe-test-directory.$$";
+        $out=`$mkdir_bin $defaults $srm_uri 2>&1`;
+        my $srmls_cmd = "$ls_bin $defaults $srm_uri 2>&1";
+        $out.=`$srmls_cmd`;
+        $ret = $? >> 8;
+        if ($probe_name eq "mkdir")
 	{
-        	if ($o{'cmdExitValue'} == 0)
-		{
-			$out_value=0;
-			$out_desc="SRM server $metric{'hostName'} was able to create and list a directory.";
-		}
-		else
-		{
-			$out_value=2;
-        		$out_desc="SRM server $metric{'hostName'} received files and was able to copy to a different location.";
-		}
-
+	        if ($o{'cmdExitValue'} == 0)
+                {
+                        $out_value=0;
+                        $out_desc="SRM server $metric{'hostName'} was able to create and list a directory.";
+                }
+                else
+                {
+                        $out_value=2;
+                        $out_desc="SRM server $metric{'hostName'} received files and was able to copy to a different location.";
+                }
 	}
-	
-	my $srmrmdir_cmd = "$o{'srmrmdirCmd'} $o{'srmcpRemoteTestdirectoryUri'} 2>&1";
-	&RSVProbeBase::Run_Command ($srmrmdir_cmd, "backtick");
-	$cmd_output .= $o{'cmdOut'}; 
+        $out.=`$rmdir_bin $defaults $srm_uri 2>&1`;
 	if ($probe_name eq "rmdir")
-	{
-        	&RSVProbeBase::Run_Command ($srmls_cmd, "backtick");
-		$cmd_output .= $o{'cmdOut'}; 
-        	if (($ls1_result==0)&&($o{'cmdExitValue'} != 0))
-		{
-			$out_value=0;
-			$out_desc="SRM server $metric{'hostName'} was able to create and remove a directory.";
-		}
-		else
-		{
-			$out_value=2;
+        {
+        	my $srmls_cmd = "$ls_bin $defaults $srm_uri 2>&1";
+        	$out.=`$srmls_cmd`;
+        	my $ret2 = $? >> 8;
+                if (($ret==0)&&($ret2 != 0))
+                {
+                        $out_value=0;
+                        $out_desc="SRM server was able to create and remove a directory.";
+                }
+                else
+                {
+                        $out_value=2;
+                        if ($ret!=0)
+                        {
+                                $out_desc="SRM server was not able to create/list the directory before removing it.";
+                        }
+                        if ($ret2 == 0)
+                        {
+                                $out_desc="SRM server was able to create the directory, but failed to remove it.";
+                        }
 
-        		if ($ls1_result!=0)
-			{
-				$out_desc="SRM server $metric{'hostName'} was not able to create/list the directory before removing it.";
-			}
-        		if ($o{'cmdExitValue'} == 0)
-			{
-				$out_desc="SRM server $metric{'hostName'} was able to create the directory, but failed to remove it.";
-			}
-
-		}
-	}
+                }
+        }
+   }
+   if ($probe_name eq "rm")
+   {
+     $srm_uri .= "/".$timestamp."-srmclient-probe-test-file-rm.$$";
+     my $srmls_cmd = "$ls_bin $defaults $srm_uri 2>&1";
+     $out=`$copy_bin $defaults $local_uri $srm_uri 2>&1`; 
+     $out.=`$srmls_cmd`;
+     $ret = $? >> 8;
+     $out.=`$rm_bin $defaults $srm_uri 2>&1`; 
+     $out.=`$srmls_cmd`;
+     my $ret2 = $? >> 8;
+     if (($ret==0)&&($ret2 !=0))
+     {
+        $out_value=0;
+        $out_desc="SRM server $metric{'hostName'} was able to create and remove a file.";
+     }
+     else
+     {
+        $out_value=2;
+        if ($ret!=0)
+        {
+            $out_desc="SRM server was either not able to create a file to delete or was not able to list that file.";
+        }
+        if ($ret2 !=0)
+        {
+            $out_desc="SRM server was able to create a file but could not delete it.";
+        }
+     }
+   }
+   if ($probe_name eq "get")
+   {
+     $srm_uri .= "/".$timestamp."-srmclient-probe-test-file-get.$$";
+     my $local_uri2="/tmp/rsv.".$timestamp."-copyfile.$$";
+     $out=`$copy_bin $defaults $local_uri $srm_uri 2>&1`; 
+     $out.=`$copy_bin $defaults $srm_uri file://$local_uri2 2>&1`; 
+     my $diff_files_cmd = "diff $local_file $local_uri2 2>&1";
+     my $diff_out=`$diff_files_cmd`; 
+     $ret = $? >> 8;
+     if (($diff_out eq '') &&($ret == 0 ))
+     {
+        $out_value=0;
+        $out_desc="SRM write/read was succesfully tested;\n Upload to and download from SRM server $o{'hostName'} succeeded; Received file is valid.";
+     }
+     else
+     {
+        $out_value=2;
+        $out_desc="ERROR: File copied was different from our testfile or srm copy failed; Absolute error message was: $diff_out";
+     }
+     $out.=`$rm_bin $defaults $srm_uri 2>&1`; 
    }
 
-### 
-### srmclient-mv
-### 
-### copy a file to the remote server using srmcp
-### Execute a srmmv to try to move the file.
-   if ($probe_name eq "mv")
+   if ($probe_name eq "copy")
    {
-	&Setup_Srmcp_Metric;
-        my $exit_value=copy_file($o{'srmcpTestfileUri'},$o{'srmcpRemoteTestfileUri'});
-        my $srmmv_cmd = "$o{'srmmvCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestfileUri'} $o{'srmcpRemoteCopyTestfileUri'} 2>&1";
-	&RSVProbeBase::Run_Command ($srmmv_cmd, "backtick");
-	$cmd_output .= $o{'cmdOut'}; 
-        my $srmls_cmd = "$o{'srmlsCmd'} -srm_protocol_version=2 $o{'srmcpRemoteCopyTestfileUri'} 2>&1";
-	&RSVProbeBase::Run_Command ($srmls_cmd, "backtick");
-	$cmd_output .= $o{'cmdOut'}; 
-        if ($o{'cmdExitValue'} == 0)
+     my $srm_uri1 = $srm_uri . "/".$timestamp."-srmclient-probe-test-file-copy.$$";
+     my $srm_uri2 = $srm_uri . "/".$timestamp."-srmclient-probe-test-file-copy2.$$";
+     $out=`$copy_bin $defaults $local_uri $srm_uri1 2>&1`; 
+     $out.=`$copy_bin $defaults $srm_uri1 $srm_uri2 2>&1`; 
+     $out.=`$ls_bin $defaults $srm_uri2 2>&1`;
+     $ret = $? >> 8;
+     if ($ret == 0)
+     {
+        $out_value=0;
+        $out_desc="SRM server received files and was able to copy to a different location";
+     }
+     else
+     {
+        $out_value=2;
+        $out_desc="SRM server either failed to receive the file, to copy file, or would not list the file.\n";
+     }
+     $out.=`$rm_bin $defaults $srm_uri1 2>&1`; 
+     $out.=`$rm_bin $defaults $srm_uri2 2>&1`; 
+   }
+
+   if (($probe_name eq "reservespace")||($probe_name eq "releasespace"))
+   {
+        my $srm_reserve_cmd="$reserve_bin ";
+	if ($options{'srm-client-type'} eq 'fermi')
 	{
-		$out_value=0;
-		$out_desc="SRM server $metric{'hostName'} was able to copy a file to the server and move it to a different location.";
+		$srm_reserve_cmd.= "--retention_policy=REPLICA " .
+                "--access_latency=ONLINE " .
+                "-retry_num=0 " .
+                "-desired_size=1024 " .
+                "-guaranteed_size=1024 " .
+                "-webservice_path=$options{'srm-webservice-path'} " .
+                "-lifetime=600 " .
+                "srm://" .  $options{'u'} . " 2>&1";
 	}
 	else
 	{
-		$out_value=2;
-		$out_desc="SRM server $metric{'hostName'} was not able to create and move the file: $cmd_output";
+		$srm_reserve_cmd.= "-size 1024 -gsize 1024 -lifetime 600 " .
+		  "-serviceurl srm://".$options{'u'}."/"
+		  .$options{'srm-webservice-path'};
 	}
-
-	my $srmrm_cmd =  "$o{'srmrmCmd'} -srm_protocol_version=2 $o{'srmcpRemoteTestfileUri'} 2>&1";
-	&RSVProbeBase::Run_Command ($srmrm_cmd, "backtick");
-	my $srmrm_cmd2 =  "$o{'srmrmCmd'} -srm_protocol_version=2 $o{'srmcpRemoteCopyTestfileUri'} 2>&1";
-	&RSVProbeBase::Run_Command ($srmrm_cmd2, "backtick");
+	$out=`$srm_reserve_cmd`;
+        $ret = $? >> 8;
+        if ($probe_name eq "reservespace")
+        {
+                if ($ret == 0)
+                { $out_value=0; $out_desc="SRM server reserved space with token output."; }
+                else
+                { $out_value=2; $out_desc="SRM server was not able to reserve space."; }
+        }
+        # Now try release
+        if ($ret == 0)
+        {
+		my $srm_release_cmd="";
+                my $token=$out;
+                $token=~s/Space token =//;
+		if ($options{'srm-client-type'} eq 'fermi')
+		{
+                	$srm_release_cmd="$release_bin ".
+				"-space_token=$token " .
+                  		"-webservice_path=" .
+				$options{'srm-webservice-path'}  .
+                  		" srm://" .  $options{'u'} . " 2>&1";
+		}
+		else
+		{
+                	$srm_release_cmd="$release_bin ".
+				"-spacetoken=$token " .
+		  		"-serviceurl srm://".$options{'u'}."/"
+		  		.$options{'srm-webservice-path'};
+		}
+                $out .= `$srm_release_cmd`;
+                if ($probe_name eq "releasespace")
+                {
+                 if ($o{'cmdExitValue'} == 0)
+                 { $out_value=0; $out_desc="SRM server reserved space and then released space."; }
+                 else
+                 { $out_value=2; $out_desc="SRM server was not able to release a reserved space."; }
+                }
+        }
+        else
+        {
+                if ($probe_name eq "releasespace")
+                { $out_value=2; $out_desc="SRM server was not able to reserve a space."; }
+        }
    }
 
 
-# Not functional yet
-   if ($probe_name eq "browse") { }
-   if ($probe_name eq "bringonline") { }
-   if ($probe_name eq "3rdcopy") { }
-   if ($probe_name eq "status") { }
-   if ($probe_name eq "reserveput") { }
-
-
-## If the command is not supported, flag as a warning rather than a failure.
-   if ($cmd_output =~ /SRM_NOT_SUPPORTED/)
+   if ($out =~ /SRM_NOT_SUPPORTED/)
    {
-	$out_value=1;
+        $out_value=1;
+	$out_desc="SRM function is not supported by the server.  SRM_NOT_SUPPORTED detected. \n";
    }
-   RSVProbeBase::Set_Summary_Metric_Results($out_value, "$out_desc.  Details: $cmd_output");
+
+if ($out_value==0) { print "OK\n;"; }
+if ($out_value==1) { print "WARNING\n;"; }
+if ($out_value==2) { print "CRITICAL\n;"; }
+if ($out_value==3) { print "UNKNOWN\n;"; }
+print $out_desc;
+print "\nCommand output:\n";
+print $out;
+
+exit 0;
 
 
-#Use the site name if provided
-#   if ($o{'SiteName'} ne "")
-#   {
-#	$metric{'serviceUri'}=$o{'SiteName'}
-#   }
-   &RSVProbeBase::Print_Metric();
-
-}
-
+################################################################################
 ## Main Program ends ##
 ################################################################################
 
 
-################################################################################
-###### Local Sub routines begin ###########
-################################################################################
 
-
-
-
-################################################################################
-##
-##  Process_Informational_Arguments ()
-##
-## OUTPUT: 
-##  None
-##
-## RETURNS:
-##  None
-## 
-################################################################################
-
-sub Process_Multi_Metrics {
-
-    if (defined ($o{'listmetric'})) {
-        ## Array probes within XML will have <probe>name</probe> elements
-        foreach my $srm_probe_name (@job_managers) {
-            &RSVProbeBase::Set_MetricName("org.osg.srm.srmclient-".$srm_probe_name);
-            &RSVProbeBase::Set_EnableByDefault("false");
-            ## Unix cron type metric interval
-            &RSVProbeBase::Set_MetricInterval (int(rand(60))." * * * *");
-            &RSVProbeBase::List_Summary_Metric();
-        }
-        exit 0;
-    }
-}
