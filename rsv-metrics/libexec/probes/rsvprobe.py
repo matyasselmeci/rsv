@@ -22,14 +22,19 @@ import re
 # Find the correct certificate directory
 def get_ca_dir():
   "Find the CA certificate directory in both Pacman and RPM installations"
+  cadirlt = []
   if os.getenv("OSG_LOCATION"):
-    cadir =  os.path.join(os.getenv("OSG_LOCATION"),"globus/TRUSTED_CA")
+    cadirlt.append(os.path.join(os.getenv("OSG_LOCATION"),"globus/TRUSTED_CA"))
   elif os.getenv("VDT_LOCATION"):
-    cadir =  os.path.join(os.getenv("VDT_LOCATION"),"globus/TRUSTED_CA")
-  else:
-    cadir = "/etc/grid-security/certificates"
+    cadirlt.append(os.path.join(os.getenv("VDT_LOCATION"),"globus/TRUSTED_CA"))
+  elif os.getenv("GLOBUS_LOCATION"):
+    cadirlt.append(os.path.join(os.getenv("GLOBUS_LOCATION"),"TRUSTED_CA"))
+  cadirlt.append("/etc/grid-security/certificates")
+  for cadir in cadirlt:
+    if os.path.isdir(cadir):
+      return cadir
   # check error (If CA dir does not exist) - differentiate message depending old/new
-  return cadir
+  return "/etc/grid-security/certificates"
 
 # Wrapper around commands (add timeout in the future)
 def run_command(cmd, timeout=0, workdir=None):
