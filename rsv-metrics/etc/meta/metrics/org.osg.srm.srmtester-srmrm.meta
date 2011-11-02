@@ -3,7 +3,7 @@ default-cron-interval = 1 * * * *
 
 execute = local
 service-type = OSG-SRM
-output-format = wlcg
+output-format = brief
 probe-spec = v3
 enable-by-default = false
 
