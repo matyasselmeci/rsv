@@ -1,11 +1,10 @@
 [org.osg.ress.ress-classad-exists]
 default-cron-interval = 24 */2 * * *
 
-execute = local
+execute = grid
 service-type = OSG-CE
-output-format = wlcg
+output-format = brief
 probe-spec = v3
 enable-by-default = false
+transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
 
-[org.osg.ress.ress-classad-exists env]
-PERL5LIB = PREPEND | /usr/libexec/rsv/probes

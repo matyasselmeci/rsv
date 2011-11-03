@@ -1,120 +1,57 @@
 #!/usr/bin/env perl
 
-###############################################################################
-##
-## Copyright 2009, The Trustees of Indiana University. 
-##
-## ReSS Project, Fermi National Accelerator Laboratory
-## Original Author(s): Parag Mhashilkar 
-##
-## This Perl script tests if a remote host has various OSG directories
-##  setup correctly
-## Type ./osg-directories-probe -h for more information
-##
-## REQUIRES
-##  'RSV::Probe_Base'
-##
-################################################################################
-
-######## Perl modules to use ######################################
 use strict;
-use RSVProbeBase;
+use warnings;
+use RSVMetric;
 
-######## Retrieve Global variables ################################
-## And alias to RSV::Probe_Base variables
-our %o;         *o         = \%RSVProbeBase::o;      
-our %metric;    *metric    = \%RSVProbeBase::metric;
+print_output_header();
 
-&RSVProbeBase::Init();
-&RSVProbeBase::Run();
+my %options = process_command_line();
 
-################################################################################
-## Main Program ends ##
-################################################################################
+my $cemon_config_path = "/etc/glite-ce-monitor/cemonitor-config.xml";
 
+my $ret = open my $cemon_config_fh, "<", $cemon_config_path;
+if (! $ret) {
+    print "UNKNOWN\n";
+    print "CEMon config file $cemon_config_path not found\n";
+    exit 0;
+}
 
-################################################################################
-## Local Sub-Routines
-################################################################################
+my $keyfile_path;
+while (my $line = <$cemon_config_fh>) {
+    chomp($line);
+    if ($line =~ /sslkeyfile="([^"]+)"/) {
+        $keyfile_path = $1;
+        last;
+    }
+}
 
-sub Init {
+close $cemon_config_fh;
 
-    &RSVProbeBase::Set_MetricName ("org.osg.ress.cemon-containerkeyfile-CE-permissions");
+if (! $keyfile_path) {
+    print "CRITICAL\n";
+    print "CEMon config file $cemon_config_path does not contain location of container key file (sslkeyfile)\n";
+    exit 0;
+}
 
-    ## Pass "status" or "performance" depending on metric type
-    &RSVProbeBase::Set_MetricType ("status");
-    &RSVProbeBase::Set_ServiceType ("OSG-CE");
-    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 0.8.0");
-    &RSVProbeBase::Set_ProbeType ("OSG-CE");
+if (! -e $keyfile_path) {
+    print "CRITICAL\n";
+    print "Container key file $keyfile_path does not exist\n";
+    exit 0;
+}
 
-    ## Should automating tools run this probe on above probeType by default?
-    &RSVProbeBase::Set_EnableByDefault ("true");
-    
-    ## Unix cron type metric interval
-    &RSVProbeBase::Set_MetricInterval ("37 * * * *");
+my $keyfile_mode = (stat($keyfile_path))[2];
+my $keyfile_perms = $keyfile_mode & 07777;
 
-    ## Define this value from RCS/SVN version
-    ## What version of the WLCG specification does this probe conform to?
-    &RSVProbeBase::Set_ProbeRevision ('3.0');
-    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
-
-    ## Basic intro for the probe; This string will be used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpIntro 
-	("Probe to check if permissions are set correctly on the certificate key file used by cemon\n".
-	 "\nMetric org.osg.general.osg-directories-CE-permissions on the OSG CE:\n".
-	 "\t Certificate key     (Required; bad permissions = CRITICAL)");
-
-    ## Additional options to print in Usage info used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpOptions
-	(" [--worker-script-file <file>     Worker script file to use.");
-
-    ## Uncomment if you want additional command line options
-    &RSVProbeBase::Extra_CLI_Option ("worker-script-file=s","cemoncontainerkeyfileWorkerScriptFile");
-
-    &RSVProbeBase::Set_DetailsDataTrim ("False");
+if (! ($keyfile_perms == 0400 || $keyfile_perms == 0600)) {
+    print "CRITICAL\n";
+    print "Container key file $keyfile_path has incorrect permissions\n";
+    printf("%04o, should be 0400 or 0600\n", $keyfile_perms);
+    exit 0
+}
+else {
+    print "OK\n";
+    exit 0;
 }
 
 
-sub Run {
-
-    my ($error_flag, $warning_flag) = 0;
-    my ($certkey_to_test, $tmp_string)  = "";
-    my ($osg_directory_name, $osg_directory_path, $osg_directory_permission) = undef;
-
-    &RSVProbeBase::Check_Gram_Authentication ();
-    
-    ## If we can authenticate, then stage and run worker script using globus
-    $o{'callingRoutine'} = "$o{'probeName'}::Run ()";
-
-
-    $certkey_to_test .= "\'";
-
-    # If a custom worker script was passed in on the command line, it will be in $o{'cemoncontainerkeyfileWorkerScriptFile'}
-    # Otherwise, use the default defined here
-    my $worker_script = $o{'cemoncontainerkeyfileWorkerScriptFile'} || "$o{'PROBE_DIR_LOCAL'}/worker-scripts/cemon-containerkeyfile-ce-permissions-worker";
-
-    &RSVProbeBase::Globus_Job_Run (" -s $worker_script 2>&1 ", "backtick");
-    &RSVProbeBase::Parse_Xml ("Attempted to get permission information using Globus job -s $o{'cemoncontainerkeyfileWorkerScriptFile'} 2>&1");
-
-    my $keyfile_path = $o{'cmdOutHash'}{'StdOut'}{'File'}{'Path'};
-    my $keyfile_permission = $o{'cmdOutHash'}{'StdOut'}{'File'}{'Permission'};
-    my $keyfile_permission_allowed = "400 600";
-
-    &RSVProbeBase::Verbose ("Checking if [$keyfile_permission] exists in [$keyfile_permission_allowed]\n");
-
-    if ($keyfile_permission_allowed =~ /$keyfile_permission/) {
-        $tmp_string .= "Container key file exists and has the required permissions as expected; $keyfile_permission detected; either of ($keyfile_permission_allowed) allowed;\n";
-    }
-    else {
-        $error_flag++;
-        $tmp_string .= "Container key file may not exist or may not have the required permissions as expected; $keyfile_permission detected; either of ($keyfile_permission_allowed) allowed;\n";
-    }
-
-    ## If error/warm flag is non-zero, edit detailsData and set metric
-    ## First set WARNING status; if there are errors then the next if branch
-    ##  will set the status to CRITICAL
-    &RSVProbeBase::Set_Summary_Metric_Results(0,"$tmp_string");
-    &RSVProbeBase::Set_Summary_Metric_Results(1,"$warning_flag WARNING(S)!\n$tmp_string") if ($warning_flag != 0);
-    &RSVProbeBase::Set_Summary_Metric_Results(2,"$error_flag ERROR(S)!\n$tmp_string")     if ($error_flag != 0);
-    &RSVProbeBase::Print_Metric();
-}

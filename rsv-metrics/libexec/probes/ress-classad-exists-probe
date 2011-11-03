@@ -1,156 +1,32 @@
 #!/usr/bin/env perl
 
-###############################################################################
-##
-## Copyright 2009, The Trustees of Indiana University. 
-##
-## ReSS Project, Fermi National Accelerator Laboratory
-## Original Author(s): Parag Mhashilkar 
-##
-## This Perl script tests if classad attributes on a resource are valid
-## Type ./classad-valid-probe -h for more information
-##
-## REQUIRES
-##  'RSV::Probe_Base'
-##
-################################################################################
-
-######## Perl modules to use ######################################
 use strict;
-use RSVProbeBase;
+use warnings;
+use RSVMetric;
 
-######## Retrieve Global variables ################################
-## And alias to RSV::Probe_Base variables
-our %o;         *o         = \%RSVProbeBase::o;      
-our %metric;    *metric    = \%RSVProbeBase::metric;
+print_output_header();
 
-&RSVProbeBase::Init();
-&RSVProbeBase::Run();
+my %extra_opts = ("ress-collector=s" => "ReSS collector to use for validation of classads. Production: osg-ress-1.fnal.gov (default). ITB: osg-ress-4.fnal.gov");
 
-################################################################################
-## Main Program ends ##
-################################################################################
+my %options = process_command_line(%extra_opts);
 
+my $collector = $options{'ress-collector'} || "osg-ress-1.fnal.gov";
+my $glue_ce_info_host_name = $options{u};
 
-################################################################################
-## Local Sub-Routines
-################################################################################
+find_binaries("condor_status");
 
-sub Init {
+my $test_attributes = qx{condor_status -l -pool $collector -constraint 'GlueCEInfoHostName == "$glue_ce_info_host_name"' | grep "isClassadValid =" | sort | uniq};
+chomp($test_attributes);
 
-    &RSVProbeBase::Set_MetricName ("org.osg.ress.ress-classad-exists");
-
-    ## Pass "status" or "performance" depending on metric type
-    &RSVProbeBase::Set_MetricType ("status");
-    &RSVProbeBase::Set_ServiceType ("OSG-CE");
-    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 0.8.0");
-    &RSVProbeBase::Set_ProbeType ("OSG-CE");
-
-    ## Should automating tools run this probe on above probeType by default?
-    &RSVProbeBase::Set_EnableByDefault ("true");
-    
-    ## Unix cron type metric interval
-    &RSVProbeBase::Set_MetricInterval ("24 */2 * * *");
-
-    ## Define this value from RCS/SVN version
-    ## What version of the WLCG specification does this probe conform to?
-    &RSVProbeBase::Set_ProbeRevision ('3.0');
-    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
-
-    ## Basic intro for the probe; This string will be used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpIntro 
-	(" Probe to test if the classad for the resource exists in ReSS.\n".
-	 " The probe takes the given service URI and checks with the\n". 
-         " appropriate ReSS collector. If no classad is found the test\n".
-         " fails and returns a CRITICAL status.");
-
-    ## Additional options to print in Usage info used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpOptions 
-	(" [--worker-script-file <file>]    Worker script file to use.\n".
-	 "                                   Default: ress-classad-exists-probe-worker.sh\n".
-	 "                                  Option: Use absolute path if declaring\n".
-	 "                                   different classad worker script\n".
-	 " [--ress-collector                ReSS collector to use for validation of\n".
-	 "    <ReSS-Collector>]              classads\n".
-	 "                                  OSG Production: osg-ress-1.fnal.gov (Default)".
-	 "\n                                  OSG ITB: osg-ress-4.fnal.gov");
-
-    ## Uncomment if you want additional command line options
-    &RSVProbeBase::Extra_CLI_Option ("ress-collector=s","classadRessCollectorHost");
-    &RSVProbeBase::Extra_CLI_Option ("worker-script-file=s","ressClassadExistsWorkerScriptFile");
-
-    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
-    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+if (! $test_attributes) {
+    print "CRITICAL\n";
+    print "Cannot find CE host $glue_ce_info_host_name in ReSS collector $collector. Check if the cemon on the host is configured to advertise to the $collector. For troubleshooting options visit https://twiki.grid.iu.edu/bin/view/ResourceSelection/CEMonTroubleshootingGuide.\n";
+}
+else {
+    print "OK\n";
+    print "ReSS Collector=$collector\n";
+    print "ressClassadExists=true\n";
 }
 
+exit 0;
 
-sub Run {
-
-    ## Check against ReSS collector if classad exists for resource 
-    $o{'callingRoutine'} = "Test_Classad_Valid ()";
-
-    ## Results flags
-    my $ok=0;
-    my $warning=1;
-    my $critical=2;
-
-    ## default status flag 99 for test did not complete successfully
-    my $ressClassadExists=99;
- 
-    ## variables to store ReSS validity as per ReSS collector
-    my $ress_classad_exists=0;
-    my $ress_classad_not_exists=1;
-
-    ## modification to worker-script for returned string - serviceUri not found on ReSS collector
-    my $no_match = "no match"; 
-
-    # If a custom worker script was passed in on the command line, it will be in $o{'ressClassadExistsWorkerScriptFile'}
-    # Otherwise, use the default defined here
-    my $worker_script = $o{'ressClassadExistsWorkerScriptFile'} || "$o{'PROBE_DIR_LOCAL'}/worker-scripts/ress-classad-exists-probe-worker.sh";
-
-    ## Check if the provided resource was even found on the ReSS collector;  
-    &RSVProbeBase::Exit_Error (2, "UNKNOWN: Cannot find the worker script $worker_script to execute. Check if your environment is setup correctly to run RSV probes and the worker script exists\n")
-        if ( (not -e $worker_script) or (not -f $worker_script) );
-
-
-    ## run command to get classadValid data
-    my $ressClassadExistsCmd = " $o{'shCmd'} $worker_script --glue-ce-host=$o{'serviceUri'} --collector=$o{'classadRessCollectorHost'}"; 
-    &RSVProbeBase::Run_Command ($ressClassadExistsCmd, "backtick");
-
-    ## Store Results in array for processing
-    my @classad_array = split (/\n/, &RSVProbeBase::Get_DetailsData());
-
-    ## Check if the provided resource was even found on the ReSS collector;  
-    &RSVProbeBase::Exit_Error (2, "CRITICAL: Cannot find CE host $o{'serviceUri'} in ReSS collector $o{'classadRessCollectorHost'}. Check if the cemon on the host is configured to advertise to the $o{'classadRessCollectorHost'}. For troubleshooting options visit https://twiki.grid.iu.edu/bin/view/ResourceSelection/CEMonTroubleshootingGuide.\n")
-        if ($no_match eq $classad_array[0]);
-
-    &RSVProbeBase::Exit_Error (2, "UNKNOWN: Cannot find condor_status command; it is required to poll ReSS collector $o{'classadRessCollectorHost'}; Bailing now...\n")    
-        if ($classad_array[0] eq "condor_status command not found");
-
-    &RSVProbeBase::Exit_Error (2, "UNKNOWN: Cannot find condor_cron_status command; it is required to poll ReSS collector $o{'classadRessCollectorHost'}; Bailing now...\n")    
-        if ($classad_array[0] eq "condor_cron_status command not found");
-
-
-    &RSVProbeBase::Exit_Error (2, "UNKNOWN: There was a problem executing the worker script $worker_script Worker script exited with status $o{cmdExitValue}\n")
-        if (($o{cmdExitValue} eq 1) or ($o{cmdExitValue} gt 2));
-
-    ## Resource found
-    $ressClassadExists=$ok;
-    &RSVProbeBase::Exit_Error (0, "ReSS Collector=$o{'classadRessCollectorHost'}\nressClassadExists=true\n")  
-	if ($ressClassadExists == $ok);
-    ## Since all are Valid, only GlueSiteName, GlueCEInfoContactString, and the ressClassadExists attrib
-   
-    ## currently not in use - set status WARNING
-    &RSVProbeBase::Exit_Error (1, "WARNING: ") if ($ressClassadExists == $warning);
-    ## Since all are Valid(1), only GlueSiteName, GlueCEInfoContactString, and the ressClassadExists attrib
-
-    &RSVProbeBase::Exit_Error (2, "ReSS Collector=$o{'classadRessCollectorHost'}\n$classad_array[0]\n$classad_array[1]\nressClassadExists=false\n")
-	if ($ressClassadExists == $critical);
-    ## Print only that the ressClassadExists attribute for this resource is invalid
-
-    &RSVProbeBase::Exit_Error 
-	(3, "ERROR: Test Did Not Complete/Timed Out While Looking for\n".
-	 "CE Host: $o{'serviceUri'} on ReSS Collector $o{'classadRessCollectorHost'}\n".
-	 "Using Worker Script: $o{'ressClassadExistsWorkerScriptFile'}\n".
-	 "Type $0 --help for more Information\n$classad_array[0]");
-}

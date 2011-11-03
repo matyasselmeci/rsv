@@ -1,172 +1,72 @@
 #!/usr/bin/env perl
 
-###############################################################################
-##
-## Copyright 2009, The Trustees of Indiana University. 
-##
-## Open Science Grid Operations Team, Indiana University
-## Original Author(s): Thomas Wang, Arvind Gopu (http://peart.ucs.indiana.edu)
-##
-## This Perl script tests if classad attributes on a resource are valid
-## Type ./classad-valid-probe -h for more information
-##
-## REQUIRES
-##  'RSV::Probe_Base'
-##
-################################################################################
-
-######## Perl modules to use ######################################
 use strict;
-use RSVProbeBase;
+use warnings;
+use RSVMetric;
 
-######## Retrieve Global variables ################################
-## And alias to RSV::Probe_Base variables
-our %o;         *o         = \%RSVProbeBase::o;      
-our %metric;    *metric    = \%RSVProbeBase::metric;
+print_output_header();
 
-&RSVProbeBase::Init();
-&RSVProbeBase::Run();
+my %extra_opts = ("ress-collector=s" => "ReSS collector to use for validation of classads. Production: osg-ress-1.fnal.gov (default). ITB: osg-ress-4.fnal.gov");
 
-################################################################################
-## Main Program ends ##
-################################################################################
+my %options = process_command_line(%extra_opts);
 
+my $collector = $options{'ress-collector'} || "osg-ress-1.fnal.gov";
+my $glue_ce_info_host_name = $options{u};
 
-################################################################################
-## Local Sub-Routines
-################################################################################
+find_binaries("condor_status");
 
-sub Init {
+# Want to get a list of the attributes whose names start with 'isClassadValid'
+chomp(my @test_attrib_lines = qx{condor_status -l -pool $collector -constraint 'GlueCEInfoHostName == "$glue_ce_info_host_name"' | grep -E "^isClassadValid[^ ]* =" | sort | uniq});
 
-    &RSVProbeBase::Set_MetricName ("org.osg.ress.classad-valid");
-
-    ## Pass "status" or "performance" depending on metric type
-    &RSVProbeBase::Set_MetricType ("status");
-    &RSVProbeBase::Set_ServiceType ("OSG-CE");
-    &RSVProbeBase::Set_ServiceVersion (">= OSG CE 0.8.0");
-    &RSVProbeBase::Set_ProbeType ("OSG-CE");
-
-    ## Should automating tools run this probe on above probeType by default?
-    &RSVProbeBase::Set_EnableByDefault ("false");
-    
-    ## Unix cron type metric interval
-    &RSVProbeBase::Set_MetricInterval ("24 */2 * * *");
-
-    ## Define this value from RCS/SVN version
-    ## What version of the WLCG specification does this probe conform to?
-    &RSVProbeBase::Set_ProbeRevision ('3.0');
-    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
-
-    ## Basic intro for the probe; This string will be used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpIntro 
-	(" Probe to test if all the classad attributes are valid for a resource.\n".
-	 " The probe takes the given service URI and checks with the appropriate\n".
-	 " ReSS collector. Each resource has multiple classads at ReSS.  Only if all\n".
-	 " the isClassadValid Attributes are 1, does the resource pass the test. If\n".
-	 " any of the isClassadValid Attributes are 0, or no valid data is returned,\n".
-	 " the test fails and returns a CRITICAL status.");
-
-    ## Additional options to print in Usage info used by Print_Usage ()
-    &RSVProbeBase::Set_ProbeHelpOptions 
-	(" [--worker-script-file <file>]    Worker script file to use.\n".
-	 "                                   Default: classad-valid-probe-worker.sh\n".
-	 "                                  Option: Use absolute path if declaring\n".
-	 "                                   different classad worker script\n".
-	 " [--ress-collector                ReSS collector to use for validation of\n".
-	 "    <ReSS-Collector>]              classads\n".
-	 "                                  OSG Production: osg-ress-1.fnal.gov (Default)".
-	 "\n                                  OSG ITB: osg-ress-4.fnal.gov");
-
-    ## Uncomment if you want additional command line options
-    &RSVProbeBase::Extra_CLI_Option ("ress-collector=s","classadRessCollectorHost");
-    &RSVProbeBase::Extra_CLI_Option ("worker-script-file=s","classadWorkerScriptFile");
-
-    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
-    ## &RSVProbeBase::Set_DetailsDataTrim ("False");
+if (! @test_attrib_lines) {
+    print "CRITICAL\n";
+    print "Cannot find CE host $glue_ce_info_host_name in ReSS collector $collector.\n";
+    exit 0;
 }
 
+my $classad_valid_cmd = qq{condor_status -pool $collector -constraint 'GlueCEInfoHostName == "$glue_ce_info_host_name"' -format 'GlueSiteName=%s\n' GlueSiteName -format 'GlueCEInfoContactString=%s\n' GlueCEInfoContactString -format 'Name=%s\n' Name};
+foreach my $attrib_line (@test_attrib_lines) {
+    my ($attrib_name) = split ' ', $attrib_line;
+    $classad_valid_cmd .= " -format '${attrib_name}=%d\\n' $attrib_name";
+}
 
-sub Run {
+chomp(my @classad_array = `$classad_valid_cmd`);
 
-    ## Check against ReSS collector isClassadsValid for resource 
-    ##  Each resource has multiple classads at ReSS.  Only if all the
-    ##  isClassadValid attributes are 1, will the site pass the test.
-    ##  If any isClassadValid for a site NOT 1, then the failed tests
-    ##  will be printed in the detailsData.  Unkown status only occurs
-    ##  if the test fails to complete properly. 
-    $o{'callingRoutine'} = "Test_Classad_Valid ()";
-
-    ## Results flags
-    my $ok=0;
-    my $warning=1;
-    my $critical=2;
-    my $not_found=3;
-
-    ## default status flag 99 for test did not complete successfully
-    my $isClassadValid=99;
- 
-    ## variables to store ReSS validity as per ReSS collector
-    my $ress_valid=1;
-    my $ress_invalid=0;
-
-    ## modification to worker-script for returned string - serviceUri not found on ReSS collector
-    my $no_match = "no match"; 
-
-    ## run command to get classadValid data
-    my $classadValidCmd = " $o{'shCmd'} $o{'classadWorkerScriptFile'} --glue-ce-host=$o{'serviceUri'} --collector=$o{'classadRessCollectorHost'}"; 
-    &RSVProbeBase::Run_Command ($classadValidCmd, "backtick");
-    
-   ## Store Results in array for processing
-    my @classad_array = split (/\n/, &RSVProbeBase::Get_DetailsData());
-
-    ## Check if the provided resource was even found on the ReSS collector;  
-    &RSVProbeBase::Exit_Error (3, "UNKNOWN: Cannot find CE host $o{'serviceUri'} in ReSS collector $o{'classadRessCollectorHost'}\n")
-	if ($no_match eq $classad_array[0]);
-    # {	$isClassadValid=$not_found; }
-
-    &RSVProbeBase::Exit_Error (3, "UNKNOWN: Cannot find condor_status command; it is required to poll ReSS collector $o{'classadRessCollectorHost'}; Bailing now...\n")    
-	if ($classad_array[0] eq "condor_status command not found");
-
-    ## Resource found, commence checks on classad attributes
-    foreach my $attribute (@classad_array){
-	## Check isClassadValid==$ress_valid for every classad,
-	if($attribute eq "isClassadValid=$ress_invalid") {
-	    ## a non-valid attritub is encountered, set flag to CRITICAL and exit loop
-	    $isClassadValid=$critical;
-	    last;
-	}
-	elsif($attribute eq "isClassadValid=$ress_valid") {
-	    #valid classad attribute, set flag to OK and continue
-	    $isClassadValid=$ok;
-	}
+if ($?) {
+    print "UNKNOWN\n";
+    print "Problem executing \"$classad_valid_cmd\"\n";
+    print "Exited with status " . $? >> 8 . "\n";
+    exit 0;
+}
+elsif (! @classad_array) {
+    print "UNKNOWN\n";
+    print "Problem executing \"$classad_valid_cmd\"\n";
+    print "Command returned no output\n";
+    exit 0;
+}
+else {
+    if (! grep { /^isClassadValid=[01]$/ } @classad_array) {
+        print "UNKNOWN\n";
+        print "No value for isClassadValid attribute found\n";
+        exit 0;
     }
 
-    ## All isClassadValid returned $ress_valid - set status OK
-    &RSVProbeBase::Exit_Error (0, "ReSS Collector=$o{'classadRessCollectorHost'}\n$classad_array[0]\n$classad_array[1]\nisClassadValid=$ress_valid\n")  
-	if ($isClassadValid == $ok);
-    ## Since all are Valid, only GlueSiteName, GlueCEInfoContactString, and the isClassadValid attrib
-   
-    ## currently not in use - set status WARNING
-    &RSVProbeBase::Exit_Error (1, "WARNING: ") if ($isClassadValid == $warning);
-    ## Since all are Valid(1), only GlueSiteName, GlueCEInfoContactString, and the isClassadValid attrib
-
-    ## isClassadValid returne one or more $ress_invalid - set status CRITICAL
-    ## Clear details Data so we can populate it with what failed - OFF FOR NOW
-    #$metric{'detailsData'} = "ReSS Collector=$o{'classadRessCollectorHost'}\n";
-    #my $size = @classad_array;    
-    ## Set Details Data to hold the classad valid attribute that returned 0
-    #for (my $x = 0; $x < $size; $x++) {
-    #  if($classad_array[$x] eq "isClassadValid=0") {
-    #    $metric{'detailsData'} .= "$classad_array[$x-3]\n$classad_array[$x-2]\n$classad_array[$x-1]\n$classad_array[$x]\n";
-    #  }
-    #}
-    &RSVProbeBase::Exit_Error (2, "ReSS Collector=$o{'classadRessCollectorHost'}\n$classad_array[0]\n$classad_array[1]\nisClassadValid=$ress_invalid\n")     
-	if ($isClassadValid == $critical);
-    ## Print only that the isClassadValid attribute for this resource is invalid
-
-    &RSVProbeBase::Exit_Error 
-	(3, "ERROR: Test Did Not Complete/Timed Out While Looking for\n".
-	 "CE Host: $o{'serviceUri'} on ReSS Collector $o{'classadRessCollectorHost'}\n".
-	 "Using Worker Script: $o{'classadWorkerScriptFile'}\n".
-	 "Type $0 --help for more Information\n$classad_array[0]");
+    my $all_valid = ! grep { $_ eq 'isClassadValid=0' } @classad_array;
+    if ($all_valid) {
+        print "OK\n";
+        print "ReSS Collector=$collector\n";
+        print "Classad is valid\n";
+        print join("\n", @classad_array)."\n";
+        exit 0;
+    }
+    else {
+        print "CRITICAL\n";
+        print "ReSS Collector=$collector\n";
+        print "Classad is invalid\n";
+        print join("\n", @classad_array)."\n";
+        exit 0;
+    }
 }
+
+
+
