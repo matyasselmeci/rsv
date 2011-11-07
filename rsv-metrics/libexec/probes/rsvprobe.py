@@ -99,7 +99,7 @@ def get_config_val(req_key, req_section=None):
   # Behaves like the old probe: no variable substitution in config.ini
   try:
     f = open(confini_fname)
-  except OSError:
+  except (OSError, IOError):
     # unable to find config.ini
     return None
   # comments at end of section line are OK
