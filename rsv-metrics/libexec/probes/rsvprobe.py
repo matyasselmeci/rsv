@@ -15,6 +15,7 @@ import commands
 import getopt
 import urllib
 import urllib2
+import urlparse
 # re for config.ini parsing
 import re
 
@@ -25,9 +26,9 @@ def get_ca_dir():
   cadirlt = []
   if os.getenv("OSG_LOCATION"):
     cadirlt.append(os.path.join(os.getenv("OSG_LOCATION"),"globus/TRUSTED_CA"))
-  elif os.getenv("VDT_LOCATION"):
+  if os.getenv("VDT_LOCATION"):
     cadirlt.append(os.path.join(os.getenv("VDT_LOCATION"),"globus/TRUSTED_CA"))
-  elif os.getenv("GLOBUS_LOCATION"):
+  if os.getenv("GLOBUS_LOCATION"):
     cadirlt.append(os.path.join(os.getenv("GLOBUS_LOCATION"),"TRUSTED_CA"))
   cadirlt.append("/etc/grid-security/certificates")
   for cadir in cadirlt:
@@ -67,14 +68,23 @@ def get_http_doc(url, quote=True):
   return ret
 
 def get_config_val(req_key, req_section=None): 
-  "Get the value of an option from a section of OSG configuration in both Pacman and RPM installations."
+  "Get the value of an option from a section of OSG configuration in both Pacman and RPM installations. Return None if option is not found."
+  confini_fname = None
+  confini_fname_list = []
   if os.getenv("OSG_LOCATION"):
-    confini_fname =  os.path.join(os.getenv("OSG_LOCATION"), "osg/etc/config.ini")
-  elif os.getenv("VDT_LOCATION"):
-    confini_fname =  os.path.join(os.getenv("VDT_LOCATION"), "osg/etc/config.ini")
-  else:    
-    # NEW osg-configure code/API 
-    from osg_configure.modules import configfile
+    confini_fname_list.append(os.path.join(os.getenv("OSG_LOCATION"), "osg/etc/config.ini"))
+  if os.getenv("VDT_LOCATION"):
+    confini_fname_list.append(os.path.join(os.getenv("VDT_LOCATION"), "osg/etc/config.ini"))
+  for i in confini_fname_list:
+    if os.path.isfile(i):
+      confini_fname = i
+  if not confini_fname:
+    # Assume new OSG 3    
+    # Using NEW osg-configure code/API 
+    try:
+      from osg_configure.modules import configfile
+    except:
+      return None
     # necassary for exception raised by osg_configure
     import ConfigParser
     try:
@@ -173,6 +183,7 @@ def get_temp_dir():
 def which(program):
   "Python replacement for which"
   def is_exe(fpath):
+    "is a regular file and is executable"
     return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
   fpath, fname = os.path.split(program)
   if fpath:
@@ -192,9 +203,47 @@ def list_directory(directory, file_ext_list):
                if os.path.splitext(f)[1] in file_ext_list]
   return filelist
  
+def uri2host(uri):
+  "Return the host part of a URI or ''. URI defined as [scheme://]host[:port][/[rest]]"
+  components = urlparse.urlparse(uri)
+  try:
+    ret = components.hostname
+    if not ret:
+      return ""
+    return ret
+  except AttributeError:
+    # urlparse attributes added in python 2.5
+    ret = components[1].lower()
+    i = ret.find(':')
+    if i < 0:
+      return ret
+    return ret[:i]
 
-# TODO: equivalent of which in python to help with external commands
-# to help verify external commands
+def uri2port(uri, default=None):
+  "Return the port (int) part of a URI or default/None. URI defined as [scheme://]host[:port][/[rest]]"
+  components = urlparse.urlparse(uri)
+  try:
+    return components.port
+  except AttributeError:
+    # urlparse attributes added in python 2.5
+    ret = components[1]
+    i = ret.rfind(':')
+    if i < 0:
+      return default
+    try:
+      ret = int(ret[i+1:])
+    except ValueError:
+      return default
+    return ret
+
+def inlist(elements, checklist):
+  "Return True if at least one of the elements is in the checklist, False otherwise."
+  # Alt, not empty intersection: [i for i in elements if i in checklist]
+  for i in elements:
+    if i in checklist:
+      return True
+  return False
+
 
 # Valid probe status (according to specification)
 OK = 0
@@ -228,6 +277,9 @@ The return code from the probe can take on either one of two values, and should 
 The behavior is specified in a WLCG document:
 https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
 """
+  HOST_OPTIONS = ('-h','--host')
+  URI_OPTIONS = ('-u', '--uri')
+
   def __init__(self):
     self.name = "Base probe"
     self.version = "1.0"
@@ -250,19 +302,25 @@ https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
     self.uri = None
     self.verbose = False
     self.output_filename = None
+    self.x509proxy = "/tmp/x509up_u%s" % os.getuid()
+    self.x509usercert = None
+    self.x509userkey = None
     self.options_short = 'm:lu:h:t:x:V?v'
     self.options_long = ['metric=', 
       'list', 
       'uri=', 'host=',
-      'timeout=', 'proxy=',
+      'timeout=', 
+      'proxy=', 'usercert=', 'userkey=',
       'version',
       'help', 'verbose']
     self.options_help = ['-m,--metric METRIC_NAME \twhich metric output is desired',
       '-l,--list \tlist all the metrics suppotrted by the probe',
-      '-u,--uri URI \tURI passed to the metric',
-      '-h,--host HOST \tHOST passed to the metric',
+      '-u,--uri URI \tURI passed to the metric (host or hierarchical URI as in rfc2396/3986)',
+      '-h,--host HOST \tHOST passed to the metric (hostname[:port])',
       '-t,--timeout TIMEOUT \tset a timeout (int) for the probe execution (NOT SUPPORTED)',
-      '-x,--proxy CERTFILE \tset the user proxy to CERTFILE (Default: /tmp/x509up_u500) (NOT SUPPORTED)',
+      '-x,--proxy CERTFILE \tset the user proxy to CERTFILE (Default: /tmp/x509up_uID with ID=uid) ',
+      '--usercert CERTFILE \tset user x509 certificate to CERTFILE',
+      '--userkey KEYFILE \tset user x509 key to KEYFILE',
       '-V,--version \tprint probe version and exit',
       '-?,--help \t print help message and exit',
       '-v,--verbose \tverbose output']
@@ -314,9 +372,10 @@ https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
   def parseopt(self):
     """Parse the command line options and arguments. Options and parameters are retrieved from sys.argv[1:], 
 validated and processed with getopt, using self.options_short and self.options_long. Actions on some options are taken.
-Finally all processed options and reminder are returned to daisy chain the processing in subclasses.
-Define parseopt(self) and first call the one of the parent 'options, remainder = rsvprobe.RSVProbe.parseopt(self)'
-then process the options as desired and at the end return all of them for processing in subclasses: 'return options, remainder'
+optlist is a list of all options encountered (all first elements of options touples).
+Finally all processed options optlist, and reminder are returned to daisy chain the processing in subclasses.
+Define parseopt(self) and first call the one of the parent 'options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)'
+then process the options as desired and at the end return all of them for processing in subclasses: 'return options, optlist, remainder'
 """
     # using sys.argv, no real usecase to pass different args
     try:
@@ -324,6 +383,7 @@ then process the options as desired and at the end return all of them for proces
     except getopt.GetoptError, emsg:
       #invalid option
       self.invalid_option_handler(emsg) 
+    optlist = [i[0] for i in options]
     for opt, arg in options:
       if opt in ('-o', '--output'):
         self.output_filename = arg
@@ -340,16 +400,26 @@ then process the options as desired and at the end return all of them for proces
         sys.exit(0)
       elif opt in ('-m', '--metric'):
         if not self.get_metric(arg):
-          self.return_unknown("Unsupported metric %s. Aborting probe" % arg)      
+          self.return_unknown("Unsupported metric %s. Use --list to list supported metrics. Aborting probe" % arg)      
         self.metric = arg
-      elif opt in ('-h', '--host'):
+      elif opt in RSVProbe.HOST_OPTIONS:  #('-h', '--host'):
         self.host = arg
-      elif opt in ('-u', '--uri'):
+        if not inlist(RSVProbe.URI_OPTIONS, optlist):
+          self.uri = arg
+      elif opt in RSVProbe.URI_OPTIONS:  #('-u', '--uri'):
         self.uri = arg
-      elif opt in ('-x', '--proxy', '-t', '--timeout'):
+        if not inlist(RSVProbe.HOST_OPTIONS, optlist):
+          self.host = uri2host(arg)
+      elif opt in ('-x', '--proxy'):
+        self.x509proxy = arg
+      elif opt == '--usercert':
+        self.x509usercert = arg
+      elif opt == '--userkey':
+        self.x509userkey = arg
+      elif opt in ('-t', '--timeout'):
         # TODO: options not implemented
         pass
-    return options, remainder 
+    return options, optlist, remainder 
 
   def out_debug(self, text):
     "Debug messages are sent to stderr."
@@ -502,6 +572,8 @@ name - metricName	 The name of the metric
 mtype - metricType	 This should be the constant value 'performance' or 'status'
 dtype - dataType	 The type of the data: float, int, string, boolean (only 'performance' probes)
 """
+  # Spec version, see https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
+  DEFAULT_VERSION = "0.91" 
   # Metric type constants
   STATUS = 'status'
   PERFORMANCE = 'performance'
@@ -513,6 +585,10 @@ dtype - dataType	 The type of the data: float, int, string, boolean (only 'perfo
       raise ValueError("Invalid metricType")
     self.mtype = mtype
     self.dtype = dtype
+    ## What version of the WLCG specification does this probe conform to?  
+    self.probe_spec_version = RSVMetric.DEFAULT_VERSION
+    self.enable_by_default = False
+ 
  
   def describe(self):
     "Return a metric description in the standard WLCG format"
