@@ -49,8 +49,8 @@ class CRLProbe(rsvprobe.RSVProbe):
     metric.probe_type = "OSG-CE"
     ## What version of the WLCG specification does this probe conform to?
     metric.probe_revision = "3.0"
-    metric.probe_spec_version = "0.91"
-    metric.enable_by_default = True
+    #metric.probe_spec_version = "0.91"
+    #metric.enable_by_default = True
     ## Unix cron type metric interval
     metric.cron_interval = "30 */6 * * *"
     self.supported_metrics = [metric]
@@ -78,14 +78,11 @@ Additionally it makes sure that all IGTF CAs are installed.
     # " [--local-ce]          The verify test is run on localhost and not through globus gatekeeper."
 
   def parseopt(self):
-    "parse options specific to CAcertProbe and return options and reminder to allow further processing"
-    options, remainder = rsvprobe.RSVProbe.parseopt(self)
+    "parse options specific to CAcertProbe and return options, optlist and reminder to allow further processing"
+    options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
     for opt, arg in options:
       if opt == '--error-file':
         self.error_file = arg
-      elif opt in ('-h', '--host'):
-        if not '--error-file' in options.keys():
-          self.error_file = os.path.join(self.tempdir, "%s.cacert_verify.err" % arg)
       elif opt == '--warning-hours':
         try:
           self.warningHrs = int(arg)
@@ -103,7 +100,9 @@ Additionally it makes sure that all IGTF CAs are installed.
       elif opt == '--cacerts-dir':
         self.ca_certs_dir = arg
       #
-    return options, remainder
+      if not '--error-file' in optlist:
+        self.error_file = os.path.join(self.tempdir, "%s.crl_verify.err" % self.host)
+    return options, optlist, remainder
 
   def run(self):
     "Probe actions"
