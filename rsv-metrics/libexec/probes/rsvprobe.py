@@ -11,7 +11,6 @@ https://twiki.grid.iu.edu/bin/view/MonitoringInformation/InstallAndConfigureRsvA
 
 import os
 import sys
-import commands
 import getopt
 import time 
 import urllib
@@ -31,6 +30,35 @@ urlparse_register_scheme('root')
 # re for config.ini parsing
 import re
 
+# Add the current directory to the path:
+# auxiliary files are staged in the same directory during remote execution
+import sys
+if not sys.path[0] == ".":
+  sys.path.insert(0, ".")
+try:
+  import timed_command
+except ImportError:
+  import commands
+  timed_command = None
+
+# Wrapper around commands (add timeout in the future)
+def run_command(cmd, timeout=0, workdir=None):
+  "Run an external command in the workdir directory. Timeout is available only if timed_command is available."
+  olddir = None
+  if workdir: 
+    olddir = os.getcwd()
+    try:
+      os.chdir(workdir)
+    except OSError, e:
+      return 1, "cd to workdir %s failed: %s" % (workdir, e)
+  if timed_command:
+    ec, elapsed, out, err = timed_command.timed_command(cmb, timeout)
+    outerr = out + err
+  else:      
+    ec, outerr = commands.getstatusoutput(cmd)
+  if olddir:
+    os.chdir(olddir)
+  return ec, outerr
 
 # Find the correct certificate directory
 def get_ca_dir():
@@ -48,21 +76,6 @@ def get_ca_dir():
       return cadir
   # check error (If CA dir does not exist) - differentiate message depending old/new
   return "/etc/grid-security/certificates"
-
-# Wrapper around commands (add timeout in the future)
-def run_command(cmd, timeout=0, workdir=None):
-  "Run an external command in the workdir directory. Timeout is not implemented yet."
-  olddir = None
-  if workdir: 
-    olddir = os.getcwd()
-    try:
-      os.chdir(workdir)
-    except OSError, e:
-      return 1, "cd to workdir %s failed: %s" % (workdir, e)
-  ec, out = commands.getstatusoutput(cmd)
-  if olddir:
-    os.chdir(olddir)
-  return ec, out
 
 def get_http_doc(url, quote=True):
   "Retrieve a document using HTTP and return all lines"
