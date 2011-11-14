@@ -15,8 +15,6 @@ and 3 ATLAS specific ones (similar but testing for an ATLAS file):
 import os
 import filecmp  # for comparing the files in run
 import tempfile
-#import time
-#import calendar
 import socket   # for the ping function
 import shutil   # rmtree in run
 
@@ -148,7 +146,7 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
     options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
     for opt, arg in options:
       if opt == '--test-file':
-        self.test_file = arg # os.path.join(self.tempdir, "%s" % arg)
+        self.test_file = arg 
       elif  opt == '--destination-dir':
         self.destination_dir = arg 
       elif  opt == '--fxr':
@@ -214,15 +212,15 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
  
     # Set file names/path, ...  ($o{'timestampUnixSeconds'}. "-xroot-probe-test-file.$$")
     # mktemp is deprecated, mkstemp is opening the file. Better to create a subdir
-    tmpdir = tempfile.mkdtemp(suffix='', prefix='xroot-probe-test-dir', dir=self.tempdir)
     #file1, fname1 = tempfile.mkstemp(suffix='-direct', prefix='xroot-probe-test-file', dir=self.tempdir)
     #file2, fname2 = tempfile.mkstemp(suffix='-server', prefix='xroot-probe-test-file', dir=self.tempdir)
     # I need the name, not the file open
     #file1.close()
     #file2.close()
+    tmpdir = tempfile.mkdtemp(prefix='xroot-probe-test-dir', dir=self.tempdir)
+    self.dir_todelete.append(tmpdir)
     fname1 = os.path.join(tmpdir, 'xrdcpdirect')
     fname2 = os.path.join(tmpdir, 'xrdcpserver')
-    self.dir_todelete.append(tmpdir)
     # ATLAS file: $o{'xrdcpServerTestfileUri'} = $o{'xrdcpServiceType'}. "://". $o{'hostName'}. 
     #   $o{'xrdcpPortNumber'}. "/" . "/atlas/test/". $o{'hostName'}. "-1M";
     if self.is_atlas_test:
@@ -237,23 +235,14 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
     # Run the tests
     if  self.short_metric == "xrdcp-direct":
       self.verify_xrdcp(uri1, fname1, cmd_xrdcp=cmdxrdcp)
-      #os.remove(fname1)
-      #shutil.rmtree(tmpdir, ignore_errors=True)
       self.return_ok("Xrootd was succesfully tested! direct download succeeded; File received correctly.")
     elif  self.short_metric == "xrdcp-fxr":
       self.verify_xrdcp(uri2, fname2, cmd_xrdcp=cmdxrdcp)
-      #os.remove(fname2)
-      #shutil.rmtree(tmpdir, ignore_errors=True)
       self.return_ok("Xrootd was succesfully tested! central redirector download succeeded; File received correctly.")
     elif  self.short_metric == "xrdcp-compare":
-      #self.verify_xrdcp(uri1, fname1, cmd_xrdcp=cmdxrdcp)
       self.verify_xrdcp(uri1, fname1, cmd_xrdcp=cmdxrdcp)
-      #self.verify_xrdcp(uri2, fname2, cmd_xrdcp=cmdxrdcp, todelete=[fname1])
       self.verify_xrdcp(uri2, fname2, cmd_xrdcp=cmdxrdcp)
       are_equal = filecmp.cmp(fname1, fname2, shallow=False)
-      #os.remove(fname1)
-      #os.remove(fname2)
-      #shutil.rmtree(tmpdir, ignore_errors=True)
       if are_equal:
         self.return_ok(
           "Xrootd was succesfully tested! Download from server and central redirector succeeded; Received files are valid.")
@@ -274,21 +263,20 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
         pass
     rsvprobe.RSVProbe.atexit(self)
 
-  def verify_xrdcp(self, src, dst, cmd_xrdcp=CMD_XRDCP, todelete=[], delete_dir=None):
+  def verify_xrdcp(self, src, dst, cmd_xrdcp=CMD_XRDCP, todelete=[]):
     "Tests a download with xrdcp"
     cmd = "%s %s %s" % (cmd_xrdcp, src, dst) #  "%s %s %s 2>&1" 
     ec, out = rsvprobe.run_command(cmd)
     if not ec == 0 or not os.path.isfile(dst):
-      if delete_dir:
-        cleanup(delete_dir)
+      # xrdcp failed
       for i in todelete + [dst]:
         try:
           os.remove(i)
         except OSError:
           # file already missing
           pass
-      self.return_critical("ERROR: Cannot copy file: %s to %s ... Bailing now. Actual error message was: %s" % 
-                           (src, dst, out))
+      self.return_critical("ERROR: Cannot copy file: %s to %s ... Bailing now.\nxrdcp failed (%s): %s\nActual error message was: %s" % 
+                           (src, dst, ec, cmd, out))
 
 
 ##### Main code #####
