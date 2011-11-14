@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 _version_info = "$Id: timed_command.py,v 1.13 2011/07/22 14:37:25 cgw Exp $"
 
 # Author:  Charles G Waldman
@@ -8,7 +7,10 @@ _version_info = "$Id: timed_command.py,v 1.13 2011/07/22 14:37:25 cgw Exp $"
 
 """This module exports a single function "timed_command" which runs a shell
    command with an optional timeout.
-See that function's docstring for more info."""
+See that function's docstring for more info.
+This module has been extensively used in ATLAS. You can find it here:
+http://repo.mwt2.org/viewvc/Python/timed_command.py?content-type=text%2Fplain
+"""
 
 import sys, os, time, select, fcntl, signal, errno
 
