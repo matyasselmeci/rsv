@@ -13,6 +13,7 @@ import os
 import sys
 import commands
 import getopt
+import time 
 import urllib
 import urllib2
 import urlparse
@@ -294,7 +295,7 @@ https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
   def __init__(self):
     self.name = "Base probe"
     self.version = "1.0"
-    self.timestamp = None
+    self.timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) # String ISO8601 UTC time
     self.status = OK
     self.select_wlcg_output = False
     self.summary = ""
@@ -417,11 +418,11 @@ then process the options as desired and at the end return all of them for proces
         if not self.get_metric(arg):
           self.return_unknown("Unsupported metric %s. Use --list to list supported metrics. Aborting probe" % arg)      
         self.metric = arg
-      elif opt in RSVProbe.HOST_OPTIONS:  #('-h', '--host'):
+      elif opt in RSVProbe.HOST_OPTIONS: 
         self.host = arg
         if not inlist(RSVProbe.URI_OPTIONS, optlist):
           self.uri = arg
-      elif opt in RSVProbe.URI_OPTIONS:  #('-u', '--uri'):
+      elif opt in RSVProbe.URI_OPTIONS:
         self.uri = arg
         if not inlist(RSVProbe.HOST_OPTIONS, optlist):
           self.host = uri2host(arg)
@@ -521,6 +522,7 @@ Retuns True if status and summary have been updated, False otherwise.
     outstring = "RSV BRIEF RESULTS:\n"
     outstring += "%s\n" % STATUS_DICT[self.status]
     outstring += "%s\n" % self.summary
+    outstring += "%s\n" % self.timestamp
     outstring += '\n'.join(self.detailed)
     if self.output_filename:
       try:
