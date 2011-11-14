@@ -18,6 +18,7 @@ import tempfile
 #import time
 #import calendar
 import socket   # for the ping function
+import shutil   # rmtree in run
 
 # Add the current directory to the path:
 # auxiliary files are staged in the same directory during remote execution
@@ -119,6 +120,8 @@ class XrootProbe(rsvprobe.RSVProbe):
       ## Unix cron type metric interval
       metric.cron_interval = "15 */6 * * *"
       self.supported_metrics.append(metric)
+    self.todelete = []
+    self.dir_todelete = []
     ## Specific options and defaults
     self.tempdir = rsvprobe.get_temp_dir()
     self.test_file = None
@@ -163,7 +166,7 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
     self.uri = getrooturi(self.uri)
     if self.metric.startswith("org.atlas.xroot"):
       self.is_atlas_test = True
-      self.short_metric = self.metric[len("org.atlas.xroot"):]
+      self.short_metric = self.metric[len("org.atlas.xroot."):]
     else:
       self.is_atlas_test = False
       if self.metric == "org.osg.xroot.ping":
@@ -210,11 +213,16 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
       os.environ['XrdSecGSIUSERKEY'] = self.x509userkey
  
     # Set file names/path, ...  ($o{'timestampUnixSeconds'}. "-xroot-probe-test-file.$$")
-    file1, fname1 = tempfile.mkstemp(suffix='-direct', prefix='xroot-probe-test-file', dir=self.tempdir)
-    file2, fname2 = tempfile.mkstemp(suffix='-server', prefix='xroot-probe-test-file', dir=self.tempdir)
+    # mktemp is deprecated, mkstemp is opening the file. Better to create a subdir
+    tmpdir = tempfile.mkdtemp(suffix='', prefix='xroot-probe-test-dir', dir=self.tempdir)
+    #file1, fname1 = tempfile.mkstemp(suffix='-direct', prefix='xroot-probe-test-file', dir=self.tempdir)
+    #file2, fname2 = tempfile.mkstemp(suffix='-server', prefix='xroot-probe-test-file', dir=self.tempdir)
     # I need the name, not the file open
-    file1.close()
-    file2.close()
+    #file1.close()
+    #file2.close()
+    fname1 = os.path.join(tmpdir, 'xrdcpdirect')
+    fname2 = os.path.join(tmpdir, 'xrdcpserver')
+    self.dir_todelete.append(tmpdir)
     # ATLAS file: $o{'xrdcpServerTestfileUri'} = $o{'xrdcpServiceType'}. "://". $o{'hostName'}. 
     #   $o{'xrdcpPortNumber'}. "/" . "/atlas/test/". $o{'hostName'}. "-1M";
     if self.is_atlas_test:
@@ -229,18 +237,23 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
     # Run the tests
     if  self.short_metric == "xrdcp-direct":
       self.verify_xrdcp(uri1, fname1, cmd_xrdcp=cmdxrdcp)
-      os.remove(fname1)
+      #os.remove(fname1)
+      #shutil.rmtree(tmpdir, ignore_errors=True)
       self.return_ok("Xrootd was succesfully tested! direct download succeeded; File received correctly.")
     elif  self.short_metric == "xrdcp-fxr":
       self.verify_xrdcp(uri2, fname2, cmd_xrdcp=cmdxrdcp)
-      os.remove(fname2)
+      #os.remove(fname2)
+      #shutil.rmtree(tmpdir, ignore_errors=True)
       self.return_ok("Xrootd was succesfully tested! central redirector download succeeded; File received correctly.")
     elif  self.short_metric == "xrdcp-compare":
+      #self.verify_xrdcp(uri1, fname1, cmd_xrdcp=cmdxrdcp)
       self.verify_xrdcp(uri1, fname1, cmd_xrdcp=cmdxrdcp)
-      self.verify_xrdcp(uri2, fname2, cmd_xrdcp=cmdxrdcp, todelete=[fname1])
-      are_equal = filecmp.cmp(file1, file2, shallow=False)
-      os.remove(fname1)
-      os.remove(fname2)
+      #self.verify_xrdcp(uri2, fname2, cmd_xrdcp=cmdxrdcp, todelete=[fname1])
+      self.verify_xrdcp(uri2, fname2, cmd_xrdcp=cmdxrdcp)
+      are_equal = filecmp.cmp(fname1, fname2, shallow=False)
+      #os.remove(fname1)
+      #os.remove(fname2)
+      #shutil.rmtree(tmpdir, ignore_errors=True)
       if are_equal:
         self.return_ok(
           "Xrootd was succesfully tested! Download from server and central redirector succeeded; Received files are valid.")
@@ -250,11 +263,24 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
     # should never end up here (invalid name)
     self.return_unknown("Invalid logic, metric name: %s" % self.metric)   
 
-  def verify_xrdcp(self, src, dst, cmd_xrdcp=CMD_XRDCP, todelete=[]):
+  def atexit(self):
+    for i in self.dir_todelete:
+      shutil.rmtree(i, ignore_errors=True)
+    for i in self.todelete:
+      try:
+        os.remove(i)
+      except OSError:
+        # file already missing
+        pass
+    rsvprobe.RSVProbe.atexit(self)
+
+  def verify_xrdcp(self, src, dst, cmd_xrdcp=CMD_XRDCP, todelete=[], delete_dir=None):
     "Tests a download with xrdcp"
     cmd = "%s %s %s" % (cmd_xrdcp, src, dst) #  "%s %s %s 2>&1" 
     ec, out = rsvprobe.run_command(cmd)
     if not ec == 0 or not os.path.isfile(dst):
+      if delete_dir:
+        cleanup(delete_dir)
       for i in todelete + [dst]:
         try:
           os.remove(i)

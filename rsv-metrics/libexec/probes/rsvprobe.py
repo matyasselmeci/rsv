@@ -16,6 +16,17 @@ import getopt
 import urllib
 import urllib2
 import urlparse
+# root is not a supported schema: http://docs.python.org/library/urlparse.html
+# Customization to fix root URI parsing (else netloc was not used) 
+def urlparse_register_scheme(scheme):
+  """Adds a scheme so that the uri will then be treated as http-like 
+and will correctly return the path, fragment, username/password, ...
+fragment, netloc, params, query, relative
+"""
+  for method in filter(lambda s: s.startswith('uses_'), dir(urlparse)):
+    getattr(urlparse, method).append(scheme)
+urlparse_register_scheme('root')
+
 # re for config.ini parsing
 import re
 
@@ -330,6 +341,10 @@ https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
     "Probe execution - replaced by the specific probes"
     pass
 
+  def atexit(self):
+    "Function invoked before exiting"
+    pass
+
   def invalid_option_handler(self, msg):
     "By default a probe aborts if an unvalid option is received. This can be changed replacing this handler."
     self.return_unknown("Invalid option (%s). Aborting probe" % msg)      
@@ -477,6 +492,7 @@ Retuns True if status and summary have been updated, False otherwise.
     if updated:
       self.trim_detailed()
     self.print_output()
+    self.atexit()
     if self.force_wlcg_ecode:
       if self.status == UNKNOWN:
         self.ecode = 1
