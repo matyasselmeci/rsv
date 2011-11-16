@@ -21,7 +21,8 @@ my $run_me_root = 0;
 my ($is_root, $probeconfig_problems, $soaphost, $probename,
     $sitename, $enabled, $datafolder, $workingfolder, $real_datafolder,
     $probe_in_cron, $current_gratia_probe_type,
-    $record_count, $file_count, $archive_count, $old_file_count
+    $record_count, $file_count, $archive_count, $old_file_count,
+    $real_gratia_probe_type
    );
 
 my %extra_opts = ("discover"       => "<Show available probes on this system>",
@@ -47,6 +48,7 @@ sub Run {
 
   # Probe type
   $current_gratia_probe_type = gratiaProbeType();
+  $real_gratia_probe_type = ($current_gratia_probe_type =~ /pbs|lsf/) ? 'pbs-lsf' : $current_gratia_probe_type;
   unless ($current_gratia_probe_type) {
     setCritical();
     &appendDetailsData(<<EOF);
@@ -92,7 +94,10 @@ EOF
   $real_datafolder = `(cd "$datafolder" >/dev/null 2>&1 && /bin/pwd)`;
   chomp $real_datafolder;
 
-  $probe_in_cron = system("crontab -l 2>/dev/null| grep -e '^\\s*[^#].*gratia/probe/$current_gratia_probe_type/' >/dev/null 2>&1") == 0;
+  my $cron_grep_pattern = "^\\s*[^#].*gratia/\\(probe/\\)\\?$real_gratia_probe_type/";
+  my $probe_in_crontab = system("crontab -l 2>/dev/null| grep -e '$cron_grep_pattern' >/dev/null 2>&1") == 0;
+  my $probe_in_cron_d = system("grep -e '$cron_grep_pattern' /etc/cron.d/* >/dev/null 2>&1") == 0;
+  $probe_in_cron = ($probe_in_crontab or $probe_in_cron_d);
 
   ################################
   # Check some basic critical stuff
@@ -103,7 +108,7 @@ EOF
       $probe_in_cron != 1) {
     if ($is_root) {
       setCritical();
-      &appendDetailsData("ERROR: Probe $probename is not listed in crontab.\n");
+      &appendDetailsData("ERROR: Probe $probename is not listed in crontab or cron.d.\n");
     } else {
       #&appendDetailsData("Not root: cannot examine crontab (not a critical error).\n");
     }
@@ -505,8 +510,10 @@ EOF
 
 sub checkProbeDirs {
   my $probe_dir = probeDirPath();
+  my $probe_config_dir = probeConfigPath();
   return (checkDirReadable($probe_dir, "$current_gratia_probe_type probe directory") and
-          checkFileReadable("$probe_dir/ProbeConfig", "$current_gratia_probe_type probe configuration"));
+          checkDirReadable($probe_config_dir, "$current_gratia_probe_type probe configuration directory") and
+          checkFileReadable("$probe_config_dir/ProbeConfig", "$current_gratia_probe_type probe configuration"));
 }
 
 sub checkDirReadable {
@@ -544,10 +551,10 @@ EOF
 }
 
 sub getProbeConfigAttribute {
-  my $probeDirPath = probeDirPath();
+  my $probeConfigPath = probeConfigPath();
   my $probeConfig_cmd = $ENV{OSG_LOCATION} ? 
-      "( source $ENV{OSG_LOCATION}/setup.sh; cd \"$probeDirPath\"; ../common/GetProbeConfigAttribute.py %s )" : 
-      "( cd \"$probeDirPath\"; /usr/share/gratia/common/GetProbeConfigAttribute %s )";
+      "( source $ENV{OSG_LOCATION}/setup.sh; cd \"$probeConfigPath\"; ../common/GetProbeConfigAttribute.py %s )" : 
+      "( cd \"$probeConfigPath\"; /usr/share/gratia/common/GetProbeConfigAttribute %s )";
 
   my @results = ();
 
@@ -571,9 +578,16 @@ sub gratiaProbeType {
 
 sub probeDirPath {
     if($ENV{OSG_LOCATION}) {
-        return ($current_gratia_probe_type) ? "$ENV{OSG_LOCATION}/gratia/probe/$current_gratia_probe_type" : "<unknown>";
+        return ($real_gratia_probe_type) ? "$ENV{OSG_LOCATION}/gratia/probe/$real_gratia_probe_type" : "<unknown>";
     }
-    return ($current_gratia_probe_type) ? "/usr/share/gratia/$current_gratia_probe_type" : "<unknown>";
+    return ($real_gratia_probe_type) ? "/usr/share/gratia/$real_gratia_probe_type" : "<unknown>";
+}
+
+sub probeConfigPath {
+    if($ENV{OSG_LOCATION}) {
+        return ($real_gratia_probe_type) ? "$ENV{OSG_LOCATION}/gratia/probe/$real_gratia_probe_type" : "<unknown>";
+    }
+    return ($real_gratia_probe_type) ? "/etc/gratia/$real_gratia_probe_type" : "<unknown>";
 }
 
 sub appendDetailsData {
