@@ -100,6 +100,11 @@ Additionally it makes sure that all IGTF CAs are installed.
       #
       if not '--error-file' in optlist:
         self.error_file = os.path.join(self.tempdir, "%s.cacert_verify.err" % self.host)
+      if self.host == self.localhost:
+        self.is_local = True
+      else:
+        self.is_local = False 
+
     return options, optlist, remainder
 
   def run(self):
