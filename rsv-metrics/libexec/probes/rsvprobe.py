@@ -13,6 +13,7 @@ import os
 import sys
 import getopt
 import time 
+import socket   
 import urllib
 import urllib2
 import urlparse
@@ -59,6 +60,30 @@ def run_command(cmd, timeout=0, workdir=None):
   if olddir:
     os.chdir(olddir)
   return ec, outerr
+
+# Test connection to host:port
+def ping(host, port="80"):
+  "Check if able to connect to HOST on the specified PORT (80 as default). Return True/False and a message."
+  # Simple alive test
+  # There are more complex implementation of ping running the command in a subprocess, 
+  # as python function, or within a library: 
+  #  http://stackoverflow.com/questions/316866/ping-a-site-in-python
+  #  http://www.g-loaded.eu/2009/10/30/python-ping/
+  #  http://code.google.com/p/pycopia/
+  #  https://github.com/jedie/python-ping/blob/master/ping.py
+  if not port:
+    # None, "", 0 mapped to the default port 80
+    port = 80
+  soc = socket.socket()
+  soc.settimeout(180.0)
+  try:
+    soc.connect((host, int(port)))
+  except Exception, e:
+    #return False, "Connection to %s:%s failed. Exception is: %s" % (host, port, e)
+    return False, "%s" % e
+  soc.shutdown(socket.SHUT_RDWR)
+  soc.close()
+  return True, "Connection successfull"
 
 # Find the correct certificate directory
 def get_ca_dir():
@@ -248,7 +273,10 @@ def uri2port(uri, default=None):
   "Return the port (int) part of a URI or default/None. URI defined as [scheme://]host[:port][/[rest]]"
   components = urlparse.urlparse(uri)
   try:
-    return components.port
+    ret = components.port
+    if ret == None:
+      return default
+    return ret
   except AttributeError:
     # urlparse attributes added in python 2.5
     ret = components[1]
@@ -321,10 +349,14 @@ https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
     self.force_wlcg_ecode = False
     self.supported_metrics = []
     self.metric = None # Requested metric
+    self.is_local = True
+    self.localhost = socket.gethostname()
     self.vo_name = None
     ## options and default values
-    self.host = "localhost"
+    self.host = self.localhost
     self.uri = None
+    # Timeout handling is left to the probe
+    self.timeout = 0
     self.verbose = False
     self.output_filename = None
     self.x509proxy = "/tmp/x509up_u%s" % os.getuid()
@@ -336,16 +368,18 @@ https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
       'uri=', 'host=',
       'timeout=', 
       'proxy=', 'usercert=', 'userkey=',
+      'output-type=',
       'version',
       'help', 'verbose']
     self.options_help = ['-m,--metric METRIC_NAME \twhich metric output is desired',
       '-l,--list \tlist all the metrics suppotrted by the probe',
       '-u,--uri URI \tURI passed to the metric (host or hierarchical URI as in rfc2396/3986)',
       '-h,--host HOST \tHOST passed to the metric (hostname[:port])',
-      '-t,--timeout TIMEOUT \tset a timeout (int) for the probe execution (NOT SUPPORTED)',
+      '-t,--timeout TIMEOUT \tset a timeout (int, seconds) for the probe execution',
       '-x,--proxy CERTFILE \tset the user proxy to CERTFILE (Default: /tmp/x509up_uID with ID=uid) ',
       '--usercert CERTFILE \tset user x509 certificate to CERTFILE',
       '--userkey KEYFILE \tset user x509 key to KEYFILE',
+      '--output-type TYPE \t output TYPE (short, wlcg - Default:short)',
       '-V,--version \tprint probe version and exit',
       '-?,--help \t print help message and exit',
       '-v,--verbose \tverbose output']
@@ -446,8 +480,14 @@ then process the options as desired and at the end return all of them for proces
       elif opt == '--userkey':
         self.x509userkey = arg
       elif opt in ('-t', '--timeout'):
-        # TODO: options not implemented
-        pass
+        self.timeout = arg
+      elif opt == '--output-type':
+        if arg.lower() == 'wlcg':
+          self.select_wlcg_output = True
+        elif not arg.lower() == 'short':
+          self.return_unknown("Unsupported output-type: %s. Use --help to list valid options (short,wlcg). Aborting probe" % arg) 
+      # Consistency checking
+      # probe will check for uri/host if the probe is not local 
     return options, optlist, remainder 
 
   def out_debug(self, text):
@@ -550,6 +590,8 @@ Retuns True if status and summary have been updated, False otherwise.
   def print_wlcg_output(self):
     "Print the probe output in the extended format (WLCG standard)"
     metric = self.get_metric(self.metric)
+    if not metric:
+      metric = EMPTY_METRIC
     out_detailed = '\n'.join(self.detailed)
     ## Trim detailsData if it is too long
     if self.detailsDataTrim and len(out_detailed) > self.detailsDataMaxLength:
@@ -568,6 +610,12 @@ Retuns True if status and summary have been updated, False otherwise.
     outstring = "metricName: %s\n" % metric.name
     outstring += "metricType: %s\n" % metric.mtype
     outstring += "timestamp: %s\n" % self.timestamp
+    # Locality information
+    if self.is_local:
+      outstring += "hostName: %s\n" % self.localhost
+    else:
+      outstring += "serviceURI: %s\n" % self.uri
+      outstring += "gatheredAt: %s\n" % self.localhost
     #optional output
     if self.vo_name:
       outstring += "voName: %s\n" % self.vo_name
@@ -628,4 +676,4 @@ dtype - dataType	 The type of the data: float, int, string, boolean (only 'perfo
       ret += "dataType: %s\n" % self.dtype # The type of the data: float, int, string, boolean
     return ret
 
-
+EMPTY_METRIC = RSVMetric('UNKNOWN', 'UNKNOWN')
