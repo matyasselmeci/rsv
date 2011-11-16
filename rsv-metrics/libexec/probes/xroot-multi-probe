@@ -10,6 +10,13 @@ and 3 ATLAS specific ones (similar but testing for an ATLAS file):
 - org.atlas.xroot.xrdcp-direct
 - org.atlas.xroot.xrdcp-fxr
 - org.atlas.xroot.xrdcp-compare
+
+This probe uses the xrdcp command (coming with xroot)
+The --small option uses xrdcp_small (that copies only 1MB of the file) if available, else falls back to xrdcp
+
+Timeout is used only for xrdcp/xrdcp_small execution: actual run time may be longer
+- Python operations not counted,
+- xrdcp-compare may take twice as long (2 xrdcp/xrdcp_small invocations)
 """
 
 import os
@@ -70,26 +77,6 @@ E.g. converts '/abspath' to 'file:///abspath'
     uri = "file://%s" % uri 
   return uri
 
-def ping(host, port="80"):
-  "Check if able to connect to HOST on the specified PORT (80 as default). Return True/False and a message."
-  # Simple alive test
-  # There are more complex implementation of ping running the command in a subprocess, 
-  # as python function, or within a library: 
-  #  http://stackoverflow.com/questions/316866/ping-a-site-in-python
-  #  http://www.g-loaded.eu/2009/10/30/python-ping/
-  #  http://code.google.com/p/pycopia/
-  #  https://github.com/jedie/python-ping/blob/master/ping.py
-  soc = socket.socket()
-  soc.settimeout(180.0)
-  try:
-    soc.connect((host, int(port)))
-  except Exception, e:
-    #return False, "Connection to %s:%s failed. Exception is: %s" % (host, port, e)
-    return False, "%s" % e
-  soc.shutdown(socket.SHUT_RDWR)
-  soc.close()
-  return True, "Connection successfull"
-
 
 class XrootProbe(rsvprobe.RSVProbe):
   """Probe verifying Xroot servers
@@ -99,6 +86,8 @@ class XrootProbe(rsvprobe.RSVProbe):
     rsvprobe.RSVProbe.__init__(self)
     self.metric = ""
     self.short_metric = ""
+    self.is_local = False 
+    #self.select_wlcg_output = True       
     # Federated Xrootd Redirector
     metric_list = ["org.osg.xroot.ping",
                    "org.atlas.xroot.xrdcp-direct","org.atlas.xroot.xrdcp-fxr",
@@ -171,7 +160,6 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
         self.short_metric = "ping"
       else:
         self.short_metric = self.metric[len("org.osg.xroot.grid-"):]
-    # Constraints
     if not self.is_atlas_test and not self.test_file and not self.metric == "org.osg.xroot.ping":
       self.return_unknown(
         "The action %s requires a --test-file option.  Please see the options to see all valid metrics and required parameters." % 
@@ -183,7 +171,7 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
     self.parseopt()
 
     # run ping test. Always? If not move inside if condition
-    res, msg = ping(rsvprobe.uri2host(self.uri), uri2rootport(self.uri))
+    res, msg = rsvprobe.ping(rsvprobe.uri2host(self.uri), uri2rootport(self.uri))
     if not res:
       self.return_critical("Unable to connect to %s:%s. Ping test failed: %s" % 
                            (rsvprobe.uri2host(self.uri), uri2rootport(self.uri), msg))
@@ -266,7 +254,7 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
   def verify_xrdcp(self, src, dst, cmd_xrdcp=CMD_XRDCP, todelete=[]):
     "Tests a download with xrdcp"
     cmd = "%s %s %s" % (cmd_xrdcp, src, dst) #  "%s %s %s 2>&1" 
-    ec, out = rsvprobe.run_command(cmd)
+    ec, out = rsvprobe.run_command(cmd, self.timeout)
     if not ec == 0 or not os.path.isfile(dst):
       # xrdcp failed
       for i in todelete + [dst]:
