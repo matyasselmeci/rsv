@@ -275,8 +275,10 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
         except OSError:
           # file already missing
           pass
-      self.return_critical("ERROR: Cannot copy file: %s to %s ... Bailing now.\nxrdcp failed (%s): %s\nActual error message was: %s" % 
-                           (src, dst, ec, cmd, out))
+      self.add_critical("xrdcp failed (%s): %s\nActual error message was: %s" %
+                        (ec, cmd, out))
+      self.return_critical("ERROR: Cannot copy file: %s to %s ... Bailing now." %
+                           (src, dst))
 
 
 ##### Main code #####
