@@ -42,7 +42,7 @@ except ImportError:
   import commands
   timed_command = None
 
-# Wrapper around commands (add timeout in the future)
+# Wrapper around commands or timed_command
 def run_command(cmd, timeout=0, workdir=None):
   "Run an external command in the workdir directory. Timeout is available only if timed_command is available."
   olddir = None
@@ -255,6 +255,8 @@ def list_directory(directory, file_ext_list):
  
 def uri2host(uri):
   "Return the host part of a URI or ''. URI defined as [scheme://]host[:port][/[rest]]"
+  if uri.find("://") < 0:
+    uri = "http://%s" % uri
   components = urlparse.urlparse(uri)
   try:
     ret = components.hostname
@@ -271,6 +273,8 @@ def uri2host(uri):
 
 def uri2port(uri, default=None):
   "Return the port (int) part of a URI or default/None. URI defined as [scheme://]host[:port][/[rest]]"
+  if uri.find("://") < 0:
+    uri = "http://%s" % uri
   components = urlparse.urlparse(uri)
   try:
     ret = components.port
@@ -588,7 +592,20 @@ Retuns True if status and summary have been updated, False otherwise.
       print outstring
 
   def print_wlcg_output(self):
-    "Print the probe output in the extended format (WLCG standard)"
+    """Print the probe output in the extended format (WLCG standard):
+serviceType	 Required	 The service the metric was gathered from
+metricName	 Required	 The name of the metric
+metricStatus	 Required	 A return status code, selected from the status codes above
+performanceData	 Optional	 Performance data returned by a performance metric
+summaryData	 Optional	 A one-line summary for the gathered metric
+detailsData	 Optional	 This allows a multi-line detailed entry to be provided - it must be the last entry before the EOT
+voName	 	 Optional	 the VO that the metric was gathered for
+hostName	 Optional*	 The hostName on which a local metric was gathered  (required for local probe)
+serviceURI	 Optional*	 The URI of a remote service the metric was gathered for  (required for remote probe)
+gatheredAt	 Optional*	 The name of the host which gathered the metric (required for remote probe)
+siteName	 Optional	 The name of the host of a remote service (extracted from the URI) (Pidgeon tools)
+timestamp	 Required	 The time the metric was gathered (String ISO8601 UTC time)
+"""
     metric = self.get_metric(self.metric)
     if not metric:
       metric = EMPTY_METRIC
@@ -617,11 +634,11 @@ Retuns True if status and summary have been updated, False otherwise.
       outstring += "serviceURI: %s\n" % self.uri
       outstring += "gatheredAt: %s\n" % self.localhost
     #optional output
-    if self.vo_name:
-      outstring += "voName: %s\n" % self.vo_name
-    # siteName is used for Pigeon Tools
+    # siteName (host extracted from URI) is used for Pigeon Tools
     if self.host:
       outstring += "siteName: %s\n" % self.host
+    if self.vo_name:
+      outstring += "voName: %s\n" % self.vo_name
     # status
     outstring += "metricStatus: %s\nserviceType: %s\n" % (STATUS_DICT[self.status], metric.stype)
     # not menitoning host/URI
