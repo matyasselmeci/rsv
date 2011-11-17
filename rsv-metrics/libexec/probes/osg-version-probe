@@ -9,23 +9,21 @@ print_output_header();
 my %options = process_command_line();
 
 if(defined $ENV{OSG_LOCATION}) {
-    monitor_old();
+    monitor("$ENV{OSG_LOCATION}/osg/bin/osg-version");
 }
 else {
-    # TODO - something more interesting than a list of RPMs?
-    print "OK\n";
-    print "\n\nList of RPMs:\n" . `rpm -qa | sort`;
+    monitor("/usr/bin/osg-version");
 }
 
 exit 0;
 
 
-sub monitor_old {
-    my $osg_version = "$ENV{OSG_LOCATION}/osg/bin/osg-version";
+sub monitor {
+    my ($osg_version) = @_;
 
     if (! -x $osg_version) {
         print "CRITICAL\n";
-        print "Can't find vdt-version!\n";
+        print "Can't find osg-version!\n";
         dump_debug();
     }
     else {
