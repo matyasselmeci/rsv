@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use File::Basename;
 
-my $RSV_VERSION = "3.6.5";
+my $RSV_VERSION = "3.6.6";
 
 my $dir = dirname($0);
 my @lines = `svn status --show-updates $dir 2>&1`;

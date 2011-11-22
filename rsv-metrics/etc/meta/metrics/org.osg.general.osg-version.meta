@@ -1,5 +1,5 @@
 [org.osg.general.osg-version]
-default-cron-interval = 47 18 * * *
+default-cron-interval = 47 * * * *
 
 execute = grid
 transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
