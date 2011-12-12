@@ -272,6 +272,7 @@ def prepare_shar_file(rsv, metric):
 
 use strict;
 use warnings;
+use File::Temp;
 
 if(system("which uudecode >/dev/null 2>&1") != 0) {
     print "RSV BRIEF RESULTS:\n";
@@ -281,10 +282,12 @@ if(system("which uudecode >/dev/null 2>&1") != 0) {
     exit 0;    
 }
 
+my $temp_dir = mkdtemp("rsv-shar-XXXXXXXX");
+chdir($temp_dir);
 my $out_file = "shar.sh";
 
 my $shar = join "", <DATA>;
-open(OUT, '>', "$out_file") or die("cannot write to $out_file: $!");
+open(OUT, '>', $out_file) or die("cannot write to $out_file: $!");
 print OUT $shar;
 close(OUT);
 
@@ -297,6 +300,8 @@ if($ret != 0) {
 }
 else {
     system("./%s @ARGV");
+    chdir("..");
+    system("rm -fr $temp_dir");
 }
 
 __DATA__""" % metric.name)
