@@ -51,7 +51,10 @@ def list_metrics(rsv, options, pattern):
                     continue
 
                 if options.list_cron:
-                    cron = metrics[metric].get_cron_string()
+                    # We need to load in the Metric with specific host so that
+                    # we get the right cron time information.
+                    tmp_metric = Metric.Metric(metric, rsv, host.host)
+                    cron = tmp_metric.get_cron_string()
                     table.addToBuffer(metric, cron)
                 else:
                     metric_type = metrics[metric].get_type()
