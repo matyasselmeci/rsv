@@ -345,7 +345,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     # Step 6: See if the warning should be an error
     now = time.time()
     last_update = 0
-    out_msg = "Few of the files in your installations are out of sync with the OSG distribution.\n"
+    out_msg = "Some of the files in your installations are out of sync with the OSG distribution.\n"
     out_msg += "\tThe CA that are out of sync are: %s \n" % error_hash
     out_msg += "\tPlease ensure that your CA update process (e.g. vdt-update-certs or yum update) is configured and running \n"
     out_msg += "\t%s IGTF CAs are missing and is required for sites that need to conform to EGEE policy.\n" % missing_count

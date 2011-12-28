@@ -272,23 +272,36 @@ def prepare_shar_file(rsv, metric):
 
 use strict;
 use warnings;
+use File::Temp;
 
+if(system("which uudecode >/dev/null 2>&1") != 0) {
+    print "RSV BRIEF RESULTS:\n";
+    print "UNKNOWN\n";
+    print "Cannot extract the shar file on remote system because uudecode is missing.\n";
+    print "To solve this, install uudecode (provided by the sharutils RPM) on the remote system you are monitoring.\n";
+    exit 0;    
+}
+
+my $temp_dir = mkdtemp("rsv-shar-XXXXXXXX");
+chdir($temp_dir);
 my $out_file = "shar.sh";
 
 my $shar = join "", <DATA>;
-open(OUT, '>', "$out_file") or die("cannot write to $out_file: $!");
+open(OUT, '>', $out_file) or die("cannot write to $out_file: $!");
 print OUT $shar;
 close(OUT);
 
 my $ret = system("/bin/sh shar.sh >shar.out 2>&1");
 if($ret != 0) {
-print "RSV BRIEF RESULTS:\n";
-print "UNKNOWN\n";
-print "Failed to extract shar file.\n";
+    print "RSV BRIEF RESULTS:\n";
+    print "UNKNOWN\n";
+    print "Failed to extract shar file.\n";
     system("cat shar.out");
 }
 else {
     system("./%s @ARGV");
+    chdir("..");
+    system("rm -fr $temp_dir");
 }
 
 __DATA__""" % metric.name)

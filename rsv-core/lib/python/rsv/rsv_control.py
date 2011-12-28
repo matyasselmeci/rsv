@@ -90,6 +90,8 @@ def process_options(arguments=None):
                       help="Turn on all enabled metrics.  If a metric is specified, turn on only that metric.")
     group.add_option("--off", action="store_true", dest="off", default=False,
                       help="Turn off all running metrics.  If a metric is specified, turn off only that metric.")
+    group.add_option("--arg", action="append", dest="knobs", default=None,
+                     help="KEY=VAL to pass to the metric.  This can be specified multiple times.")
     parser.add_option_group(group)
 
     group = OptionGroup(parser, "Other Options")
@@ -164,7 +166,7 @@ def main_rsv_control():
     elif options.job_list:
         return actions.job_list(rsv, options.parsable, options.host)
     elif options.show_config:
-        return actions.dispatcher(rsv, "show-config", args, options.host)
+        return actions.dispatcher(rsv, "show-config", options, args)
     elif options.profile:
         return actions.profile(rsv)
     elif options.verify:
@@ -180,13 +182,13 @@ def main_rsv_control():
         if options.run:
             return run_metric.main(rsv, options, args)
         elif options.on:
-            return actions.dispatcher(rsv, "start", args, options.host)
+            return actions.dispatcher(rsv, "start", options, args)
         elif options.off:
-            return actions.dispatcher(rsv, "stop", args, options.host)
+            return actions.dispatcher(rsv, "stop", options, args)
         elif options.enable:
-            return actions.dispatcher(rsv, "enable", args, options.host)
+            return actions.dispatcher(rsv, "enable", options, args)
         elif options.disable:
-            return actions.dispatcher(rsv, "disable", args, options.host)
+            return actions.dispatcher(rsv, "disable", options, args)
 
     # We didn't find the request?
     return False
