@@ -151,11 +151,15 @@ def profile(rsv):
         return False
 
 
-def dispatcher(rsv, action, jobs=None, hostname=None):
+def dispatcher(rsv, action, options, jobs=None):
     """ Handle on, off, enable, disable.  Determine if jobs are metrics or
     consumers. """
 
     condor = Condor.Condor(rsv)
+
+    hostname = None
+    if options and options.host:
+        hostname = options.host
 
     if action == "start" or action == "stop":
         if not condor.is_condor_running():
@@ -218,7 +222,7 @@ def dispatcher(rsv, action, jobs=None, hostname=None):
                 elif action == "stop":
                     num_errors += stop_metric(rsv, condor, metric, host)
                 elif action == "enable":
-                    write_config_file |= enable_metric(rsv, metric, host)
+                    write_config_file |= enable_metric(rsv, metric, host, options.knobs)
                 elif action == "disable":
                     write_config_file |= disable_metric(rsv, metric, host)
                 elif action == "show-config":
@@ -347,10 +351,13 @@ def stop_consumer(rsv, condor, consumer):
     return 0
 
 
-def enable_metric(rsv, metric, host):
+def enable_metric(rsv, metric, host, knobs):
     """ Enable the specified metric against the specified host. """
 
     rsv.echo("Enabling metric '%s' for host '%s'" % (metric.name, host.host))
+
+    if knobs:
+        metric.set_config_val(knobs)
 
     if host.metric_enabled(metric.name):
         rsv.echo("   Metric already enabled")

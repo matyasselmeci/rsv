@@ -10,21 +10,15 @@ VALID_OUTPUT_FORMATS = ["wlcg", "wlcg-multiple", "brief"]
 class Metric:
     """ Instantiable class to read and store configuration for a single metric """
 
-    rsv = None
-    name = None
-    host = None
-    config = None
-    conf_dir = None
-    meta_dir = None
-    executable = None
-
-
     def __init__(self, metric, rsv, host=None, options=None):
         # Initialize vars
         self.name = metric
         self.rsv  = rsv
-        self.conf_dir = os.path.join("/", "etc", "rsv", "metrics")
-        self.meta_dir = os.path.join("/", "etc", "rsv", "meta", "metrics")
+        conf_dir = os.path.join("/", "etc", "rsv", "metrics")
+        meta_dir = os.path.join("/", "etc", "rsv", "meta", "metrics")
+
+        self.meta_file = os.path.join(meta_dir, metric + ".meta")
+        self.top_config_file = os.path.join(conf_dir, metric + ".conf") 
 
         # Find executable
         self.executable = os.path.join("/", "usr", "libexec", "rsv", "metrics", metric)
@@ -35,8 +29,10 @@ class Metric:
             rsv.log("ERROR", "Metric does not exist at %s" % self.executable)
             sys.exit(1)
 
+        self.host = None
         if host:
             self.host = host
+            self.host_config_file = os.path.join(conf_dir, host, metric + ".conf")
 
         # Load configuration
         defaults = get_metric_defaults(metric)
@@ -90,17 +86,14 @@ class Metric:
                     self.config.set(section, item, defaults[section][item])
 
         # Load the metric's meta information file
-        meta_file = os.path.join(self.meta_dir, self.name + ".meta")
-        self.load_config_file(meta_file, required=1)
+        self.load_config_file(self.meta_file, required=1)
 
         # Load the metric's general configuration file
-        config_file = os.path.join(self.conf_dir, self.name + ".conf")
-        self.load_config_file(config_file, required=0)
+        self.load_config_file(self.top_config_file, required=0)
 
         # If this is for a specified host, load the metric/host config file
         if self.host:
-            config_file = os.path.join(self.conf_dir, self.host, self.name + ".conf")
-            self.load_config_file(config_file, required=0)
+            self.load_config_file(self.host_config_file, required=0)
 
         # If we were given a file on the command line load it now
         if options and options.extra_config_file:
@@ -365,6 +358,46 @@ class Metric:
                     self.rsv.echo("\t\tValue: %s" % environment[var][1])
 
         self.rsv.echo("") # newline for nicer formatting
+        return
+
+
+    def set_config_val(self, knobs):
+        """ Put a value in the metric config file.  If host is set, it will go
+        into the host-specific file.  If not, it will go into the general file.
+        """
+
+        if self.host:
+            file = self.host_config_file
+        else:
+            file = self.top_config_file
+
+        # The file and parent directory are not guaranteed to exist.
+        # But we want to create them if not.
+        if not os.path.exists(file):
+            os.makedirs(os.path.dirname(file))
+            open(file, 'w').close()
+
+        local_config = ConfigParser.RawConfigParser()
+        local_config.optionxform = str
+        local_config.read(file)
+
+        section = "%s args" % self.name
+        if not local_config.has_section(section):
+            local_config.add_section(section)
+
+        for knob in knobs:
+            if knob.find('=') == -1:
+                self.rsv.log("WARNING", "Invalid knob supplied (%s).  Must be Key=Value" % knob)
+                continue
+            
+            (key, val) = knob.split('=', 1)
+            self.rsv.log("INFO", "Setting config value (%s=%s)" % (key, val))
+            local_config.set(section, key, val)
+
+        fp = open(file, 'w')
+        local_config.write(fp)
+        fp.close()
+
         return
     
 
