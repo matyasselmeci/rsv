@@ -207,7 +207,7 @@ class Condor:
 
         # Check if any jobs are running to be removed
         jobs = self.get_classads(constraint)
-        if not jobs:
+        if jobs == None:
             self.rsv.log("ERROR", "Problem stopping RSV jobs.  Condor may not be running")
             return False
         if len(jobs) == 0:
