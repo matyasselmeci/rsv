@@ -374,7 +374,8 @@ class Metric:
         # The file and parent directory are not guaranteed to exist.
         # But we want to create them if not.
         if not os.path.exists(file):
-            os.makedirs(os.path.dirname(file))
+            if not os.path.exists(os.path.dirname(file)):
+                os.makedirs(os.path.dirname(file))
             open(file, 'w').close()
 
         local_config = ConfigParser.RawConfigParser()
