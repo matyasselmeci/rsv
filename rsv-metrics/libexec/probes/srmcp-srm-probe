@@ -116,12 +116,12 @@ if($? != 0) {
     exit 0;
 }
 
+cleanup_files();
 print "OK\n";
 print "Successful transfer to remote host.\n";
 print "Successful transfer from remote host.\n";
 print "Original file and received file are identical.\n";
 print "Remote file was properly listed using srm-ls.\n";
-cleanup_files();
 exit 0;
 
 
@@ -135,7 +135,15 @@ sub cleanup_files {
 
     # And also the remote file
     my $out = `srm-rm $remote_uri`;
-    if($? != 0) {
+    if (($? != 0)||($out =~ /SRM_FAILURE/)) {
         print STDERR "Failed to remove remote file '$remote_uri'.  Output:\n$out\n";
+        print "WARNING\n";
+        print "Successful transfer to remote server.\n";
+        print "Successful transfer from remote server.\n";
+        print "Original file and received file are identical.\n";
+        print "However, remote file could not be deleted correctly.\n";
+        print "Command: srm-rm $remote_uri\n";
+        print "Output:\n$out\n";
+        exit 0;
     }
 }
