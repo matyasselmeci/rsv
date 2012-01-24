@@ -53,7 +53,6 @@ import optparse
 import ConfigParser
 
 from xml.dom.minidom import parse
-from xml.sax.saxutils import escape
 
 # Prepare the environment for the rest of the script.  Includes:
 #   * $VDT_LOCATION
@@ -142,23 +141,6 @@ class UnknownException(Exception):
 myosg_url = "http://myosg.grid.iu.edu/rgsummary/xml?datasource=summary" \
     "&summary_attrs_showservice=on&all_resources=on"
 
-all_results_xml = """
-<?xml version="1.0" encoding="ISO8859-1" ?>
-<Results>
-%s
-</Results>
-"""
-
-metric_xml = """
-<Metric>
-  <Name>%(metric)s</Name>
-  <WorkerScriptOutput>
-    <ExitCode>%(exit_code)s</ExitCode>
-    <StdOut>%(stdout)s</StdOut>
-    <StdErr>%(stderr)s</StdErr>
-  </WorkerScriptOutput>
-</Metric>
-"""
 
 def verify_ldapsearch():
     fd = os.popen("which ldapsearch")
@@ -596,6 +578,7 @@ def run_metric(metric_name, fcn, args, kwargs):
         info = {"exit_code": escape(str(exit_code)),
             "metric": escape(str(metric_name)),
             "stdout": escape(str(stdout)), "stderr": escape(str(stderr))}
+        
         return metric_xml % info
     except:
         return ""
@@ -603,25 +586,19 @@ def run_metric(metric_name, fcn, args, kwargs):
 def main():
     config_ini = get_config_ini()
     get_config_ini_hostname(config_ini)
-    metric_output = []
     if metricname == "org.osg.gip.consistency":
-        metric_output.append(run_metric(metricname,
-            metric_consistency, (config_ini,), {}))
+        print run_metric(metricname, metric_consistency, (config_ini,), {})
     elif metricname == "org.osg.gip.lastrun":
-        metric_output.append(run_metric(metricname,
-            metric_gip_lastrun, tuple(), {}))
+        print run_metric(metricname, metric_gip_lastrun, tuple(), {})
     elif metricname == "org.osg.gip.freshness":
-        metric_output.append(run_metric(metricname,
-            metric_freshness, tuple(), {}))
+        print run_metric(metricname, metric_freshness, tuple(), {})
     elif metricname == "org.osg.gip.ce":
-        metric_output.append(run_metric(metricname, metric_ce, tuple(), {}))
+        print run_metric(metricname, metric_ce, tuple(), {})
     elif metricname == "org.osg.gip.se":
-        metric_output.append(run_metric(metricname, metric_se, tuple(), {}))
+        print run_metric(metricname, metric_se, tuple(), {})
     else:
         print "Unknown metric: %s" % metricname
         sys.exit(2)
-
-    print all_results_xml % "\n".join(metric_output)
 
 if __name__ == '__main__':
     main()
