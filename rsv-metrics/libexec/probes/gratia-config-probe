@@ -167,7 +167,21 @@ EOF
   ################################
   # Check size of reprocessing queue
   init_find_counts();
-  find( { wanted => \&process_find_leaf, follow => 1, follow_skip => 2 }, "$workingfolder/gratiafiles");
+
+  # This code was modified by Scot Kronenfeld on 2012-02-21 to fix a bug in JIRA
+  # ticket SOFTWARE-535.  The logic is replicating the behavior in GratiaCore.py,
+  # specifically in the ProbeConfiguration.getFilenameFragment() function.  If
+  # that changes, this might become invalid, so I added a warning in case the 
+  # directory does not exist.
+  (my $subdir = "subdir.${probename}_$soaphost") =~ s|[:/]|_|g;
+  $subdir = "$workingfolder/gratiafiles/$subdir";
+  if(!-e $subdir) {
+      setWarning();
+      my $message = "WARNING: The expected directory containing records waiting to be re-sent does not exist ($subdir).  This might be a problem in the gratia-config-probe itself.  Please report this error to OSG for assistance.";
+      appendDetailsData($message);
+  }
+
+  find( { wanted => \&process_find_leaf, follow => 1, follow_skip => 2 }, $subdir);
   my $message="$record_count records waiting to be re-sent to $soaphost in $file_count files (including $archive_count archive files).\n";
   if ($record_count > 1000) {
     setWarning();
