@@ -7,6 +7,9 @@ use RSVMetric;
 my $warning_hours = 168;
 my $warning_seconds = $warning_hours * 60 * 60;
 
+my $critical_hours = 24;
+my $critical_seconds = $critical_hours * 60 * 60;
+
 print_output_header();
 
 my %options = process_command_line();
@@ -28,9 +31,31 @@ if(!-e $cert) {
     exit 0;
 }
 
-my $openssl_cmd = "openssl x509 -in $cert -noout -checkend $warning_seconds 2>&1";
+# First we make sure we're not in the critical range (which is currently set to 
+# expired or expiring within 24 hours).  After that we'll check the warning range.
+
+my $openssl_cmd = "openssl x509 -in $cert -noout -checkend $critical_seconds 2>&1";
 my $out = `$openssl_cmd`;
 my $ret = $? >> 8;
+
+if ($ret == 1) {
+    my $valid = `openssl x509 -in $cert -noout -enddate 2>&1`;
+    chomp $valid;
+
+    print "CRITICAL\n";
+    print "Certificate '$cert' is expired or expiring within $critical_hours hours.  It is valid until: $valid\n";
+    exit 0;
+}
+elsif($ret != 0) {
+    print "CRITICAL\n";
+    print "Error running openssl command ($openssl_cmd).  Output:\n$out\n";
+    dump_debug();
+    exit 0;
+}
+
+$openssl_cmd = "openssl x509 -in $cert -noout -checkend $warning_seconds 2>&1";
+$out = `$openssl_cmd`;
+$ret = $? >> 8;
 
 if($ret == 0) {
     print "OK\n";
@@ -38,11 +63,11 @@ if($ret == 0) {
     exit 0;
 }
 elsif ($ret == 1) {
-    my $valid = `openssl x509 -in $cert -noout -enddate`;
+    my $valid = `openssl x509 -in $cert -noout -enddate 2>&1`;
     chomp $valid;
 
-    print "CRITICAL\n";
-    print "Certificate '$cert' is expiring/expired.  It is valid until: $valid\n";
+    print "WARNING\n";
+    print "Certificate '$cert' is expiring within $warning_hours hours.  It is valid until: $valid\n";
     exit 0;
 }
 else {
