@@ -406,8 +406,8 @@ class RSV:
                     hours_til_expiry, 4)
 
             extra_args = ""
-            if self.use_old_style_proxy():
-                self.log("INFO", "Generating an old style proxy because it was requested.", 4)
+            if self.use_legacy_proxy():
+                self.log("INFO", "Generating a legacy Globus proxy because it was requested.", 4)
                 extra_args += "-old "
                 
             (ret, out, err) = self.run_command("grid-proxy-init %s -cert %s -key %s -valid 12:00 -debug -out %s" %
@@ -481,12 +481,12 @@ class RSV:
 
         return True
 
-    def use_old_style_proxy(self):
-        """ Return True or False depending on if we should use an old style proxy.
+    def use_legacy_proxy(self):
+        """ Return True or False depending on if we should use a legacy Globus proxy.
         We will default to False if the user did not specify. """
 
         try:
-            value = self.config.get('rsv', 'old-style-proxy')
+            value = self.config.get('rsv', 'legacy-proxy')
             if value.lower() == "true":
                 return True
         except ConfigParser.NoOptionError:
