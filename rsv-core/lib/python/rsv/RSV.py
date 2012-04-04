@@ -16,29 +16,26 @@ import Sysutils
 import Consumer
 
 OPENSSL_EXE = "/usr/bin/openssl"
+CONSUMER_CONFIG_FILE = os.path.join("/", "etc", "rsv", "consumers.conf")
 
 class RSV:
     """ Class to load and store configuration information about this install
     of RSV.  This could be replaced with a singleton pattern to reduce the need
     to pass the instance around in functions. """
 
-    consumer_config_file = os.path.join("/", "etc", "rsv", "consumers.conf")
-    consumer_config = None
-    sysutils = None
-    results = None
-    config = None
-    logger = None
-    proxy = None
-    quiet = 0
+    def __init__(self, options):
+        """ Constructor.  Take the command line options as a parameter """
+        self.options = options
 
-    # Cache these values so we don't make a system call each time
-    vdt_pythonpath = None
-    vdt_perl5lib = None
-
-    def __init__(self, verbosity=1):
+        # Initialize some instance vars
+        self.consumer_config = None
+        self.config = None
+        self.logger = None
+        self.proxy = None
 
         # For any messages that won't go through the logger
-        if verbosity == 0:
+        self.quiet = 0
+        if self.options.verbose == 0:
             self.quiet = 1
 
         # Instantiate our helper objects
@@ -46,11 +43,13 @@ class RSV:
         self.results  = Results.Results(self)
 
         # Setup the logger
-        self.init_logging(verbosity)
+        self.init_logging(self.options.verbose)
 
         # Setup the initial configuration
         self.setup_config()
         self.setup_consumer_config()
+        return
+
 
     def setup_config(self):
         """ Load configuration """
@@ -73,7 +72,7 @@ class RSV:
         """ Load configuration """
         self.consumer_config = ConfigParser.RawConfigParser()
         self.consumer_config.optionxform = str # make keys case-insensitive
-        self.load_config_file(self.consumer_config, self.consumer_config_file, required=0)
+        self.load_config_file(self.consumer_config, CONSUMER_CONFIG_FILE, required=0)
         return
 
 
@@ -325,12 +324,12 @@ class RSV:
     def write_consumer_config_file(self):
         """ Write out the consumers.conf file to disk """
 
-        self.log("INFO", "Writing consumer configuration file '%s'" % self.consumer_config_file)
+        self.log("INFO", "Writing consumer configuration file '%s'" % CONSUMER_CONFIG_FILE)
         
-        if not os.path.exists(self.consumer_config_file):
-            self.echo("Creating configuration file '%s'" % self.consumer_config_file)
+        if not os.path.exists(CONSUMER_CONFIG_FILE):
+            self.echo("Creating configuration file '%s'" % CONSUMER_CONFIG_FILE)
             
-        config_fp = open(self.consumer_config_file, 'w')
+        config_fp = open(CONSUMER_CONFIG_FILE, 'w')
         self.consumer_config.write(config_fp)
         config_fp.close()
 
@@ -403,11 +402,16 @@ class RSV:
         if ret == 0:
             self.log("INFO", "Service certificate valid for at least %s hours." % hours_til_expiry, 4)
         else:
-            self.log("INFO", "Service certificate proxy expiring within %s hours.  Renewing it." %
+            self.log("INFO", "Service certificate proxy expired or expiring within %s hours.  Renewing it." %
                     hours_til_expiry, 4)
 
-            (ret, out, err) = self.run_command("grid-proxy-init -cert %s -key %s -valid 12:00 -debug -out %s" %
-                                               (cert, key, proxy))
+            extra_args = ""
+            if self.use_old_style_proxy():
+                self.log("INFO", "Generating an old style proxy because it was requested.", 4)
+                extra_args += "-old "
+                
+            (ret, out, err) = self.run_command("grid-proxy-init %s -cert %s -key %s -valid 12:00 -debug -out %s" %
+                                               (extra_args, cert, key, proxy))
 
             if ret:
                 self.results.service_proxy_renewal_failed(metric, cert, key, proxy, out, err)
@@ -476,6 +480,19 @@ class RSV:
             return True
 
         return True
+
+    def use_old_style_proxy(self):
+        """ Return True or False depending on if we should use an old style proxy.
+        We will default to False if the user did not specify. """
+
+        try:
+            value = self.config.get('rsv', 'old-style-proxy')
+            if value.lower() == "true":
+                return True
+        except ConfigParser.NoOptionError:
+            pass
+
+        return False
 
 # End of RSV class
 

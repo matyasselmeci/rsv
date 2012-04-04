@@ -155,7 +155,7 @@ def main_rsv_control():
     # Process the command line
     options, args = process_options()
 
-    rsv = RSV.RSV(options.verbose)
+    rsv = RSV.RSV(options)
 
     # List the metrics
     if options.list:
