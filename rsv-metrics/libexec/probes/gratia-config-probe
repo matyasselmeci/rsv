@@ -177,7 +177,7 @@ EOF
   $subdir = "$workingfolder/gratiafiles/$subdir";
   if(!-e $subdir) {
       setWarning();
-      my $message = "WARNING: The expected directory containing records waiting to be re-sent does not exist ($subdir).  This might be a problem in the gratia-config-probe itself.  Please report this error to OSG for assistance.";
+      my $message = "WARNING: The expected directory containing records waiting to be re-sent does not exist ($subdir).  This might be a problem in the gratia-config-probe itself.  Please report this error to OSG for assistance.\n";
       appendDetailsData($message);
   }
 
@@ -375,6 +375,37 @@ sub probe_check_condor() {
   if($ENV{OSG_LOCATION}) {
       $get_condor_config_cmd = ". $ENV{OSG_LOCATION}/setup.sh; $get_condor_config_cmd";
   }
+  else {
+      # If Condor is not installed in the default location we will go looking for it.
+      if (system("which condor_config_val") != 0) {
+          open(IN, '<', '/etc/globus/globus-condor.conf');
+          my $condor_config_val;
+          my $condor_config;
+          while(<IN>) {
+              if(/^condor_submit\s*=\s*\"(.+)\"/ ) {
+                  ($condor_config_val = $1) =~ s/condor_submit/condor_config_val/;
+              }
+              if(/^condor_config\s*=\s*\"(.+)\"/) {
+                  $condor_config = $1;
+              }
+          }
+
+          if($condor_config_val and $condor_config) {
+              $get_condor_config_cmd = "CONDOR_CONFIG=$condor_config $condor_config_val PER_JOB_HISTORY_DIR";
+          }
+          else {
+              setUnknown();
+              &appendDetailsData (<<EOF);
+Could not find condor_config_val command or CONDOR_CONFIG: could
+not check for presence of PER_JOB_HISTORY_DIR attribute in condor
+schedd configuration.
+Please check manually.
+EOF
+              return 0;
+              
+          }
+      }
+  }
 
   my $cmd_output = `$get_condor_config_cmd 2>&1`;
   my $status = $?;
@@ -386,7 +417,7 @@ sub probe_check_condor() {
     chomp $cmd_output;
   }
   if ($status == 127 or $cmd_output =~ m&command not found&) {
-    setUknown();
+    setUnknown();
     &appendDetailsData (<<EOF);
 Unable to find condor_config_val command: could not check for presence
 of PER_JOB_HISTORY_DIR attribute in condor schedd configuration.
