@@ -6,14 +6,14 @@ import os
 import re
 import sys
 import time
-import popen2
 import pickle
-import signal
 import ConfigParser
 from time import strftime
 from optparse import OptionParser
 
-# STATE holds all the metric info.  This is a multi-level data structure with the
+import RSVConsumer
+
+# __state holds all the metric info.  This is a multi-level data structure with the
 # following format:
 #   <Host> -> {}
 #             sitename = Site Name, as used by Pigeon
@@ -28,734 +28,516 @@ from optparse import OptionParser
 #                                     ...
 #  <Host2> -> {}
 #             ...
-STATE = {}
-
-# CUR holds information that is only valid for this run, and should not be stored
-# in the state file.  This includes whether the metric is enabled and when its
-# next run time is.
-CUR = {}
-
-JOB_INFO_ERROR = None
-ALERTS = []
-OPTIONS = None
-CONSUMER_DONE = 0
-
-class InvalidRecordError(Exception):
-    """ Custom exception for a bad record format """
-    pass
 
 
-def main():
-    initialize()
-    load_state_file()
-    process_files()
-    get_job_info()
-    generate_html_files()
-    write_state_file()
-    sys.exit(0)
+# cur holds information that is only valid for this run, and should not be
+# stored in the state file.  This includes whether the metric is enabled and
+# when its next run time is.
 
 
-def initialize():
-    """ Check that environment is valid """
+class HTMLConsumer(RSVConsumer.RSVConsumer):
 
-    #
-    # We don't want people to accidently run this consumer as root because that may
-    # cause permissions problems on log files and directories for the regular RSV user.
-    #
-    # TODO - setuid to 'rsv'
-    if os.geteuid() == 0:
-        die("ERROR: The html-consumer cannot be run as root")
+    name = "html"
 
 
-    usage = """usage: html-consumer
-      --output-dir <HTML directory>
-      --max-history <Number of historical entries>
-      --help | -h 
-      --version
-    """
-
-    version = "html-consumer 4.0"
-    description = "This script processes RSV records and generates an HTML status page."
-
-    parser = OptionParser(usage=usage, description=description, version=version)
-    parser.add_option("--max-history", dest="max_history", default=20, type="int",
-                      help="Number of historical entries to store for each metric.", metavar="SIZE")
-    parser.add_option("--record-trim-length", dest="record_trim_length", type="int", default=10000,
-                      help="Size in bytes to trim each record.  Default=%default", metavar="LENGTH" )
-
-    global OPTIONS
-    (OPTIONS, args) = parser.parse_args()
-
-    #
-    # Open a file for logging all output.  If we print all output to STDOUT it will end up in
-    # a file that Condor will overwrite every time this script executes, so we'll move it to
-    # a more permanent log file and rotate it manually.
-    #
-    log_file = os.path.join("/", "var", "log", "rsv", "consumers", "html-consumer.output")
-    OPTIONS.log = open(log_file, 'a')
-
-    log("html-consumer initializing.")
-
-    # Where records will be read from
-    # This script will delete files from this directory, so it also needs write access.
-    OPTIONS.records_dir = os.path.join("/", "var", "spool", "rsv", "html-consumer")
-    if not os.access(OPTIONS.records_dir, os.F_OK):
-        die("WARNING: Records directory does not exist '%s' (This directory should be created when a metric runs.  Have any metrics run yet?)" % OPTIONS.records_dir)
-    if not os.access(OPTIONS.records_dir, os.R_OK):
-        die("ERROR: Cannot read records directory '%s'" % OPTIONS.records_dir)
-    if not os.access(OPTIONS.records_dir, os.W_OK):
-        die("ERROR: Cannot write records directory '%s'" % OPTIONS.records_dir)
-
-    # Validate the HTML output directory and create it if necessary
-    OPTIONS.output_dir = os.path.join("/", "usr", "share", "rsv", "www")
-    if not os.access(OPTIONS.output_dir, os.F_OK):
-        log("Directory for HTML output does not exist at %s.  Creating it." % OPTIONS.output_dir)
-        try:
-            os.mkdir(OPTIONS.output_dir, 0755)
-        except OSError, err:
-            die("ERROR: Could not create directory.  Error: %s" % err)
-    if not os.access(OPTIONS.output_dir, os.R_OK):
-        die("ERROR: Cannot read HTML output directory '%s'" % OPTIONS.output_dir)
-    if not os.access(OPTIONS.output_dir, os.W_OK):
-        die("ERROR: Cannot write HTML output directory '%s'" % OPTIONS.output_dir)
-
-    # Catch some signals and exit gracefully if we get them
-    signal.signal(signal.SIGINT, sigterm_handler)
-    signal.signal(signal.SIGTERM, sigterm_handler)
-
-    return
-
-
-def get_state_file_path():
-    """ Returns the path of the state file """
-    return os.path.join(OPTIONS.output_dir, "state.pickle")
-
-
-def load_state_file():
-    """ Process the HTML state file """
-
-    global ALERTS
-    state_file = get_state_file_path()
-
-    if not os.path.exists(state_file):
-        log("State file does not exist.")
+    def initialize_variables(self):
+        self.state = {}
+        self.cur = {}
+        self.alerts = []
+        self.job_info_error = False
         return
-
-    try:
-        state_file_fp = open(state_file, 'r')
-    except IOError, err:
-        # If we can't read/write to the state file we won't be able to save any
-        # results, but we should still write an HTML page with the problem.
-        msg = "Error trying to load state file - %s" % err
-        log(msg)
-        ALERTS.append(msg)
-        return
-
-    try:
-        global STATE
-        STATE = pickle.load(state_file_fp)
-    except EOFError, err:
-        # Should this be a warning?
-        log("State file is empty")
-    except pickle.UnpicklingError, err:
-        msg = "Error loading state file - %s" % err
-        log(msg)
-        # We should assume nobody will ever read the log file.  Push all error
-        # messages to the web page for higher visibility.
-        ALERTS.append(msg)
-        
-    return
-
-
-def write_state_file():
-    """ Save the state back to disk """
-    state_file = get_state_file_path()
-    state_fp = open(state_file, 'w')
-    pickle.dump(STATE, state_fp)
-    state_fp.close()
-    return
-
-
-def process_files():
-    """ Open the records directory and load each file """
-
-    filenames = os.listdir(OPTIONS.records_dir)
-    log("Processing %s files" % len(filenames))
-
-    # We need to sort the files by creation time so that in case multiple records have
-    # accumulated for a given metric we want to parse them in order (because the order
-    # that we parse them is the order they will show up in the history and the last one
-    # we parse will be the current state)
-    files = []
-    for filename in filenames:
-        path = os.path.join(OPTIONS.records_dir, filename)
-        ctime = os.stat(path).st_ctime
-        files.append( (ctime, filename) )
-    files.sort()
     
 
-    for file in files:
-        if CONSUMER_DONE == 1:
-            break
-        
-        success = 0
+    def parse_arguments(self):
+        usage = """usage: html-consumer
+          --max-history <Number of historical entries>
+          --record-trim-length <Size in bytes to trim details data>
+          --help | -h 
+          --version
+        """
 
-        filename = file[1]
-        file = os.path.join(OPTIONS.records_dir, filename)
-        fh = open(file, 'r')
-        record = fh.read()
-        fh.close()
+        version = "html-consumer 5.0"
+        description = "This script processes RSV records and generates an HTML status page."
 
-        if not record or record.isspace():
-            log("The record in %s is empty.  Removing file." % filename)
+        parser = OptionParser(usage=usage, description=description, version=version)
+        parser.add_option("--max-history", dest="max_history", default=20, type="int",
+                          help="Number of historical entries to store for each metric.", metavar="SIZE")
+        parser.add_option("--record-trim-length", dest="record_trim_length", type="int", default=10000,
+                          help="Size in bytes to trim each record.  Default=%default", metavar="LENGTH" )
+
+        (self.__options, self.__args) = parser.parse_args()
+
+
+    def validate_html_output_dir(self):
+        """ Make sure we can read and write to the HTML output directory.  Create if necessary. """
+
+        self.__html_output_dir = os.path.join("/", "usr", "share", "rsv", "www")
+        if not os.access(self.__html_output_dir, os.F_OK):
+            self.log("Directory for HTML output does not exist at %s.  Creating it." % self.__html_output_dir)
+            try:
+                os.mkdir(self.__html_output_dir, 0755)
+            except OSError, err:
+                self.die("ERROR: Could not create directory.  Error: %s" % err)
+        if not os.access(self.__html_output_dir, os.R_OK):
+            self.die("ERROR: Cannot read HTML output directory '%s'" % self.__html_output_dir)
+        if not os.access(self.__html_output_dir, os.W_OK):
+            self.die("ERROR: Cannot write HTML output directory '%s'" % self.__html_output_dir)
+
+        return
+
+
+    def add_alert(self, msg):
+        """ Add an alert to the list.  Alerts are displayed at the top of each HTML page. """
+        self.alerts.append(msg)
+
+    def load_state_file(self):
+        """ Load the previous state """
+
+        self.__state_file = os.path.join(self.__html_output_dir, "state.pickle")
+
+        if not os.path.exists(self.__state_file):
+            self.log("State file does not exist.")
+            return
+
+        try:
+            fd = open(self.__state_file, 'r')
+        except IOError, err:
+            # If we can't read/write to the state file we won't be able to save any
+            # results, but we should still write an HTML page with the problem.
+            msg = "Error trying to load state file - %s" % err
+            self.log(msg)
+            self.add_alert(msg)
+            return
+
+        try:
+            self.state = pickle.load(fd)
+        except EOFError, err:
+            # Should this be a warning?
+            self.log("State file is empty")
+        except pickle.UnpicklingError, err:
+            msg = "Error loading state file - %s" % err
+            self.log(msg)
+            # We should assume nobody will ever read the log file.  Push all error
+            # messages to the web page for higher visibility.
+            self.add_alert(msg)
+
+        fd.close()
+        return
+
+
+    def write_state_file(self):
+        """ Save the state back to disk """
+        fd = open(self.__state_file, 'w')
+        pickle.dump(self.state, fd)
+        fd.close()
+        return
+
+
+    def process_record(self, raw_record):
+        """ Parse and error check a record, and stuff it into our data structure """
+
+        record = self.parse_record(raw_record)
+
+        if "serviceURI" in record:
+            record["serviceURI"] = re.sub(":", "_", record["serviceURI"])
+        elif "hostName" in record:
+            record["hostName"] = re.sub(":", "_", record["hostName"])
+
+        #
+        # Update the state
+        #
+        metric = record["metricName"]
+        host = record.get("serviceURI", record.get("hostName", ""))
+
+        if host not in self.state:
+            self.state[host] = {}
+            self.state[host]["metrics"] = {}
+            self.state[host]["sitename"] = None
+
+        # If the siteName line is present then stash it for the host
+        if "siteName" in record:
+            self.state[host]["sitename"] = record["siteName"]
+
+        # Set the top-level metric info
+        if metric not in self.state[host]["metrics"]:
+            self.state[host]["metrics"][metric] = {}
+        self.state[host]["metrics"][metric]["time"]   = float(record["timestamp"])
+        self.state[host]["metrics"][metric]["status"] = record["metricStatus"]
+
+        # Add an item to the history.  We could either do a history based on the number
+        # of records kept (for each metric) or based on an expiration date since the record
+        # was generated.  I'm picking the easier approach for now of just keeping an absolute
+        # number.
+        trimmed_record = raw_record[:self.__options.record_trim_length]
+
+        # We want to swap the timestamp in the raw_record that we store so it's more readable
+        # on the history web page.
+        match = re.search("timestamp: (\d+)", trimmed_record)
+        if match:
+            pretty_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(self.state[host]["metrics"][metric]["time"]))
+            trimmed_record = re.sub("timestamp: \d+", "timestamp: %s" % pretty_time, trimmed_record)
+
+        if "history" not in self.state[host]["metrics"][metric]:
+            self.state[host]["metrics"][metric]["history"] = []
+
+        self.state[host]["metrics"][metric]["history"].insert(0, trimmed_record)
+        if len(self.state[host]["metrics"][metric]["history"]) > self.__options.max_history:
+            self.state[host]["metrics"][metric]["history"] = self.state[host]["metrics"][metric]["history"][0:self.__options.max_history]
+
+        return
+
+
+    def get_job_info(self):
+        """ Figure out if any jobs are missing """
+
+        try:
+            (ret, out, err) = self.run_command([self.rsv_control, "-j", "--parsable"], 15)
+        except RSVConsumer.TimeoutError:
+            msg = "rsv-control timed out while trying to get job information"
+            self.add_alert(msg)
+            self.log("ERROR: %s" % msg)
+            self.job_info_error = True
+            return
+
+        if ret != 0:
+            msg = "rsv-control returned a non-zero exit code while trying to get job information"
+            self.add_alert(msg)
+            self.log("ERROR: %s" % msg)
+            self.log("STDOUT:\n%s" % out)
+            self.log("STDERR:\n%s" % err)
+            self.job_info_error = True
+            return
+
+
+        for line in out.split("\n"):
+            match = re.match("ERROR: (.+)", line)
+            if match:
+                self.job_info_error = True
+                break
+
+            match = re.match("Hostname: (\S+)", line)
+            if match:
+                host = re.sub(":", "_", match.group(1))
+                if host not in self.cur:
+                    self.cur[host] = {}
+                continue
+
+            match = re.match("MISSING: (.+)", line)
+            if match:
+                missing_metrics = match.group(1).split('|')
+                for metric in missing_metrics:
+                    metric = metric.strip()
+                    if metric not in self.cur[host]:
+                        self.cur[host][metric] = {}
+                    self.cur[host][metric]["enabled"] = 1
+
+                self.add_alert("On host %s there are %s metrics enabled that are not running: %s" %
+                              (host, len(missing_metrics), " ".join(missing_metrics)))
+                continue
+
+            arr = line.split('|')
+            if len(arr) == 5:
+                metric = arr[4].strip()
+                if metric not in self.cur[host]:
+                    self.cur[host][metric] = {}
+
+                # Store that the metric is enabled and its next run time
+                self.cur[host][metric]["enabled"] = 1
+                self.cur[host][metric]["next"]    = arr[3].strip()
+
+
+    def get_next_run_time(self, host, metric):
+        """ Return the next run time or something appropriate if it is not defined """
+        try:
+            return self.cur[host][metric]["next"]
+        except KeyError:
+            return "NOT RUNNING"
+
+
+    def form_metric_row(self, host, metric, top_level):
+        """ Form a table row for the supplied host/metric """
+
+        # The top level page links to the host-specific pages
+        if top_level:
+            link = "%s.html#%s" % (host, metric)
+        else:
+            link = "#%s" % metric
+
+        # If the metric is older than 24 hours:
+        #    If it is enabled, mark it as "old"
+        #    If it is disabled, remove it entirely
+        one_day_ago = int(time.time()) - 24*60*60
+        if self.state[host]["metrics"][metric]["time"] >= one_day_ago:
+            id = self.state[host]["metrics"][metric]["status"].lower()
         else:
             try:
-                process_record(record)
-            except InvalidRecordError, err:
-                log("Error processing record: %s\nFull record:\n%s" % (err, record))
+                if self.cur[host][metric]["enabled"] == 1:
+                    id = "old"
+                else:
+                    raise KeyError
+            except KeyError:
+                # This indicates that the record is not enabled, so purge it
+                del self.state[host]["metrics"][metric]
+                return ""
+
+        pretty_time   = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(self.state[host]["metrics"][metric]["time"]))
+        next_run_time = self.get_next_run_time(host, metric)
 
         try:
-            os.remove(file)
-        except OSError, err:
-            # If we cannot remove the files then we are going to process them again
-            # So stop processing now to avoid duplicate data.
-            die("ERROR: Failed to remove record '%s'.  Error: %s" % (file, err))
-
-    return
-
-
-def parse_wlcg_record(raw_record):
-    """ Parse a record in WLCG format and return a dict with values.  For the html-consumer
-    the timestamp will be in seconds since the epoch.  Example of WLCG record:
-
-    metricName: org.osg.general.ping-host
-    metricType: status
-    timestamp: 1287068818
-    metricStatus: OK
-    serviceType: OSG-CE
-    serviceURI: osg-edu
-    gatheredAt: vdt-itb.cs.wisc.edu
-    summaryData: OK
-    detailsData: Host osg-edu is alive and responding to pings!
-    EOT
-
-    Note: for local probe serviceURI and gatheredAt are replaced by hostName
-    """
-
-    record = {}
-
-    # detailsData will always come last, and might be multiple lines
-    # Keep state so that once we are in the detailsData section, we put the rest of the
-    # lines into detailsData and return when we see EOT
-    in_details_data = 0
-    for line in raw_record.split('\n'):
-        if not in_details_data:
-            match = re.match("(\w+):(.*)$", line)
-            if match:
-                record[match.group(1)] = match.group(2).strip()
-                if match.group(1) == "detailsData":
-                    in_details_data = 1
+            if self.job_info_error:
+                enabled = "UNKNOWN"
+            elif self.cur[host][metric]["enabled"] == 1:
+                enabled = "YES"
             else:
-                raise InvalidRecordError("Invalid line:\n\t%s" % line)
+                enabled = "NO"
+        except KeyError:
+            enabled = "NO"
+
+        row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
+               (id, link, metric, pretty_time, enabled, next_run_time, self.state[host]["metrics"][metric]["status"])
+
+        return row
+
+
+    def format_hostname(self, host, sitename):
+        """ Get the hostname in the to-be-displayed format """
+
+        # Turn the _ back into a : when displaying
+        pretty_host = re.sub("_(\d+)$", ":\g<1>", host)
+
+        if sitename:
+            pretty_host = "%s (%s)" % (sitename, pretty_host)
+
+        return pretty_host
+
+
+    def generate_html_files(self):
+        """ Write out the top-level HTML file and any host-specific files """
+        
+        main_page = self.html_template_header()
+
+        # Fill in the basics
+        timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        title = "RSV Status - %s" % timestamp
+        header = "RSV Status - %s" % timestamp
+        main_page = re.sub("!!TITLE!!", title, main_page)
+        main_page = re.sub("!!HEADER!!", header, main_page)
+
+        # Add in any alerts
+        alerts = ""
+        for alert in self.alerts:
+            alerts += "<p class=\"alert\">WARNING: %s\n" % alert
+
+        main_page = re.sub("!!ALERTS!!", alerts, main_page)
+
+        # Generate a table for each host
+        tables = ""
+        if len(self.state) == 0:
+            tables = "<p>There is no data to display.</p>"
         else:
-            if re.match("EOT$", line):
-                if "serviceURI" in record:
-                    record["serviceURI"] = re.sub(":", "_", record["serviceURI"])
-                elif "hostName" in record:
-                    record["hostName"] = re.sub(":", "_", record["hostName"])
-                return record
-            else:
-                record["detailsData"] += line
+            for host in sorted(self.state.keys()):
+                self.generate_host_html(host, self.state[host]["sitename"], self.state[host]["metrics"])
 
-    # If we reach this point, it means we did not see EOT.  So the record is invalid
-    raise InvalidRecordError("'EOT' marker missing")
+                host_table = self.html_table_template()
+                display_host = self.format_hostname(host, self.state[host]["sitename"])
+                host_table = re.sub("!!HOSTNAME!!", display_host, host_table)
 
+                rows = []
+                for metric in sorted(self.state[host]["metrics"]):
+                    rows.append(self.form_metric_row(host, metric, top_level=1))
 
-def process_record(raw_record):
-    """ Process a record in WLCG format """
+                if len(rows) > 0:
+                    # TODO: Perhaps we should run generate_host_html in here also since we
+                    # don't need a host-specific HTML file unless there are some metrics
+                    table = '\n'.join(rows)
+                    host_table = re.sub("!!ROWS!!", table, host_table)
+                    tables += host_table
 
-    record = parse_wlcg_record(raw_record)
+            tables = "<table id='links_table'>%s</table>" % tables
 
-    #
-    # Check that we got the values we are expecting
-    #
-    for attribute in ("metricName", "metricType", "metricStatus", "timestamp", "serviceType",
-                      "summaryData", "detailsData"):
-        if attribute not in record:
-            raise InvalidRecordError("Missing %s" % attribute)
+        main_page += tables
+        main_page += self.html_template_footer()
 
-    # We need to have either (hostName) or (serviceURI + gatheredAt)
-    host = None
-    if "serviceURI" in record and "gatheredAt" in record:
-        host = record["serviceURI"]
-    elif "hostName" in record:
-        host = record["hostName"]
-    else:
-        raise InvalidRecordError("Missing either hostName or (serviceURI + gatheredAt)")
+        try:
+            main_html_file = os.path.join(self.__html_output_dir, "index.html")
+            fp = open(main_html_file, 'w')
+            fp.write(main_page)
+            fp.close()
+        except IOError, err:
+            self.log("Error writing main HTML file '%s': %s" % (main_html_file, err))
 
-
-    #
-    # Update the state
-    #
-    metric = record["metricName"]
-
-    global STATE
-    if host not in STATE:
-        STATE[host] = {}
-        STATE[host]["metrics"] = {}
-        STATE[host]["sitename"] = None
-
-    # If the siteName line is present then stash it for the host
-    if "siteName" in record:
-        STATE[host]["sitename"] = record["siteName"]
-
-    # Set the top-level metric info
-    if metric not in STATE[host]["metrics"]:
-        STATE[host]["metrics"][metric] = {}
-    STATE[host]["metrics"][metric]["time"]   = float(record["timestamp"])
-    STATE[host]["metrics"][metric]["status"] = record["metricStatus"]
-
-    # Add an item to the history.  We could either do a history based on the number
-    # of records kept (for each metric) or based on an expiration date since the record
-    # was generated.  I'm picking the easier approach for now of just keeping an absolute
-    # number.
-    trimmed_record = raw_record[:OPTIONS.record_trim_length]
-
-    # We want to swap the timestamp in the raw_record that we store so it's more readable
-    # on the history web page.
-    match = re.search("timestamp: (\d+)", trimmed_record)
-    if match:
-        pretty_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(STATE[host]["metrics"][metric]["time"]))
-        trimmed_record = re.sub("timestamp: \d+", "timestamp: %s" % pretty_time, trimmed_record)
-
-    if "history" not in STATE[host]["metrics"][metric]:
-        STATE[host]["metrics"][metric]["history"] = []
-    
-    STATE[host]["metrics"][metric]["history"].insert(0, trimmed_record)
-    if len(STATE[host]["metrics"][metric]["history"]) > OPTIONS.max_history:
-        STATE[host]["metrics"][metric]["history"] = STATE[host]["metrics"][metric]["history"][0:OPTIONS.max_history]
-
-    return
-
-
-def set_job_info_error(msg):
-    """ Set the job info error global and make an alert """
-    global JOB_INFO_ERROR
-    JOB_INFO_ERROR = msg
-    ALERTS.append("Error trying to get job information: %s" % msg)
-    
-
-def get_job_info():
-    """ Figure out if any jobs are missing """
-
-    rsv_control = os.path.join("/", "usr", "bin", "rsv-control")
-    try:
-        (ret, out, err) = system("%s -j --parsable" % rsv_control, 15)
-    except TimeoutError:
-        set_job_info_error("rsv-control timed out while trying to get job information")
-        log("ERROR: " + JOB_INFO_ERROR)
         return
 
-    if ret != 0:
-        set_job_info_error("rsv-control returned a non-zero exit code while trying to get job information")
-        log("ERROR: " + JOB_INFO_ERROR)
-        log("STDOUT:\n%s" % out)
-        log("STDERR:\n%s" % err)
 
-    host = ""
-    for line in out.split("\n"):
-        match = re.match("ERROR: (.+)", line)
-        if match:
-            set_job_info_error(match.group(1))
-            break
-        
-        match = re.match("Hostname: (\S+)", line)
-        if match:
-            host = re.sub(":", "_", match.group(1))
-            if host not in CUR:
-                CUR[host] = {}
-            continue
+    def generate_host_html(self, host, sitename, info):
+        """ Create the host-specific HTML file """
 
-        match = re.match("MISSING: (.+)", line)
-        if match:
-            missing_metrics = match.group(1).split('|')
-            for metric in missing_metrics:
-                metric = metric.strip()
-                if metric not in CUR[host]:
-                    CUR[host][metric] = {}
-                CUR[host][metric]["enabled"] = 1
+        display_host = self.format_hostname(host, sitename)
+        host_page = self.html_template_header()
 
-            ALERTS.append("On host %s there are %s metrics enabled that are not running: %s" %
-                          (host, len(missing_metrics), " ".join(missing_metrics)))
-            continue
+        # Fill in the basics
+        timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        title = "RSV Status - %s - %s" % (display_host, timestamp)
+        header = "RSV Status - %s - %s" % (display_host, timestamp)
+        host_page = re.sub("!!TITLE!!", title, host_page)
+        host_page = re.sub("!!HEADER!!", header, host_page)
 
-        arr = line.split('|')
-        if len(arr) == 5:
-            metric = arr[4].strip()
-            if metric not in CUR[host]:
-                CUR[host][metric] = {}
+        # Add in any alerts
+        alerts = ""
+        for alert in self.alerts:
+            alerts += "<p class=\"alert\">WARNING: %s\n" % alert
 
-            # Store that the metric is enabled and its next run time
-            CUR[host][metric]["enabled"] = 1
-            CUR[host][metric]["next"]    = arr[3].strip()
+        host_page = re.sub("!!ALERTS!!", alerts, host_page)
 
-
-def get_next_run_time(host, metric):
-    """ Return the next run time or something appropriate if it is not defined """
-    if host in CUR:
-        if metric in CUR[host]:
-            if "next" in CUR[host][metric]:
-                return CUR[host][metric]["next"]
-
-    return "NOT RUNNING"
-
-
-def form_metric_row(host, metric, top_level):
-    """ Form a table row for the supplied host/metric """
-
-    # The top level page links to the host-specific pages
-    if top_level:
-        link = "%s.html#%s" % (host, metric)
-    else:
-        link = "#%s" % metric
-
-    # If the metric is older than 24 hours:
-    #    If it is enabled, mark it as "old"
-    #    If it is disabled, remove it entirely
-    one_day_ago = int(time.time()) - 24*60*60
-    if STATE[host]["metrics"][metric]["time"] >= one_day_ago:
-        id = STATE[host]["metrics"][metric]["status"].lower()
-    else:
-        try:
-            if CUR[host][metric]["enabled"] == 1:
-                id = "old"
-            else:
-                raise KeyError
-        except KeyError:
-            # This indicates that the record is not enabled, so purge it
-            del STATE[host]["metrics"][metric]
-            return ""
-        
-    pretty_time   = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(STATE[host]["metrics"][metric]["time"]))
-    next_run_time = get_next_run_time(host, metric)
-
-    try:
-        if JOB_INFO_ERROR:
-            enabled = "UNKNOWN"
-        elif CUR[host][metric]["enabled"] == 1:
-            enabled = "YES"
+        # Generate a table for the host, and display each historical result
+        table = ""
+        data = ""
+        if len(info) == 0:
+            table = "<p>There is no data to display.</p>"
         else:
-            enabled = "NO"
-    except KeyError:
-        enabled = "NO"
-    
-    row  = "<tr id='%s'><td style='text-align:left'><a href='%s'>%s</a></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" %\
-           (id, link, metric, pretty_time, enabled, next_run_time, STATE[host]["metrics"][metric]["status"])
-
-    return row
-
-
-def format_hostname(host, sitename):
-    """ Get the hostname in the to-be-displayed format """
-    
-    # Turn the _ back into a : when displaying
-    pretty_host = re.sub("_(\d+)$", ":\g<1>", host)
-
-    if sitename:
-        pretty_host = "%s (%s)" % (sitename, pretty_host)
-
-    return pretty_host
-
-
-def generate_html_files():
-    """ Write out the top-level HTML file and any host-specific files """
-
-    main_page = html_template_header()
-
-    # Fill in the basics
-    timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    title = "RSV Status - %s" % timestamp
-    header = "RSV Status - %s" % timestamp
-    main_page = re.sub("!!TITLE!!", title, main_page)
-    main_page = re.sub("!!HEADER!!", header, main_page)
-
-    # Add in any alerts
-    alerts = ""
-    for alert in ALERTS:
-        alerts += "<p class=\"alert\">WARNING: %s\n" % alert
-
-    main_page = re.sub("!!ALERTS!!", alerts, main_page)
-
-    # Generate a table for each host
-    tables = ""
-    if len(STATE) == 0:
-        tables = "<p>There is no data to display.</p>"
-    else:
-        for host in sorted(STATE.keys()):
-            generate_host_html(host, STATE[host]["sitename"], STATE[host]["metrics"])
-
-            host_table = html_table_template()
-            display_host = format_hostname(host, STATE[host]["sitename"])
+            host_table = self.html_table_template()
             host_table = re.sub("!!HOSTNAME!!", display_host, host_table)
-
             rows = []
-            for metric in sorted(STATE[host]["metrics"]):
-                rows.append(form_metric_row(host, metric, top_level=1))
+            for metric in sorted(info):
+                row = self.form_metric_row(host, metric, top_level=0)
+                if row:
+                    rows.append(row)
 
-            if len(rows) > 0:
-                # TODO: Perhaps we should run generate_host_html in here also since we
-                # don't need a host-specific HTML file unless there are some metrics
-                table = '\n'.join(rows)
-                host_table = re.sub("!!ROWS!!", table, host_table)
-                tables += host_table
+                    data += "<a name='%s'></a><h2>%s</h2>\n" % (metric, metric)
+                    for entry in info[metric]["history"]:
+                        data += "<pre>%s</pre>\n" % entry
 
-        tables = "<table id='links_table'>%s</table>" % tables
+            host_table = "<table id='links_table'>%s</table>" % host_table
+            table = re.sub("!!ROWS!!", '\n'.join(rows), host_table)
 
-    main_page += tables
-    main_page += html_template_footer()
+        host_page += table
+        host_page += data
+        host_page += self.html_template_footer()
 
-    try:
-        main_html_file = os.path.join(OPTIONS.output_dir, "index.html")
-        fp = open(main_html_file, 'w')
-        fp.write(main_page)
-        fp.close()
-    except IOError, err:
-        log("Error writing main HTML file '%s': %s" % (main_html_file, err))
+        try:
+            host_html_file = os.path.join(self.__html_output_dir, "%s.html" % host)
+            fp = open(host_html_file, 'w')
+            fp.write(host_page)
+            fp.close()
+        except IOError, err:
+            self.log("Error writing main HTML file '%s': %s" % (host_html_file, err))
 
-    return
-
-
-def generate_host_html(host, sitename, info):
-    """ Create the host-specific HTML file """
-
-    display_host = format_hostname(host, sitename)
-    host_page = html_template_header()
-
-    # Fill in the basics
-    timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    title = "RSV Status - %s - %s" % (display_host, timestamp)
-    header = "RSV Status - %s - %s" % (display_host, timestamp)
-    host_page = re.sub("!!TITLE!!", title, host_page)
-    host_page = re.sub("!!HEADER!!", header, host_page)
-
-    # Add in any alerts
-    alerts = ""
-    for alert in ALERTS:
-        alerts += "<p class=\"alert\">WARNING: %s\n" % alert
-
-    host_page = re.sub("!!ALERTS!!", alerts, host_page)
-
-    # Generate a table for the host, and display each historical result
-    table = ""
-    data = ""
-    if len(info) == 0:
-        table = "<p>There is no data to display.</p>"
-    else:
-        host_table = html_table_template()
-        host_table = re.sub("!!HOSTNAME!!", display_host, host_table)
-        rows = []
-        for metric in sorted(info):
-            row = form_metric_row(host, metric, top_level=0)
-            if row:
-                rows.append(row)
-
-                data += "<a name='%s'></a><h2>%s</h2>\n" % (metric, metric)
-                for entry in info[metric]["history"]:
-                    data += "<pre>%s</pre>\n" % entry
-
-        host_table = "<table id='links_table'>%s</table>" % host_table
-        table = re.sub("!!ROWS!!", '\n'.join(rows), host_table)
-
-    host_page += table
-    host_page += data
-    host_page += html_template_footer()
-
-    try:
-        host_html_file = os.path.join(OPTIONS.output_dir, "%s.html" % host)
-        fp = open(host_html_file, 'w')
-        fp.write(host_page)
-        fp.close()
-    except IOError, err:
-        log("Error writing main HTML file '%s': %s" % (host_html_file, err))
-
-    return
+        return
 
 
-def log(msg):
-    """ Print a message with a timestamp """
-    timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    print "%s: %s" % (timestamp, msg)
+    def html_template_header(self):
+        """ Returns the HTML template file """
 
-    try:
-        OPTIONS.log.write("%s: %s\n" % (timestamp, msg))
-    except AttributeError:
-        # In case OPTIONS.log is not yet set
-        pass
-        
+        return """<html>
+       <head>
+          <title>!!TITLE!!</title>
+          <style type='text/css'>
+          <!--
+          pre {
+             margin-left: 1em;
+             margin-right: 1em;
+             padding: 0.5em;
+             width: 90%;
+             background-color: #f0f0f0;
+             border: 1px solid black;
+             white-space: pre-wrap;       /* css-3 */
+             white-space: -moz-pre-wrap !important; /* Mozilla + Firefox */
+             white-space: -pre-wrap;      /* Opera 4-6 */
+             white-space: -o-pre-wrap;    /* Opera 7 */
+             word-wrap: break-word;       /* Internet Explorer 5.5+ */
+          }
+          body { 
+             color: black;
+             background-color: white;
+          }
+          #links_table { border: 0px solid black; width: 100%; text-align: center; }
+          a:link {background: none; color: #000000; text-decoration: underline}
+          a:visited {background: none; color: #000000; text-decoration: underline}
+          a:hover {background: #000000; color: #FFFFFF; text-decoration: underline}
 
-def die(msg):
-    """ Print an error message and exit with a non-zero status """
-    log(msg)
-    sys.exit(1)
+          #ok { background-color: #8ae234; }
+          #warning { background-color: #fce94f; }
+          #critical { background-color: #ef2929; }
+          #unknown { background-color: #eeeeec; }
+          #old { background-color: #e0ae8b; }
 
+          .question { cursor:pointer; text-decoration:underline; }
+          .visible { display: block }
+          .invisible { display: none }
 
-def sigterm_handler(signum, frame):
-    """ The handler for SIGTERM and SIGKILL """
-    log("Caught signal #%s.  Exiting after processing current record." % signum)
-    global CONSUMER_DONE
-    CONSUMER_DONE = 1
-    return
+          li.q { padding-top: 10px; font-weight: bold; }
+          li.a { font-style: italic; list-style-type: none; padding-top: 4px; }
 
+          p.alert { background-color: red }
+          -->
+          </style>
 
-def html_template_header():
-    """ Returns the HTML template file """
+          </script>
+       </head>
 
-    return """<html>
-   <head>
-      <title>!!TITLE!!</title>
-      <style type='text/css'>
-      <!--
-      pre {
-         margin-left: 1em;
-         margin-right: 1em;
-         padding: 0.5em;
-         width: 90%;
-         background-color: #f0f0f0;
-         border: 1px solid black;
-         white-space: pre-wrap;       /* css-3 */
-         white-space: -moz-pre-wrap !important; /* Mozilla + Firefox */
-         white-space: -pre-wrap;      /* Opera 4-6 */
-         white-space: -o-pre-wrap;    /* Opera 7 */
-         word-wrap: break-word;       /* Internet Explorer 5.5+ */
-      }
-      body { 
-         color: black;
-         background-color: white;
-      }
-      #links_table { border: 0px solid black; width: 100%; text-align: center; }
-      a:link {background: none; color: #000000; text-decoration: underline}
-      a:visited {background: none; color: #000000; text-decoration: underline}
-      a:hover {background: #000000; color: #FFFFFF; text-decoration: underline}
-
-      #ok { background-color: #8ae234; }
-      #warning { background-color: #fce94f; }
-      #critical { background-color: #ef2929; }
-      #unknown { background-color: #eeeeec; }
-      #old { background-color: #e0ae8b; }
-
-      .question { cursor:pointer; text-decoration:underline; }
-      .visible { display: block }
-      .invisible { display: none }
-
-      li.q { padding-top: 10px; font-weight: bold; }
-      li.a { font-style: italic; list-style-type: none; padding-top: 4px; }
-
-      p.alert { background-color: red }
-      -->
-      </style>
-
-      </script>
-   </head>
-
-   <body>
-     <table>
-       <tr>
-         <td><a href='http://www.opensciencegrid.org' title='Open Science Grid'><img src='http://vdt.cs.wisc.edu/pictures/osg_logo.gif' border='0'></a></td>
-         <td align='center'><h1>!!HEADER!!</h1></td>
-       </tr>
-    </table>
-    !!ALERTS!!
-    <p>Note: This page is for local reference only.  If your site participates in WLCG availability you can view your status at <a href="http://myosg.grid.iu.edu">http://myosg.grid.iu.edu</a>.
-    <p><a href=\"#faq\">Frequently Asked Questions</a>
-"""
-
-def html_template_footer():
-    return """<p>&nbsp;
-   <p><a name=\"faq\" style='background:#ffffff;color:#000000;'>Frequently Asked Questions:</a>
-   <ul>
-
-   <li class='q'>How often does this page update?
-   <li class='a'>Approximately every 5 minutes.
-
-   <li class='q'>When do records get removed?
-   <li class='a'>Any record that is not enabled will be removed when it is 24 hours old.<br />
-      If a record is enabled but has not been updated for 24+ hours the line will be left in place but will be turned gray.
-
-   <li class='q'>How can I manually remove records?
-   <li class='a'>This can't be done yet - you'll need to wait until the records are 24 hours old.
-
-   <li class='q'>What do the colors indicate?</a>
-   <li class='a'>
-   <table>
-     <tr id=\"ok\"><td>The metric ran successfully</td></tr>
-     <tr id=\"warning\"><td>The metric produced some warnings</td></tr>
-     <tr id=\"critical\"><td>The metric failed</td></tr>
-     <tr id=\"unknown\"><td>The metric produced an unknown result</td></tr>
-     <tr id=\"old\"><td>The metric is enabled, but it has not produced output for 24+ hours</td></tr>
-   </table>
-   </ul>
-   </body>
-</html>
-"""
-
-def html_table_template():
-    """ Return the HTML table template """
-    return """<p>
-         <tr><td colspan=5 style='padding-top:15px;text-align:left;font-weight:bold;'>Host: !!HOSTNAME!!</td></tr>
-         <tr>
-            <th>Metric</th>
-            <th>Last Executed</th>
-            <th>Enabled?</th>
-            <th>Next Run Time</th>
-            <th>Status</th>
-         </tr>
-         !!ROWS!!
-      """
-
-
-
-class TimeoutError(Exception):
-    """ This defines an Exception that we can use if our system call times out """
-    pass
-
-def alarm_handler(signum, frame):
-    raise TimeoutError("System call timed out")
-
-def system(command, timeout):
-    """ Run a system command with a timeout specified (in seconds).
-    Returns:
-    1) exit code
-    2) STDOUT
-    3) STDERR
-    
-    I think this could possibly be better done using the subprocess module, but
-    that requires Python 2.4 and we need to support Python 2.3+.
+       <body>
+         <table>
+           <tr>
+             <td><a href='http://www.opensciencegrid.org' title='Open Science Grid'><img src='http://vdt.cs.wisc.edu/pictures/osg_logo.gif' border='0'></a></td>
+             <td align='center'><h1>!!HEADER!!</h1></td>
+           </tr>
+        </table>
+        !!ALERTS!!
+        <p>Note: This page is for local reference only.  If your site participates in WLCG availability you can view your status at <a href="http://myosg.grid.iu.edu">http://myosg.grid.iu.edu</a>.
+        <p><a href=\"#faq\">Frequently Asked Questions</a>
     """
-    
-    try:
-        signal.signal(signal.SIGALRM, alarm_handler)
-        signal.alarm(timeout)
-        child = popen2.Popen3(command, capturestderr=1)
-        ret = child.wait()
-        signal.alarm(0)
-    except TimeoutError:
-        log("ERROR: Command timed out (timeout=%s): %s" % (timeout, command))
-        os.kill(child.pid, signal.SIGKILL)
-        raise TimeoutError("Command timed out (timeout=%s)" % timeout)
-    
-    out = child.fromchild.read()
-    err = child.childerr.read()
-    return (ret, out, err)
+
+    def html_template_footer(self):
+        return """<p>&nbsp;
+       <p><a name=\"faq\" style='background:#ffffff;color:#000000;'>Frequently Asked Questions:</a>
+       <ul>
+
+       <li class='q'>How often does this page update?
+       <li class='a'>Approximately every 5 minutes.
+
+       <li class='q'>When do records get removed?
+       <li class='a'>Any record that is not enabled will be removed when it is 24 hours old.<br />
+          If a record is enabled but has not been updated for 24+ hours the line will be left in place but will be turned gray.
+
+       <li class='q'>How can I manually remove records?
+       <li class='a'>This can't be done yet - you'll need to wait until the records are 24 hours old.
+
+       <li class='q'>What do the colors indicate?</a>
+       <li class='a'>
+       <table>
+         <tr id=\"ok\"><td>The metric ran successfully</td></tr>
+         <tr id=\"warning\"><td>The metric produced some warnings</td></tr>
+         <tr id=\"critical\"><td>The metric failed</td></tr>
+         <tr id=\"unknown\"><td>The metric produced an unknown result</td></tr>
+         <tr id=\"old\"><td>The metric is enabled, but it has not produced output for 24+ hours</td></tr>
+       </table>
+       </ul>
+       </body>
+    </html>
+    """
+
+    def html_table_template(self):
+        """ Return the HTML table template """
+        return """<p>
+             <tr><td colspan=5 style='padding-top:15px;text-align:left;font-weight:bold;'>Host: !!HOSTNAME!!</td></tr>
+             <tr>
+                <th>Metric</th>
+                <th>Last Executed</th>
+                <th>Enabled?</th>
+                <th>Next Run Time</th>
+                <th>Status</th>
+             </tr>
+             !!ROWS!!
+          """
 
 
-try:
-    sorted = sorted
-except NameError:
-    def sorted(iterable):
-        """ Implementing a barebones sorted function for Python 2.3. This can go
-        away once we no longer support RedHat 4 """
-        lst = list(iterable)
-        lst.sort()
-        return lst
 
-main()
+consumer = HTMLConsumer()
+consumer.initialize_variables()
+consumer.validate_html_output_dir()
+consumer.load_state_file()
+consumer.process_files(sort_by_time=True)
+consumer.get_job_info()
+consumer.generate_html_files()
+consumer.write_state_file()
+sys.exit(0)

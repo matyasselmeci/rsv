@@ -5,254 +5,89 @@
 import os
 import re
 import sys
-import time
-import signal
 
-from time import strftime
-
-Gratia = None
-Metric = None
-CONSUMER_DONE = 0
-LOG_FH = None
-
-class InvalidRecordError(Exception):
-    """ Custom exception for a bad record format """
-    pass
+import RSVConsumer
 
 
-def main():
-    info = initialize()
-    load_gratia_libraries()
-    process_files(info)
-    sys.exit(0)
+class GratiaConsumer(RSVConsumer.RSVConsumer):
+    name = 'gratia'
 
 
-def initialize():
-    """ Check that environment is valid """
+    def validate_failed_records_dir(self):
 
-    info = {}
+        # Where records will be moved if they fail
+        # This script will move files to this directory that fail, so it needs write access.
+        # It won't read anything from the directory, but there's probably a problem if it can't.
+        self.failed_records_dir = os.path.join("/", "var", "spool", "rsv", "failed-gratia-records")
+        if not os.access(self.failed_records_dir, os.F_OK):
+            self.log("Directory for failed gratia scripts does not exist at %s.  Creating it." %
+                self.failed_records_dir,)
+            try:
+                os.mkdir(self.failed_records_dir, 0755)
+            except OSError, err:
+                self.die("ERROR: Could not create directory.  Error: %s" % err)
+        if not os.access(self.failed_records_dir, os.R_OK):
+            self.die("ERROR: Cannot read failed records directory '%s'" % self.failed_records_dir)
+        if not os.access(self.failed_records_dir, os.W_OK):
+            self.die("ERROR: Cannot write failed records directory '%s'" % self.failed_records_dir)
 
-    #
-    # We don't want people to accidently run this consumer as root because that may
-    # cause permissions problems on log files and directories for the regular RSV user.
-    #
-    # TODO - setuid to 'rsv'
-    if os.geteuid() == 0:
-        die("ERROR: The gratia-consumer cannot be run as root")
-
-    #
-    # Open a file for logging all output.  If we print all output to STDOUT it will end up in
-    # a file that Condor will overwrite every time this script executes, so we'll move it to
-    # a more permanent log file and rotate it manually.
-    #
-    log_file = os.path.join("/", "var", "log", "rsv", "consumers", "gratia-consumer.output")
-    global LOG_FH
-    LOG_FH = open(log_file, 'a')
-
-    log("Gratia consumer initializing.")
-
-    # Where records will be read from
-    # This script will delete files from this directory, so it also needs write access.
-    info["output_dir"] = os.path.join("/", "var", "spool", "rsv", "gratia-consumer")
-    if not os.access(info["output_dir"], os.F_OK):
-        die("ERROR: Records directory does not exist '%s'" % info["output_dir"])
-    if not os.access(info["output_dir"], os.R_OK):
-        die("ERROR: Cannot read records directory '%s'" % info["output_dir"])
-    if not os.access(info["output_dir"], os.W_OK):
-        die("ERROR: Cannot write records directory '%s'" % info["output_dir"])
-
-    # Where records will be moved if they fail
-    # This script will move files to this directory that fail, so it needs write access.
-    # It won't read anything from the directory, but there's probably a problem if it can't.
-    info["failed_dir"] = os.path.join("/", "var", "spool", "rsv", "failed-gratia-records")
-    if not os.access(info["failed_dir"], os.F_OK):
-        log("Directory for failed gratia scripts does not exist at %s.  Creating it." %
-            info["failed_dir"],)
-        try:
-            os.mkdir(info["failed_dir"], 0755)
-        except OSError, err:
-            die("ERROR: Could not create directory.  Error: %s" % err)
-    if not os.access(info["failed_dir"], os.R_OK):
-        die("ERROR: Cannot read failed records directory '%s'" % info["failed_dir"])
-    if not os.access(info["failed_dir"], os.W_OK):
-        die("ERROR: Cannot write failed records directory '%s'" % info["failed_dir"])
-
-    info["gratia_config_file"] = os.path.join("/", "etc", "gratia", "metric", "ProbeConfig")
-
-    # Catch some signals and exit gracefully if we get them
-    signal.signal(signal.SIGINT, sigterm_handler)
-    signal.signal(signal.SIGTERM, sigterm_handler)
-
-    return info
-
-
-def load_gratia_libraries():
-    """ Try importing the Gratia libraries.  They might not be on the system so we treat
-    them more carefully than other libraries that we import """
+        return
     
-    try:
-        global Gratia
-        global Metric
-        import gratia.common.Gratia as Gratia
-        import gratia.metric.Metric as Metric
-    except ImportError, err:
-        msg = "ERROR: Could not import Gratia python libraries: %s\n" % err
-        msg += "Contents of sys.path:\n"
-        msg += "\n".join(sys.path)
-        die(msg)
 
-
-def process_files(info):
-    """ Open the records directory and load each file """
-
-    Gratia.Initialize(info["gratia_config_file"])
-
-    files = os.listdir(info["output_dir"])
-    log("Processing %s files" % len(files))
-    for filename in files:
-        if CONSUMER_DONE == 1:
-            break
-        
-        success = 0
-
-        file = os.path.join(info["output_dir"], filename)
-        fh = open(file, 'r')
-        record = fh.read()
-        fh.close()
+    def initialize_gratia(self):
+        """ Try importing the Gratia libraries.  They might not be on the system so we treat
+        them more carefully than other libraries that we import """
 
         try:
-            gratia_record = process_record(record)
+            import gratia.common.Gratia as Gratia
+            self.Gratia = Gratia
+            import gratia.metric.Metric as Metric
+            self.Metric = Metric
+        except ImportError, err:
+            msg = "ERROR: Could not import Gratia python libraries: %s\n" % err
+            msg += "Contents of sys.path:\n"
+            msg += "\n".join(sys.path)
+            self.die(msg)
 
-            # Gratia.Send will return an empty string on success, or an string containing
-            # the problem on error.
-            error_msg = Gratia.Send(gratia_record)
-            if not error_msg or re.match("^OK ", error_msg):
-                success = 1
-                
-        except InvalidRecordError, err:
-            log("ERROR: Invalid record in file '%s'.  Error: %s" % (file, err))
-        except Exception, err:
-            log("ERROR: An unknown exception occurred when processing file '%s'. Error: " % file)
-            log(err)
+        self.__gratia_config_file = os.path.join("/", "etc", "gratia", "metric", "ProbeConfig")
+        self.Gratia.Initialize(self.__gratia_config_file)
 
-        if success:
-            try:
-                os.remove(file)
-            except OSError, err:
-                # If we cannot remove the files then we are going to process them again
-                # So stop processing now to avoid duplicate data.
-                die("ERROR: Failed to remove record '%s'.  Error: %s" % (file, err))
-        else:
-            failed_file = os.path.join(info["failed_dir"], filename)
-            try:
-                os.rename(file, failed_file)
-            except OSError, err:
-                # If we cannot move the files then we are going to process them again
-                # So stop processing now to avoid duplicate data.
-                die("ERROR: Failed to move record '%s' to '%s'.  Error: %s" %
-                    (file, failed_file, err))
+        return
 
 
-def process_record(raw_record):
-    """ Process a record in WLCG format """
-    record = parse_wlcg_record(raw_record)
+    def process_record(self, raw_record):
+        """ Process a record in WLCG format """
+        record = self.parse_record(raw_record)
 
-    # Check that we got the values we are expecting
-    for attribute in ("metricName", "metricType", "metricStatus", "timestamp", "serviceType",
-                      "summaryData", "detailsData"):
-        if attribute not in record:
-            raise InvalidRecordError("Missing %s" % attribute)
+        # This code is based on the Python scripts RSV generates
+        rec = self.Metric.MetricRecord()
+        rec.MetricName(record["metricName"])
+        rec.MetricType(record["metricType"])
+        rec.MetricStatus(record["metricStatus"])
+        rec.Timestamp(record["timestamp"])
+        rec.ServiceType(record["serviceType"])
+        rec.SummaryData(record["summaryData"])
+        rec.DetailsData(record["detailsData"])
 
-    # We need to have either (hostName) or (serviceURI + gatheredAt)
-    if "hostName" not in record and not ("serviceURI" in record and "gatheredAt" in record):
-        raise InvalidRecordError("Missing either hostName or (serviceURI + gatheredAt)")
+        # serviceURI and gatheredAt will be on "non-local" metrics
+        if "serviceURI" in record and "gatheredAt" in record:
+            rec.ServiceUri(record["serviceURI"])
+            rec.GatheredAt(record["gatheredAt"])
+        # And hostName will be in "local" metrics
+        elif "hostName" in record:
+            rec.HostName(record["hostName"])
 
-    # This code is based on the Python scripts RSV generates
-    rec = Metric.MetricRecord()
-    rec.MetricName(record["metricName"])
-    rec.MetricType(record["metricType"])
-    rec.MetricStatus(record["metricStatus"])
-    rec.Timestamp(record["timestamp"])
-    rec.ServiceType(record["serviceType"])
-    rec.SummaryData(record["summaryData"])
-    rec.DetailsData(record["detailsData"])
+        # Gratia.Send will return an empty string on success, or a string containing
+        # the problem on error.
+        error_msg = self.Gratia.Send(rec)
+        if error_msg and not re.match("OK", error_msg):
+            raise RSVConsumer.GratiaException("Failed to send via Gratia: %s" % error_msg)
 
-    # serviceURI and gatheredAt will be on "non-local" metrics
-    if "serviceURI" in record and "gatheredAt" in record:
-        rec.ServiceUri(record["serviceURI"])
-        rec.GatheredAt(record["gatheredAt"])
-    # And hostName will be in "local" metrics
-    elif "hostName" in record:
-        rec.HostName(record["hostName"])
-
-    return rec
+        return
 
 
-def parse_wlcg_record(raw_record):
-    """ Parse a record in WLCG format and return a dict with values.  Example of WLCG record:
-
-    metricName: org.osg.general.ping-host
-    metricType: status
-    timestamp: 2010-08-21T17:47:08Z
-    metricStatus: OK
-    serviceType: OSG-CE
-    serviceURI: osg-edu
-    gatheredAt: vdt-itb.cs.wisc.edu
-    summaryData: OK
-    detailsData: Host osg-edu is alive and responding to pings!
-    EOT
-
-    Note: for local probe serviceURI and gatheredAt are replaced by hostName
-
-    """
-
-    record = {}
-
-    # detailsData will always come last, and might be multiple lines
-    # Keep state so that once we are in the detailsData section, we put the rest of the
-    # lines into detailsData and return when we see EOT
-    in_details_data = 0
-    for line in raw_record.split('\n'):
-        if not in_details_data:
-            match = re.match("(\w+):(.*)$", line)
-            if match:
-                record[match.group(1)] = match.group(2).strip()
-                if match.group(1) == "detailsData":
-                    in_details_data = 1
-            else:
-                raise InvalidRecordError("Invalid line:\n\t%s\n\nFull record:\n%s" % (line, raw_record))
-        else:
-            if re.match("EOT$", line):
-                return record
-            else:
-                record["detailsData"] += line + "\n"
-
-    # If we reach this point, it means we did not see EOT.  So the record is invalid
-    raise InvalidRecordError("'EOT' marker missing")
-            
-
-def log(msg):
-    """ Print a message with a timestamp """
-    timestamp = strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    print "%s: %s" % (timestamp, msg)
-
-    if LOG_FH:
-        LOG_FH.write("%s: %s\n" % (timestamp, msg))
-        
-
-def die(msg):
-    """ Print an error message and exit with a non-zero status """
-    log(msg)
-    sys.exit(1)
-
-
-def sigterm_handler(signum, frame):
-    """ The handler for SIGTERM and SIGKILL """
-    log("Caught signal #%s.  Exiting after processing current record." % signum)
-    global CONSUMER_DONE
-    CONSUMER_DONE = 1
-    return
-
-
-
-main()
+consumer = GratiaConsumer()
+consumer.validate_failed_records_dir()
+consumer.initialize_gratia()
+consumer.process_files(failed_records_dir=consumer.failed_records_dir)
+sys.exit(0)
