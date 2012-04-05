@@ -1,156 +1,198 @@
-#!/usr/bin/env perl
-use strict;
-use warnings;
-use Getopt::Long;
-use POSIX;
+#!/usr/bin/env python
 
-# Turn autoflush on
-$|=1;
+""" This script processes RSV records and interfaces with Nagios """
 
-# The file we will write all output to
-my $output_fh;
-my $conf_file;
-my $send_nsca;
-GetOptions("conf-file=s" => \$conf_file,
-           "send-nsca"   => \$send_nsca,
-           );
+import os
+import sys
+import ConfigParser
 
+# Used by send_nagios and send_nsca
+import urllib2
+import urllib
+import re
+import base64
+from urlparse import urlparse
+import string
 
-#
-# We don't want people to accidently run this consumer as root because that may
-# cause permissions problems on log files and directories for the regular RSV user.
-#
-if($> == 0) {
-    die("ERROR: The nagios-consumer cannot be run as root");
-}
+from optparse import OptionParser
 
+import RSVConsumer
 
-##
-## Make sure we have VDT_LOCATION set in our environment
-##
-my $VDT_LOCATION = $ENV{VDT_LOCATION};
-die("ERROR: The VDT_LOCATION environment variable is not set") unless ($VDT_LOCATION);
-die("ERROR: VDT_LOCATION is set to an non-existing location '$VDT_LOCATION'") unless (-e $VDT_LOCATION);
-
-if(!$conf_file) {
-    die("ERROR: Usage: $0 --conf-file <path to Nagios config file>");
-}
-elsif(!-e $conf_file) {
-    die("ERROR: Specified configuration file ($conf_file) does not exist");
-}
-
-##
-my $PROBE_LOG_DIRECTORY = "$VDT_LOCATION/osg-rsv/output/nagios-consumer";
-
-# This variable will be set to true if we catch a SIGTERM.  The script will
-# exit after processing the current record completes.
-my $CONSUMER_DONE = 0;
-
-# Allow for graceful shutdown
-$SIG{TERM} = \&catch_term;
-
-##
-## If we print to STDOUT and STDERR, Condor will overwrite the file everytime the
-## script executes.  So we'll use a file to record all output, and rotate it.
-##
-my $output_file = "$VDT_LOCATION/osg-rsv/logs/consumers/nagios-consumer.output";
-open($output_fh, ">>", $output_file) or die("Cannot open '$output_file' for output: $!");
+nagiosCode = {}
+nagiosCode["OK"]       = "0"
+nagiosCode["WARNING"]  = "1"
+nagiosCode["CRITICAL"] = "2"
+nagiosCode["UNKNOWN"]  = "3"
 
 
-## Main loop
-my @files = glob("$PROBE_LOG_DIRECTORY/*");
-debug_print("Beginning execution, found " . scalar(@files) . " files");
-foreach my $file (@files) {
-    last if($CONSUMER_DONE);
-    my $file_data = slurp($file);
+class NagiosConsumer(RSVConsumer.RSVConsumer):
 
-    if(!defined($file_data)) {
-        debug_print("Error reading from $file.  Removing record without processing it.");
-    }
-    else {
-        write_data($file, $file_data);
-    }
+    name = "nagios"
 
-    unlink($file);
-}
+    def parse_arguments(self):
 
-exit;
+        usage = """usage: nagios-consumer
+          --conf-file <path to configuration file>
+          --send-nsca
+          --help | -h 
+          --version
+        """
 
-## -----------------------------------------------------------
-## catch_term
-## SIGTERM handler - used to allow the consumer to exit gently.
-## -----------------------------------------------------------
-sub catch_term {
-    debug_print("Caught signal! Exiting...\n");
-    $CONSUMER_DONE = 1;
-}
+        version = "nagios-consumer 5.0"
+        description = "This script processes RSV records and sends them to Nagios."
+
+        parser = OptionParser(usage=usage, description=description, version=version)
+        parser.add_option("--conf-file", dest="conf_file", default=None,
+                          help="Nagios configuration file.")
+        parser.add_option("--send-nsca", dest="send_nsca", action="store_true", default=False,
+                          help="Use NSCA.  Default=%default")
+
+        (self.__options, self.__args) = parser.parse_args()
+        return
 
 
-## -----------------------------------------------------------
-## debug_print
-## Add a timestamp to messages
-## -----------------------------------------------------------
-sub debug_print {
-   my ($str) = @_;
-   my $msg = strftime("%Y-%m-%d %H:%M:%S - $str\n" , localtime);
-   print $msg;
+    def load_config_file(self):
+        """ """
+        if not os.path.exists(self.__options.conf_file):
+            self.die("ERROR: The supplied configuration file '%s' does not exist." % self.__options.conf_file)
 
-   # Just in case this hasn't been opened yet
-   if(defined($output_fh)) {
-       print $output_fh $msg;
-   }
-}
+        self.config = ConfigParser.ConfigParser()
+        self.config.read(self.__options.conf_file)
+        return
+        
 
-## -----------------------------------------------------------
-## write_data
-## -----------------------------------------------------------
-sub write_data {
-    my ($file, $data) = @_;
+    def process_record(self, raw_record):
+        """ Process a record in WLCG format """
+        record = self.parse_record(raw_record)
 
-    # detailsData can be on multiple lines, but we do not need that field, only
-    # things that come before it.  So when we see we've reached detailsData then
-    # we'll stop processing.
-    my %info;
-    foreach my $line (split("\n", $data)) {
-        if($line =~ /^\s*(\S+):\s+(.+)$/) {
-            last if $1 eq "detailsData";
-            $info{$1} = $2;
-        }
-    }
+        metric = record["metricName"]
+        PLUGIN_STATE = nagiosCode[record["metricStatus"]]
+        PLUGIN_OUTPUT = record["detailsData"][0:255]
+        PLUGIN_HOST = record.get("serviceURI", record.get("hostName", ""))
 
-    # Check that we got the necessary attributes
-    foreach my $attribute (qw/metricName metricStatus timestamp/) {
-        if(not defined($info{$attribute})) {
-            debug_print("ERROR: In file '$file', missing attribute $attribute.  Skipping record.");
-            debug_print("Full record:\n$data");
-            return;
-        }
-    }
+        if self.__options.send_nsca:
+            self.send_nsca(metric, PLUGIN_HOST, PLUGIN_STATE, PLUGIN_OUTPUT)
+        else:
+            self.send_nagios(metric, PLUGIN_HOST, PLUGIN_STATE, PLUGIN_OUTPUT)
 
-    if(!defined($info{hostName}) and !(defined($info{serviceURI}) and defined($info{gatheredAt}))) {
-        debug_print("ERROR: Missing either hostName or (serviceURI + gatheredAt)");
-        debug_print("Full record:\n$data");
-        return;
-    }
-   
-    ########################
-    # Do nagios calls here #
-    ########################
-    my $exe = ($send_nsca) ? "rsv2nsca.py" : "rsv2nagios.py";
-    my $rsvnagios_cmd = "$ENV{VDT_LOCATION}/osg-rsv/bin/misc/$exe $conf_file $info{metricName} <$file >>$ENV{VDT_LOCATION}/osg-rsv/logs/consumers/rsv2nagios.log";
-    debug_print("Cmd: $rsvnagios_cmd");
-    system("$rsvnagios_cmd");
-}
+        return
 
-sub slurp {
-    my ($file) = @_;
-    
-    if(not open(FILE, "<", $file)) {
-        debug_print("ERROR: Unable to open $file: $!");
-        return undef;
-    }
-    my $contents = join("", <FILE>);
-    close(FILE);
-    
-    return $contents;
-}
+
+    def send_nsca(self, SERVICE, HOST, PLUGIN_STATE, PLUGIN_OUTPUT): 
+        """ This code is from rsv2nsca.py """
+        URL = self.config.get("RSV", "NAGIOS_URL")
+
+        # send_nsca -H $nagios_host
+        # $HOST, $SERVICE, $PLUGIN_STATE, $PLUGIN_OUTPUT
+
+        nsca_cmd="/usr/sbin/send_nsca -d , -H " + URL
+        nsca_id=os.popen(nsca_cmd, "w")
+        nsca_id.write(HOST + "," + SERVICE + "," + PLUGIN_STATE + "," + PLUGIN_OUTPUT + "\n")
+        nsca_id.close()
+        return
+        
+
+    def send_nagios(self, SERVICE, HOST, PLUGIN_STATE, PLUGIN_OUTPUT):
+        """ This code is from rsv2nagios.py """
+        URL = self.config.get("RSV", "NAGIOS_URL")
+        USERNAME = self.config.get("RSV", "NAGIOS_USERNAME")
+        PASSWORD = self.config.get("RSV", "NAGIOS_PASSWORD")
+
+	theurl="URL?"
+	theurl=theurl+"cmd_typ=30"
+	theurl=theurl+"&cmd_mod=2"
+	theurl=theurl+"&service=SERVICE"
+	theurl=theurl+"&host=HOST"
+	theurl=theurl+"&plugin_state=PLUGIN_STATE"
+	theurl=theurl+"&plugin_output=PLUGIN_OUTPUT"
+	theurl=theurl+"&btnSubmit=Commited"
+
+	PLUGIN_OUTPUT=string.strip(PLUGIN_OUTPUT)
+	PLUGIN_OUTPUT=string.replace(PLUGIN_OUTPUT," ","+")
+	PLUGIN_OUTPUT=urllib.quote(PLUGIN_OUTPUT)
+
+	theurl=string.replace(theurl,"URL",URL)
+	theurl=string.replace(theurl,"SERVICE",SERVICE)
+	theurl=string.replace(theurl,"HOST",HOST)
+	theurl=string.replace(theurl,"PLUGIN_OUTPUT",PLUGIN_OUTPUT)
+	theurl=string.replace(theurl,"PLUGIN_STATE",PLUGIN_STATE)
+
+	# now the user name and password
+
+	req = urllib2.Request(theurl)
+	try:
+	    handle = urllib2.urlopen(req)
+	except IOError, e:
+	    pass
+	else:
+	    # Here I will have to put code to deal with unauthenticated pages
+	    print "No authentication, I will exit"
+	    sys.exit(1)
+
+
+	if not hasattr(e, 'code') or e.code != 401:
+	    # we got an error - but not a 401 error
+	    print "This page isn't protected by authentication."
+	    print 'But we failed for another reason.'
+	    print e
+	    sys.exit(1)
+
+	authline = e.headers['www-authenticate']
+
+	authobj = re.compile(
+	    r'''(?:\s*www-authenticate\s*:)?\s*(\w*)\s+realm=['"]([^'"]+)['"]''',
+	    re.IGNORECASE)
+	# this regular expression is used to extract scheme and realm
+	matchobj = authobj.match(authline)
+
+	if not matchobj:
+	    # if the authline isn't matched by the regular expression
+	    # then something is wrong
+	    print 'The authentication header is badly formed.'
+	    print authline
+	    sys.exit(1)
+
+	scheme = matchobj.group(1)
+	realm = matchobj.group(2)
+	# here we've extracted the scheme
+	# and the realm from the header
+	if scheme.lower() != 'basic':
+	    print 'This code only works with BASIC authentication.'
+	    sys.exit(1)
+
+	base64string = base64.encodestring(
+			'%s:%s' % (USERNAME, PASSWORD))[:-1]
+	authheader =  "Basic %s" % base64string
+	req.add_header("Authorization", authheader)
+	try:
+
+	    handle = urllib2.urlopen(req)
+
+	except IOError, e:
+            if hasattr(e, 'code') and e.code==404:
+            #The NAGIOS_URL parameter is wrong
+                print "NAGIOS_URL "+URL+" returned 404 not found."
+		sys.exit(1)
+	    # Username/password is wrong
+	    print "It looks like the username or password is wrong."
+            print e;
+	    sys.exit(1)
+
+	thepage = handle.read()
+
+	for line in string.split(thepage,"\n"):
+	  if string.find(line,"<P><DIV CLASS='infoMessage'>")!=-1:
+	    message=string.replace(line,"<P><DIV CLASS='infoMessage'>","")
+	    message=string.replace(message,"<BR><BR>","")
+	    print message
+	  if string.find(line,"<P><DIV CLASS='errorMessage'>")!=-1:
+	    message=string.replace(line,"<P><DIV CLASS='errorMessage'>","")
+	    message=string.replace(message,"</DIV></P>","")
+	    print message
+
+
+
+consumer = NagiosConsumer()
+consumer.load_config_file()
+consumer.process_files()
+sys.exit(0)
