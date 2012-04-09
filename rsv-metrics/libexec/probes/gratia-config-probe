@@ -377,7 +377,7 @@ sub probe_check_condor() {
   }
   else {
       # If Condor is not installed in the default location we will go looking for it.
-      if (system("which condor_config_val") != 0) {
+      if (system("which condor_config_val >/dev/null 2>&1") != 0) {
           open(IN, '<', '/etc/globus/globus-condor.conf');
           my $condor_config_val;
           my $condor_config;
