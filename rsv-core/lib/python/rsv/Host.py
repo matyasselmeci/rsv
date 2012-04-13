@@ -7,12 +7,6 @@ import ConfigParser
 class Host:
     """ Instantiable class to read and store configuration about a single host """
 
-    rsv = None
-    host = None
-    config = None
-    conf_dir = None
-    config_file = None
-    
     def __init__(self, host, rsv):
         self.host = host
         self.rsv  = rsv

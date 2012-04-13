@@ -13,8 +13,6 @@ import Host
 class Condor:
     """ Define the interface to condor-cron """
 
-    rsv = None
-
     def __init__(self, rsv):
         self.rsv = rsv
 

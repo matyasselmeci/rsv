@@ -8,14 +8,6 @@ import ConfigParser
 class Consumer:
     """ Instantiable class to read and store configuration about a single consumer """
     
-    rsv = None
-    name = None
-    config = None
-    conf_dir = None
-    meta_dir = None
-    executable = None
-
-
     def __init__(self, consumer, rsv):
         # Initialize vars
         self.name = consumer
