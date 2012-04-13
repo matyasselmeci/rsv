@@ -679,7 +679,7 @@ sub discoverProbesToTest {
 }
 
 
-## Print exit code, stdout, stderr in format expected by RSVProbeBase perl module
+## Print exit code, stdout, stderr in format expected by rsv-control
 sub workerScriptOutput {
     if ($options{'human-readable'}) {
         my $probe_dir = probeDirPath();
