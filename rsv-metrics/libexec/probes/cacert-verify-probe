@@ -241,7 +241,7 @@ Additionally it makes sure that all IGTF CAs are installed.
       try:
         file_md5sum[os.path.basename(f).split('.')[0]] = md5sum(f)
       except IOError:
-        self.return_unknown("Could not calculate md5sums of your CA file %s." % f)
+        self.add_message("Could not calculate md5sums of your CA file %s. This may result in a probe error. Please verify the  file." % f)
         # eliminate error? file may have been deleted in the mean time, just skip?
         pass
     # Download the ms5sum file from OSG/ITB cache
@@ -307,8 +307,8 @@ Additionally it makes sure that all IGTF CAs are installed.
     }
 """
 
-    # Step 3: Check the CAs to ensure that md5sums matchup
-    status_code = 0
+    # Step 3: Check the CAs to ensure that md5sums match-up
+    status_code = rsvprobe.OK
     # No counting of errors
     #error_count = 0
     #warn_count = 0
@@ -323,8 +323,8 @@ Additionally it makes sure that all IGTF CAs are installed.
         continue
       try:
         if file_md5sum[i] != md5[i]:
-          # We have detected atleast a warning
-          status_code = 1
+          # We have detected at least a warning
+          status_code = rsvprobe.WARNING
           # warn/err count?
           error_hash.append(i)
       except KeyError:
@@ -338,7 +338,7 @@ Additionally it makes sure that all IGTF CAs are installed.
         if i in found_cas: 
           continue  # CA was present. 
         #self.add_warning("Certficate %s mssing" % i)
-        status_code = 1
+        status_code = rsvprobe.WARNING
         egee_error_hash.append(i)
         missing_count += 1
 
@@ -351,7 +351,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     out_msg += "\t%s IGTF CAs are missing and is required for sites that need to conform to EGEE policy.\n" % missing_count
     out_msg += "\tList of missing CAs include: %s.\n" % egee_error_hash
      
-    if status_code == 0:
+    if status_code == rsvprobe.OK:
       # Remove error file if exists 
       if os.path.isfile(self.error_file):
         try:
@@ -361,7 +361,7 @@ Additionally it makes sure that all IGTF CAs are installed.
             "Could not delete the error file (%s). Please delete it by hand to avoid potential future problems." % 
             self.error_file)
       self.return_ok("CAs are in sync with OSG distribution\n")
-    elif status_code == 1:
+    elif status_code == rsvprobe.WARNING:
       if os.path.isfile(self.error_file):
         lines = None
         try:
@@ -396,7 +396,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     # Step ?6?: Recording the result for RSV output
     # already done
     # As it is now it should never end up here
-    if status_code > 1:
+    if status_code > rsvprobe.WARNING:
       self.return_critical("Probe ended with unexpected error condition")
     self.return_unknown("Probe ended with unexpected status")
 
