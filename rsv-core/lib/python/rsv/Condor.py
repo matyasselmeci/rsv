@@ -5,7 +5,7 @@ import re
 import pwd
 import time
 import commands
-import tempfile
+#unused import tempfile
 from time import strftime
 
 import Host
@@ -42,7 +42,7 @@ class Condor:
 
         classads = self.get_classads("OSGRSVUniqueName==\"%s\"" % condor_id)
 
-        if classads == None:
+        if classads is None:
             self.rsv.log("ERROR", "Could not determine if job is running")
             return False
 
@@ -70,7 +70,7 @@ class Condor:
 
         # Build the command
         cmd = "condor_cron_q -l"
-        if constraint != None:
+        if  constraint is not None:
             cmd += " -constraint '%s'" % constraint
 
         (ret, out) = self.commands_getstatusoutput(cmd)
@@ -85,11 +85,18 @@ class Condor:
 
     def number_of_running_metrics(self):
         """ Return the number of running metrics """
-        return len(self.get_classads("OSGRSV==\"metrics\""))
+        try:
+            return len(self.get_classads("OSGRSV==\"metrics\""))
+        except TypeError:
+            self.rsv.log("ERROR", "Classad parsing failed, unable to count running metrics")
+
 
     def number_of_running_consumers(self):
         """ Return the number of running consumers """
-        return len(self.get_classads("OSGRSV==\"consumers\""))
+        try:
+            return len(self.get_classads("OSGRSV==\"consumers\""))
+        except TypeError:
+            self.rsv.log("ERROR", "Classad parsing failed, unable to count running consumers")
 
 
     def start_metric(self, metric, host):
@@ -150,8 +157,8 @@ class Condor:
         Create submission file, submits it to Condor and removes it
         """
 
+        sub_file_name = os.path.join(dir, condor_id + ".sub")
         try:
-            sub_file_name = os.path.join(dir, condor_id + ".sub")
             file_handle = open(sub_file_name, 'w')
             file_handle.write(submit_file_contents)
             file_handle.close()
@@ -167,7 +174,7 @@ class Condor:
         os.chdir(os.path.join("/", "tmp"))
 
         # Submit the job and remove the file
-        cmd = "condor_cron_submit %s" % (sub_file_name)
+        cmd = "condor_cron_submit %s" % sub_file_name
         raw_ec, out = self.commands_getstatusoutput(cmd, self.rsv.get_user())
         exit_code = os.WEXITSTATUS(raw_ec)
         self.rsv.log("INFO", "Condor submission: %s" % out)
@@ -205,7 +212,7 @@ class Condor:
 
         # Check if any jobs are running to be removed
         jobs = self.get_classads(constraint)
-        if jobs == None:
+        if jobs is None:
             self.rsv.log("ERROR", "Problem stopping RSV jobs.  Condor may not be running")
             return False
         if len(jobs) == 0:
@@ -214,7 +221,7 @@ class Condor:
 
         # Build the command
         cmd = "condor_cron_rm"
-        if constraint != None:
+        if constraint is not None:
             cmd += " -constraint '%s'" % constraint
 
         (ret, out) = self.commands_getstatusoutput(cmd)
@@ -358,7 +365,7 @@ class Condor:
                 output = "%5s.%-1s %-10s %-2s %-15s %-44s\n" % (classad["ClusterId"], classad["ProcId"],
                                                                 owner, status, next_run_time, metric)
                 
-            return (metric, output)
+            return metric, output
 
 
         #
