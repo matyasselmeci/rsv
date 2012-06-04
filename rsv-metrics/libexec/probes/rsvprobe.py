@@ -33,7 +33,6 @@ import re
 
 # Add the current directory to the path:
 # auxiliary files are staged in the same directory during remote execution
-import sys
 if not sys.path[0] == ".":
   sys.path.insert(0, ".")
 try:
@@ -44,7 +43,7 @@ except ImportError:
 
 # Wrapper around commands or timed_command
 def run_command(cmd, timeout=0, workdir=None):
-  "Run an external command in the workdir directory. Timeout is available only if timed_command is available."
+  """Run an external command in the workdir directory. Timeout is available only if timed_command is available."""
   olddir = None
   if workdir: 
     olddir = os.getcwd()
@@ -53,7 +52,7 @@ def run_command(cmd, timeout=0, workdir=None):
     except OSError, e:
       return 1, "cd to workdir %s failed: %s" % (workdir, e)
   if timed_command:
-    ec, elapsed, out, err = timed_command.timed_command(cmb, timeout)
+    ec, elapsed, out, err = timed_command.timed_command(cmd, timeout)
     outerr = out + err
   else:      
     ec, outerr = commands.getstatusoutput(cmd)
@@ -63,7 +62,7 @@ def run_command(cmd, timeout=0, workdir=None):
 
 # Test connection to host:port
 def ping(host, port="80"):
-  "Check if able to connect to HOST on the specified PORT (80 as default). Return True/False and a message."
+  """Check if able to connect to HOST on the specified PORT (80 as default). Return True/False and a message."""
   # Simple alive test
   # There are more complex implementation of ping running the command in a subprocess, 
   # as python function, or within a library: 
@@ -87,7 +86,7 @@ def ping(host, port="80"):
 
 # Find the correct certificate directory
 def get_ca_dir():
-  "Find the CA certificate directory in both Pacman and RPM installations"
+  """Find the CA certificate directory in both Pacman and RPM installations"""
   cadirlt = []
   if os.getenv("OSG_LOCATION"):
     cadirlt.append(os.path.join(os.getenv("OSG_LOCATION"),"globus/TRUSTED_CA"))
@@ -103,7 +102,7 @@ def get_ca_dir():
   return "/etc/grid-security/certificates"
 
 def get_http_doc(url, quote=True):
-  "Retrieve a document using HTTP and return all lines"
+  """Retrieve a document using HTTP and return all lines"""
   if quote:
     u = url.split('/', 3)
     u[-1] = urllib.quote(u[-1]) 
@@ -118,7 +117,7 @@ def get_http_doc(url, quote=True):
   return ret
 
 def get_config_val(req_key, req_section=None): 
-  "Get the value of an option from a section of OSG configuration in both Pacman and RPM installations. Return None if option is not found."
+  """Get the value of an option from a section of OSG configuration in both Pacman and RPM installations. Return None if option is not found."""
   confini_fname = None
   confini_fname_list = []
   if os.getenv("OSG_LOCATION"):
@@ -278,7 +277,7 @@ def uri2port(uri, default=None):
   components = urlparse.urlparse(uri)
   try:
     ret = components.port
-    if ret == None:
+    if ret is None:
       return default
     return ret
   except AttributeError:
@@ -390,24 +389,24 @@ https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
     self.help_message = ""
 
   def run(self):
-    "Probe execution - replaced by the specific probes"
+    """Probe execution - replaced by the specific probes"""
     pass
 
   def atexit(self):
-    "Function invoked before exiting"
+    """Function invoked before exiting"""
     pass
 
   def invalid_option_handler(self, msg):
-    "By default a probe aborts if an unvalid option is received. This can be changed replacing this handler."
+    """By default a probe aborts if an unvalid option is received. This can be changed replacing this handler."""
     self.return_unknown("Invalid option (%s). Aborting probe" % msg)      
     
   def get_version(self):
-    "Returns the probe's name and version."
+    """Returns the probe's name and version."""
     ret = "Probe %s: version %s" % (self.name, self.version)
     return ret
 
   def get_usage(self):
-    "Usage string."
+    """Usage string."""
     ret = "Usage: %s [opts] \n" % sys.argv[0]
     if self.help_message:
       ret += "%s\n" % self.help_message
@@ -416,7 +415,7 @@ https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
     return ret
 
   def get_metrics(self):
-    "Returns a list of the supported metrics, described according to specification."
+    """Returns a list of the supported metrics, described according to specification."""
     ret = ""
     for m in self.supported_metrics:
       ret += m.describe()
@@ -424,14 +423,14 @@ https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
     return ret
 
   def get_metric(self,  metric_name):
-    "Returns the metric named. None if it is not supported by the probe."
+    """Returns the metric named. None if it is not supported by the probe."""
     for m in self.supported_metrics:
       if metric_name == m.name:
         return m
     return None
 
   def addopt(self, short_str, long_str, help_str):
-    "Helper function to add options supported by subclasses."
+    """Helper function to add options supported by subclasses."""
     self.options_short += short_str
     self.options_long.append(long_str)
     self.options_help.append(help_str)
@@ -445,6 +444,8 @@ Define parseopt(self) and first call the one of the parent 'options, optlist, re
 then process the options as desired and at the end return all of them for processing in subclasses: 'return options, optlist, remainder'
 """
     # using sys.argv, no real usecase to pass different args
+    options = []
+    remainder = []
     try:
       options, remainder = getopt.getopt(sys.argv[1:], self.options_short, self.options_long)
     except getopt.GetoptError, emsg:
@@ -495,13 +496,13 @@ then process the options as desired and at the end return all of them for proces
     return options, optlist, remainder 
 
   def out_debug(self, text):
-    "Debug messages are sent to stderr."
+    """Debug messages are sent to stderr."""
     # output the text to stderr
     #print >> sys.stderr, text
     sys.stderr.write("%s\n" % text)
 
   def add_message(self, text):
-    "Add a message to the probe detailed output. The status is not affected."
+    """Add a message to the probe detailed output. The status is not affected."""
     self.detailed.append("MSG: %s" % text)
 
   def add(self, what, text, exit_code):
@@ -527,25 +528,25 @@ Retuns True if status and summary have been updated, False otherwise.
     return False
 
   def trim_detailed(self, number=1):
-    "detailed normally contains a copy of te summary, trim_detailed allows to remove it"
+    """detailed normally contains a copy of te summary, trim_detailed allows to remove it"""
     self.detailed = self.detailed[:-number]
 
   def add_ok(self, text, exit_code=DEFAULT_ECODE):
-    "OK message"
+    """OK message"""
     self.add(OK, text, exit_code)
 
   def add_warning(self, text, exit_code=DEFAULT_ECODE):
-    "WARNING mesage"
+    """WARNING mesage"""
     self.add(WARNING, text, exit_code)
 
   def add_critical(self, text, exit_code=DEFAULT_ECODE):
-    "CRITICAL message"
+    """CRITICAL message"""
     self.add(CRITICAL, text, exit_code)
 
   # add_unknown makes no sense because UNKNOWN is an exit condition
 
   def probe_return(self, what, text, exit_code=DEFAULT_ECODE):
-    "All the return_... functions add messages to the probe output, affect the status and terminate the probe"
+    """All the return_... functions add messages to the probe output, affect the status and terminate the probe"""
     updated = self.add(what, text, exit_code)
     if updated:
       self.trim_detailed()
@@ -559,23 +560,23 @@ Retuns True if status and summary have been updated, False otherwise.
     sys.exit(self.ecode)
 
   def return_ok(self, text):
-    "return OK"
+    """return OK"""
     self.probe_return(OK, text, 0)
 
   def return_critical(self, text, exit_code=0):
-    "return CRITICAL"
+    """return CRITICAL"""
     self.probe_return(CRITICAL, text, exit_code)
 
   def return_warning(self, text, exit_code=0):
-    "return WARNING"
+    """return WARNING"""
     self.probe_return(WARNING, text, exit_code)
 
   def return_unknown(self, text, exit_code=1):
-    "return UNKNOWN"
+    """return UNKNOWN"""
     self.probe_return(UNKNOWN, text, exit_code)
 
   def print_short_output(self):
-    "Print the probe output in the short format (RSV short format)"
+    """Print the probe output in the short format (RSV short format)"""
     outstring = "RSV BRIEF RESULTS:\n"
     outstring += "%s\n" % STATUS_DICT[self.status]
     outstring += "%s\n" % self.summary
@@ -654,7 +655,7 @@ timestamp	 Required	 The time the metric was gathered (String ISO8601 UTC time)
       print outstring
 
   def print_output(self):
-    "Select the output format"
+    """Select the output format"""
     if self.select_wlcg_output:
       self.print_wlcg_output()
     else:
@@ -687,7 +688,7 @@ dtype - dataType	 The type of the data: float, int, string, boolean (only 'perfo
  
  
   def describe(self):
-    "Return a metric description in the standard WLCG format"
+    """Return a metric description in the standard WLCG format"""
     ret = "serviceType:	%s\nmetricName: %s\nmetricType: %s\n" % (self.stype, self.name, self.mtype)
     if self.mtype == 'performance':
       ret += "dataType: %s\n" % self.dtype # The type of the data: float, int, string, boolean
