@@ -41,8 +41,13 @@ class Sysutils:
             (stdout, stderr) = p.communicate()
             signal.alarm(0)
         except TimeoutError:
+            # p.kill() is new in Python 2.6 and we support Python 2.4 so we need to have a fallback
+            if hasattr(p, "kill"):
+                p.kill()
+            else:
+                os.kill(p.pid, signal.SIGKILL)
+                
             self.rsv.log("ERROR", "Command timed out (timeout=%s): %s" % (timeout, command))
-            os.kill(child.pid, signal.SIGKILL)
             raise TimeoutError("Command timed out (timeout=%s)" % timeout)
 
         self.rsv.log("INFO", "Exit code of job: %s" % p.returncode)
