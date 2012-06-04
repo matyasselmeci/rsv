@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-_version_info = "$Id: timed_command.py,v 1.13 2011/07/22 14:37:25 cgw Exp $"
-
 # Author:  Charles G Waldman
 # Date: Nov 10 2007
 # Email: cgw@hep.uchicago.edu
@@ -11,6 +9,8 @@ See that function's docstring for more info.
 This module has been extensively used in ATLAS. You can find it here:
 http://repo.mwt2.org/viewvc/Python/timed_command.py?content-type=text%2Fplain
 """
+_version_info = "$Id: timed_command.py,v 1.13 2011/07/22 14:37:25 cgw Exp $"
+
 
 import sys, os, time, select, fcntl, signal, errno
 
