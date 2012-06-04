@@ -64,7 +64,7 @@ class Metric:
                 ret = self.config.read(file)
                 # Python 2.3 (RHEL-4) does not return anything so we can only do this check
                 # if we get an array back.
-                if ret != None:
+                if ret is not None:
                     if file not in ret:
                         self.rsv.log("ERROR", "An unknown error occurred while trying to load config file '%s'" %
                                      file)
@@ -188,7 +188,7 @@ class Metric:
                     self.rsv.log("WARNING", "Invalid entry: %s = %s" % (var, setting))
                     self.rsv.log("WARNING", "Action '%s' must be one of (%s)" %
                                  (action, " ".join(valid_actions)))
-                elif (not value and action not in actions_without_value):
+                elif not value and action not in actions_without_value:
                     self.rsv.log("WARNING", "Invalid environment config setting in section '%s'" % section)
                     self.rsv.log("WARNING", "Invalid entry: %s = %s" % (var, setting))
                     self.rsv.log("WARNING", "Format must be VAR = ACTION | VALUE")
