@@ -99,7 +99,7 @@ class Table(object):
         if not sort_:
             for i in self._buffer:
                 #multiline format to be faster?
-                retlines.append(self.format(*(i)))
+                retlines.append(self.format(*i))
                 self._buffer = []
                 return retlines
         order_dic = {}        
@@ -129,7 +129,7 @@ class Table(object):
             raise TableError("Table columns not set")
         if not self.format_str:
             self.makeFormat()
-        strval = strval_par
+        strval = list(strval_par)
         if self.truncate_quick:
             strval = [strval_par[0][:self.columns[0]-1],] 
             for i in range(len(self.columns)-2):
@@ -167,8 +167,5 @@ class TableError(Exception):
     """
 
     def __init__(self, message, *args, **kwargs):
-        super(TableError, self).__init__(*args, **kwargs)
-        self.message = message
-         
-    def __str__(self):
-        return repr(self.message)
+        Exception.__init__(self, message, *args, **kwargs)
+
