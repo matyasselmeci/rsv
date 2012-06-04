@@ -5,8 +5,8 @@ import os
 import re
 import sys
 import time
-import fcntl
-import select
+#unused import fcntl
+#unused import select
 import signal
 import subprocess
 
@@ -51,7 +51,7 @@ class Sysutils:
             raise TimeoutError("Command timed out (timeout=%s)" % timeout)
 
         self.rsv.log("INFO", "Exit code of job: %s" % p.returncode)
-        return (p.returncode, stdout, stderr)
+        return p.returncode, stdout, stderr
 
 
     def switch_user(self, user, desired_uid, desired_gid):
@@ -102,11 +102,11 @@ class Sysutils:
 
                 for keyword in keywords:
                     if re.search(keyword, contents):
-                        return (keyword, contents)
+                        return keyword, contents
 
             time.sleep(sleep_interval)
         
-        return (None, None)
+        return None, None
     
 
     def slurp(self, file, must_exist=0):
@@ -131,11 +131,13 @@ class Sysutils:
 
     def which(self, program):
         """ Examine the path for supplied binary.  Return path to binary or None if not found """
+        #def is_exe(fpath):
+        #    return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
         self.rsv.log("DEBUG", "Looking for binary named '%s'" % program)
         
         fpath, fname = os.path.split(program)
         if fpath:
-            if is_exe(program):
+            if os.path.isfile(program) and os.access(program, os.X_OK):
                 self.rsv.log("DEBUG", "Fully qualified program %s is a valid executable." % program)
                 return program
         else:
