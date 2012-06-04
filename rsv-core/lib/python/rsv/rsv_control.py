@@ -105,7 +105,7 @@ def process_options(arguments=None):
                      help="Skip the ping test against the host being monitored")
     parser.add_option_group(group)
 
-    if arguments == None:
+    if arguments is None:
         (options, args) = parser.parse_args()
     else:
         (options, args) = parser.parse_args(arguments)
