@@ -17,12 +17,18 @@ class Table(object):
     Truncating options are evaluated in order and first ones supersede the followings
     """
     def __init__(self, columns=(), header_par=()):
+        # tuple - width of the columns
         self.columns = columns
+        # string - table header
         self.header = ""
+        # booleans - flags controlling how columns are truncated
         self.truncate = True
         self.truncate_quick = False
         self.truncate_leftright = False
+        # array - content of the table before formatting
         self._buffer = []
+        # header_par (tuple) may contain the headers of the columns and  it is
+        # formatted and assigned to self.header
         if header_par:
             self.makeHeader(*header_par)
         
@@ -31,8 +37,9 @@ class Table(object):
         self.columns = cols
         
     def makeHeader(self, *header_par):
-        """Create a formatted header string (usig the current style).
+        """Create a formatted header string (using the current style).
         Column widths should be set. Number of columns and element in the header should match.
+        The formatted header includes a line of dashes (-) underneath the headers.
         """
         header_args = header_par
         if not self.columns or len(self.columns) != len(header_args):
@@ -69,7 +76,7 @@ class Table(object):
         return
     
     def addToBuffer(self, *strval_par):
-        """Add line to internal buffer"""
+        """Add line to internal buffer. Each line should have the same length"""
         self._buffer.append(strval_par)
         return
 
@@ -158,7 +165,9 @@ class Table(object):
 class TableError(Exception):
     """Error in Table formatting: inconsistent options, line clash
     """
-    def __init__(self, message):
+
+    def __init__(self, message, *args, **kwargs):
+        super(TableError, self).__init__(*args, **kwargs)
         self.message = message
          
     def __str__(self):
