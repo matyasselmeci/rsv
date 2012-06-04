@@ -15,8 +15,12 @@ import Results
 import Sysutils
 import Consumer
 
+# Define base system paths
 OPENSSL_EXE = "/usr/bin/openssl"
-CONSUMER_CONFIG_FILE = os.path.join("/", "etc", "rsv", "consumers.conf")
+CONFIG_DIR = os.path.join("/", "etc", "rsv")
+LIBEXEC_DIR = os.path.join("/", "usr", "libexec", "rsv")
+LOG_DIR = os.path.join("/", "var", "log", "rsv")
+CONSUMER_CONFIG_FILE = os.path.join(CONFIG_DIR, "consumers.conf")
 
 class RSV:
     """ Class to load and store configuration information about this install
@@ -64,7 +68,7 @@ class RSV:
                 for item in defaults[section].keys():
                     self.config.set(section, item, defaults[section][item])
 
-        self.load_config_file(self.config, os.path.join("/", "etc", "rsv", "rsv.conf"), required=1)
+        self.load_config_file(self.config, os.path.join(CONFIG_DIR, "rsv.conf"), required=1)
         return
 
 
@@ -101,7 +105,7 @@ class RSV:
     
     def get_installed_metrics(self):
         """ Return a list of installed metrics """
-        metrics_dir = os.path.join("/", "usr", "libexec", "rsv", "metrics")
+        metrics_dir = os.path.join(LIBEXEC_DIR, "metrics")
         try:
             files = os.listdir(metrics_dir)
             files.sort()
@@ -120,7 +124,7 @@ class RSV:
 
     def get_installed_consumers(self):
         """ Return a list of installed consumers """
-        consumers_dir = os.path.join("/", "usr", "libexec", "rsv", "consumers")
+        consumers_dir = os.path.join(LIBEXEC_DIR, "consumers")
         try:
             files = os.listdir(consumers_dir)
             files.sort()
@@ -129,7 +133,7 @@ class RSV:
                 if re.search("-consumer$", entry):
                     consumers.append(entry)
             return consumers
-        except OSError:
+        except OSError, err:
             self.log("ERROR", "The consumers directory (%s) could not be accessed.  Error msg: %s" %
                      (consumers_dir, err))
             return []
@@ -151,7 +155,7 @@ class RSV:
 
         special_config_files = ["rsv.conf", "consumers.conf", "rsv-nagios.conf"]
 
-        conf_dir = os.path.join("/", "etc", "rsv")
+        conf_dir = CONFIG_DIR
         try:
             config_files = os.listdir(conf_dir)
             hosts = []
@@ -199,7 +203,9 @@ class RSV:
 
 
     def log(self, level, message, indent=0):
-        """ Interface to logger """
+        """ Interface to logger. Accepted logging levels are (case insensitive):
+        debug, info, warning, error, critical.
+        """
         level = level.lower()
 
         if indent > 0:
@@ -233,12 +239,12 @@ class RSV:
 
     def get_metric_log_dir(self):
         """ Return the directory to store condor log/out/err files for metrics """
-        return os.path.join("/", "var", "log", "rsv", "metrics")
+        return os.path.join(LOG_DIR, "metrics")
 
 
     def get_consumer_log_dir(self):
         """ Return the directory to store condor log/out/err files for consumers """
-        return os.path.join("/", "var", "log", "rsv", "consumers")
+        return os.path.join(LOG_DIR, "consumers")
 
 
     def get_user(self):
@@ -478,7 +484,6 @@ class RSV:
             self.log("INFO", "use-condor-g is not defined in Condor config file.  Defaulting to true.")
             return True
 
-        return True
 
     def use_legacy_proxy(self):
         """ Return True or False depending on if we should use a legacy Globus proxy.
