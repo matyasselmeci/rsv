@@ -7,14 +7,14 @@ import sys
 import copy
 import shutil
 import tempfile
-import ConfigParser
-from optparse import OptionParser
+#unused import ConfigParser
+#unused from optparse import OptionParser
 
 # RSV libraries
 import RSV
 import Metric
 import CondorG
-import Results
+#unused import Results
 import Sysutils
 
 
@@ -33,8 +33,8 @@ def ping_test(rsv, metric):
 
     # Send a single ping, with a timeout.  We just want to know if we can reach
     # the remote host, we don't care about the latency unless it exceeds the timeout
+    cmd = ["/bin/ping", "-W", "3", "-c", "1", host]
     try:
-        cmd = ["/bin/ping", "-W", "3", "-c", "1", host]
         (ret, out, err) = rsv.run_command(cmd)
     except Sysutils.TimeoutError, err:
         rsv.results.ping_timeout(metric, " ".join(cmd), err)
@@ -53,11 +53,11 @@ def ping_test(rsv, metric):
 def parse_job_output(rsv, metric, stdout, stderr):
     """ Parse the job output from the worker script """
 
-    if(metric.config_val("output-format", "wlcg")):
+    if metric.config_val("output-format", "wlcg"):
         parse_job_output_wlcg(rsv, metric, stdout, stderr)
-    elif(metric.config_val("output-format", "wlcg-multiple")):
+    elif metric.config_val("output-format", "wlcg-multiple"):
         parse_job_output_multiple_wlcg(rsv, metric, stdout, stderr)
-    elif(metric.config_val("output-format", "brief")):
+    elif metric.config_val("output-format", "brief"):
         parse_job_output_brief(rsv, metric, stdout, stderr)
     else:
         rsv.log("ERROR", "output format unknown")
@@ -80,7 +80,7 @@ def parse_job_output_multiple_wlcg(rsv, metric, stdout, stderr):
     for record in records:
         if not re.search("\S", record):
             continue
-        record = record + "\nEOT\n"
+        record += "\nEOT\n"
         rsv.echo("Record %s of %s:" % (num, len(records)))
         rsv.results.wlcg_result(metric, record, stderr)
         rsv.echo("\n")
@@ -252,7 +252,7 @@ def prepare_shar_file(rsv, metric):
     path = utils.which("shar")
     if not path:
         rsv.results.shar_not_installed(metric)
-        return (None, None)
+        return None, None
 
     # Make a temporary path to create the shar file
     parent_dir = os.path.join("/", "var", "tmp", "rsv")
@@ -306,13 +306,13 @@ __DATA__""" % metric.name)
     (ret, out, err) = rsv.run_command(cmd)
     if ret != 0:
         rsv.results.shar_creation_failed(metric, out, err)
-        return (None, None)
+        return None, None
 
     f = open(shar_file, 'a')
     f.write(out)
     f.close()
 
-    return (tempdir, shar_file)
+    return tempdir, shar_file
     
 
 def execute_condor_g_job(rsv, metric):
