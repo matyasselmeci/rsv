@@ -24,7 +24,7 @@ CMD_OPENSSL = "/usr/bin/openssl"
 
 # Auxiliary functions
 def md5sum(fname):
-  "Return the md5 checksum of the file."
+  """Return the md5 checksum of the file."""
   BLOCKSIZE = 4096 * 1024
   f = open(fname,'r')
   checksum = mymd5.md5()
@@ -81,7 +81,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     # " [--local-ce]          The verify test is run on localhost and not through globus gatekeeper."
  
   def parseopt(self):
-    "parse options specific to CAcertProbe and return options, optlist and reminder to allow further processing"
+    """parse options specific to CAcertProbe and return options, optlist and reminder to allow further processing"""
     options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
     for opt, arg in options:
       if opt == '--error-file':
@@ -108,7 +108,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     return options, optlist, remainder
 
   def run(self):
-    "Probe actions"
+    """Probe actions"""
     self.parseopt()
     if self.ca_certs_dir:
       certdir = self.ca_certs_dir
@@ -118,7 +118,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     self.Check_Local_CA(certdir, self.errorHrs)
 
   def verify_CA(self, certdir, warnHrs):
-    "function to check certificate validity - not used"
+    """function to check certificate validity - not used"""
     ## Step 1: Check for existence of CAcertfiles directory ... 
     ##   return Unknown as metricsresult when directory does not exist
     if not os.path.isdir(certdir):
@@ -225,13 +225,13 @@ Additionally it makes sure that all IGTF CAs are installed.
     grid_type = rsvprobe.get_grid_type()
     if not grid_type in [0, 1]:
       self.return_unknown("ERROR: Unknown grid type %s. Setting metric to unknown." % grid_type) 
-    if ca_format_type == 0:
-      cert_ext = ".0"
-      local_url = local_urls[0][grid_type]
-    elif ca_format_type == 1:
+    #ca_format_type can be only 0,1:
+    cert_ext = ".0"
+    local_url = local_urls[0][grid_type]
+    if ca_format_type == 1:
       cert_ext = ".pem"
       local_url = local_urls[1][grid_type]
-    else:
+    elif ca_format_type != 0:
       self.return_unknown("ERROR: CA Certs Directory %s has unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type))
     cert_files = rsvprobe.list_directory(certdir, [cert_ext])
     if not cert_files:
@@ -241,7 +241,7 @@ Additionally it makes sure that all IGTF CAs are installed.
       try:
         file_md5sum[os.path.basename(f).split('.')[0]] = md5sum(f)
       except IOError:
-        self.add_message("Could not calculate md5sums of your CA file %s. This may result in a probe error. Please verify the  file." % f)
+        self.add_message("Could not calculate md5sums of your CA file %s. This may result in a probe error. Please verify the file." % f)
         # eliminate error? file may have been deleted in the mean time, just skip?
         pass
     # Download the ms5sum file from OSG/ITB cache
@@ -406,7 +406,7 @@ Additionally it makes sure that all IGTF CAs are installed.
 
 ##### Main code #####
 def main():
-  "main: calling probe.run"  
+  """main: calling probe.run"""
   p = CAcertProbe()
   p.run()
 
