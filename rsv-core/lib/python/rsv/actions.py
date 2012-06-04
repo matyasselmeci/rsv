@@ -2,7 +2,7 @@
 
 import os
 import re
-import sys
+#unused import sys
 
 import Host
 import Table
