@@ -25,7 +25,7 @@ CMD_OPENSSL = "/usr/bin/openssl"
 
 # Auxiliary functions
 def md5sum(fname):
-  "Return the md5 checksum of the file."
+  """Return the md5 checksum of the file."""
   BLOCKSIZE = 4096 * 1024
   f = open(fname,'r')
   checksum = mymd5.md5()
@@ -78,7 +78,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     # " [--local-ce]          The verify test is run on localhost and not through globus gatekeeper."
 
   def parseopt(self):
-    "parse options specific to CAcertProbe and return options, optlist and reminder to allow further processing"
+    """parse options specific to CAcertProbe and return options, optlist and reminder to allow further processing"""
     options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
     for opt, arg in options:
       if opt == '--error-file':
@@ -109,7 +109,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     return options, optlist, remainder
 
   def run(self):
-    "Probe actions"
+    """Probe actions"""
     self.parseopt()
     if self.ca_certs_dir:
       certdir = self.ca_certs_dir
@@ -219,7 +219,8 @@ errHrs:    Number hours since the failing downloads before an error is issued
     source_hash_list = source_hash0.keys()
     if ca_format_type == 1:
       source_hash_list += source_hash1.keys()
-    for i in crl_files:  
+    local_hash = ""
+    for i in crl_files:
       local_hash = os.path.basename(i).split('.')[0] #remove the extension
       # List of CRLs found.
       found_crls.append(local_hash)
