@@ -22,7 +22,6 @@ Timeout is used only for xrdcp/xrdcp_small execution: actual run time may be lon
 import os
 import filecmp  # for comparing the files in run
 import tempfile
-import socket   # for the ping function
 import shutil   # rmtree in run
 
 # Add the current directory to the path:
@@ -36,28 +35,11 @@ import rsvprobe
 CMD_XRDCP = "xrdcp"
 CMD_XRDCP_SMALL = "xrdcp_small"
 
+
 # Auxiliary functions
-"""
-def site2host(site):
-  "Return the host part of a site. Site defined as host[:port]"
-  i = site.find(':')
-  if i < 0:
-    return site
-  return site[:i]
-"""
-
 def uri2rootport(uri):
-  "Return the port part of a URI ('1094' as default)."
+  """Return the port part of a URI ('1094' as default)."""
   return rsvprobe.uri2port(uri, 1094)
-
-"""
-def site2rootport(site):
-  "Return the port part of a site ('1094' as default). Site defined as host[:port]."
-  i = site.find(':')
-  if i < 0:
-    return "1094"
-  return site[i:]
-"""
 
 def getrooturi(uri):
   """Complete a URI adding 'root://' if the schema is missing and the 
@@ -131,7 +113,7 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
     # central server
 
   def parseopt(self):
-    "Parse options specific to this probe and return options and reminder to allow further processing"
+    """Parse options specific to this probe and return options and reminder to allow further processing"""
     options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
     for opt, arg in options:
       if opt == '--test-file':
