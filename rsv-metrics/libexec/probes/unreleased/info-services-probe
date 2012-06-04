@@ -40,9 +40,10 @@ is not counted against the site's availability metrics.
 
 """
 
+#TODO fix run_metric: escape and metric_xml seems not to be defined
+
 import re
 import os
-import md5
 import pwd
 import sys
 import stat
@@ -51,6 +52,11 @@ import socket
 import urllib2
 import optparse
 import ConfigParser
+# hashlib new in 2.5, md5 not in 2.6
+try:
+    import hashlib as mymd5
+except ImportError:
+    import md5 as mymd5
 
 from xml.dom.minidom import parse
 
@@ -197,12 +203,12 @@ def get_resource_doms(dom, service="CE", myhostname=None):
     """
     Return a tuple of the resource_group_dom, resource_dom
     """
-    if myhostname == None:
+    if myhostname is None:
         myhostname = hostname
     if myhostname == 'UNKNOWN':
         raise UnknownException("Unable to determine CE's hostname.")
     for resource_group_dom in dom.getElementsByTagName("ResourceGroup"):
-        for resource_dom in resource_group_dom.getElementsByTagName( \
+        for resource_dom in resource_group_dom.getElementsByTagName(
                 "Resource"):
             for service_dom in resource_dom.getElementsByTagName("Service"):
                 try:
@@ -233,7 +239,7 @@ def get_resource_group_name(resource_group_dom):
                 return resource_group_name
             except:
                 continue
-    raise UnknownException("Able to determine resource group, but could " \
+    raise UnknownException("Able to determine resource group, but could "
         "not find the resource_group name in the XML; probably a MyOSG issue.")
 
 def get_resource_name(resource_dom):
@@ -247,7 +253,7 @@ def get_resource_name(resource_dom):
                 return resource_name
             except:
                 continue
-    raise UnknownException("Able to determine resource, but could " \
+    raise UnknownException("Able to determine resource, but could "
         "not find the resource name in the XML; probably a MyOSG issue.")
 
 split_re = re.compile("\s*,?\s*")
@@ -310,10 +316,10 @@ def metric_consistency(config_ini):
         "resource_group", gip_common.cp_get(cp, "Site Information",
         "site_name", "UNKNOWN"))
     if ci_resource_name == "UNKNOWN":
-        raise CriticalException("Unable to find resource or sitename in " \
+        raise CriticalException("Unable to find resource or sitename in "
             "Site Information section")
     if ci_resource_group_name == "UNKNOWN":
-        raise CriticalException("Unable to find resource_group or sitename"\
+        raise CriticalException("Unable to find resource_group or sitename"
             " in Site Information section")
 
     stdout  = "OIM Resource Name: %s\n" % resource_name
@@ -389,7 +395,7 @@ def metric_gip_lastrun():
         max_age = max(max_age, age)
     if min_age != now:
         stdout += "Minimum provider age: %i\n" % min_age
-    if max_age != None:
+    if max_age is not None:
         stdout += "Maximum provider age: %i\n" % max_age
 
     min_age, max_age = now, None
@@ -406,7 +412,7 @@ def metric_gip_lastrun():
         if age > cache_ttl:
             raise CriticalException("Plugin %s last output is %i seconds" \
             " old, above the maximum age of %i." % (plugin_name, age, 
-            cache_ttle))
+            cache_ttl))
         if age > freshness:
             raise WarningException("Plugin %s last output is %i seconds" \
             " old, above the warning threshold of %i." % (plugin_name, age,
@@ -415,14 +421,14 @@ def metric_gip_lastrun():
         max_age = max(max_age, age)
     if min_age != now:
         stdout += "Minimum plugin age: %i\n" % min_age
-    if max_age != None:
+    if max_age is not None:
         stdout += "Maximum plugin age: %i\n" % max_age
 
     return stdout, ""
 
 def calculate_hash(filename):
     try:
-        m = md5.md5()
+        m = mymd5.md5()
         m.update(open(filename, 'r').read())
         return m.hexdigest()
     except:
@@ -462,16 +468,17 @@ def metric_freshness():
 
     gip_ldap = __import__("gip_ldap")
     try:
-        entries = gip_ldap.read_bdii(cp, "(&(objectClass=GlueLocation)" \
+        entries = gip_ldap.read_bdii(cp, "(&(objectClass=GlueLocation)"
             "(GlueLocationName=TIMESTAMP))")
     except:
-        raise UnknownException("Unable to read data from BDII to perform" \
-            " RSV test.  This may indicate a central BDII issue and is not" \
+        raise UnknownException("Unable to read data from BDII to perform"
+            " RSV test.  This may indicate a central BDII issue and is not"
             " a site failure.")
 
     now = time.time()
     timestamp = 0
     all_entries = []
+    entry = None
     for entry in entries:
         all_entries.append("dn: %s" % ", ".join(entry.dn))
         if cname in entry.dn:
@@ -490,12 +497,12 @@ def metric_freshness():
     if age > MAX_TIMESTAMP_AGE:
         raise CriticalException("BDII information at %s is %i seconds old, " \
             "more than the critical threshold of %i.  LDAP:\n- %s" % (my_bdii,
-             age, MAX_TIMESTAMP_AGE, "\n- ".join(entry.to_ldif().\
+             age, MAX_TIMESTAMP_AGE, "\n- ".join(entry.to_ldif().
              splitlines())))
     if age > WARNING_TIMESTAMP_AGE:
         raise WarningException("BDII information at %s is %i seconds old, " \
             "more than the warning threshold of %i  LDAP:\n- %s." % (my_bdii,
-            age, WARNING_TIMESTAMP_AGE, "\n- ".join(entry.to_ldif().\
+            age, WARNING_TIMESTAMP_AGE, "\n- ".join(entry.to_ldif().
             splitlines())))
 
     stdout += "BDII information is %i seconds old." % age
@@ -511,16 +518,16 @@ def metric_se():
     entries = osg_info_wrapper.main(cp=cp, return_entries=True)
     se_entries = [i for i in entries if 'GlueSE' in i.objectClass]
     if len(se_entries) == 0:
-        raise CriticalException("BDII output has no storage information; " \
+        raise CriticalException("BDII output has no storage information; "
             "contact osg-gip@opensciencegrid.org for help.")
     first_se = se_entries[0]
     total_size = first_se.glue.get("SESizeTotal", None)
-    if total_size == None:
-        raise CriticalException("BDII SE information has no size entry!" \
+    if total_size is None:
+        raise CriticalException("BDII SE information has no size entry!"
             "  Contact osg-gip@opensciencegrid.org; it is likely a GIP bug.")
     if total_size == 0:
-        raise CriticalException("SE exists in the BDII output, but its size" \
-            " is zero.  Consult the Release Documentation or contact " \
+        raise CriticalException("SE exists in the BDII output, but its size"
+            " is zero.  Consult the Release Documentation or contact "
             "osg-gip@opensciencegrid.org for help.")
     stdout = "There are %i SEs listed in the GIP output." % len(se_entries)
     return stdout, ""
@@ -535,16 +542,16 @@ def metric_ce():
     entries = osg_info_wrapper.main(cp=cp, return_entries=True)
     ce_entries = [i for i in entries if 'GlueCE' in i.objectClass]
     if len(ce_entries) == 0:
-        raise CriticalException("BDII output has no CE information; " \
+        raise CriticalException("BDII output has no CE information; "
             "contact osg-gip@opensciencegrid.org for help.")
     first_ce = ce_entries[0]
     total_size = first_ce.glue.get("CEInfoTotalCPUs", None)
-    if total_size == None:
-        raise CriticalException("BDII CE information has no size entry!" \
+    if total_size is None:
+        raise CriticalException("BDII CE information has no size entry!"
             "  Contact osg-gip@opensciencegrid.org; it is likely a GIP bug.")
     if total_size == 0:
-        raise CriticalException("CE exists in the BDII output, but its size" \
-            " is zero.  Consult the Release Documentation or contact " \
+        raise CriticalException("CE exists in the BDII output, but its size"
+            " is zero.  Consult the Release Documentation or contact "
             "osg-gip@opensciencegrid.org for help.")
     stdout = "There are %i CE queues." % len(ce_entries)
     return stdout, ""
@@ -557,7 +564,7 @@ def run_metric(metric_name, fcn, args, kwargs):
         exit_code = 0
     except WarningException, we:
         if stdout:
-            stdout += "\n" + str(ue)
+            stdout += "\n" + str(we)
         else:
             stdout = str(we)
         exit_code = 1
