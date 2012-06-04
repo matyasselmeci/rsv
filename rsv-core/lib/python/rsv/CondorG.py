@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import sys    # for sys.exit
 import shutil
 import tempfile
 
