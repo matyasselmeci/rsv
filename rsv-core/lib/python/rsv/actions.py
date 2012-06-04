@@ -138,7 +138,7 @@ def profile(rsv):
     print "Running the rsv-profiler..."
     profiler = os.path.join("/", "usr", "libexec", "rsv", "misc", "rsv-profiler")
     sysutils = Sysutils.Sysutils(rsv)
-    (ret, out, err) = sysutils.system(profiler, timeout=100)
+    (ret, out, err) = sysutils.system([profiler], timeout=100)
 
     if ret == 0:
         print out

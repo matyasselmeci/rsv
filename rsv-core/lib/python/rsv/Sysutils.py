@@ -7,8 +7,8 @@ import sys
 import time
 import fcntl
 import select
-import popen2
 import signal
+import subprocess
 
 class TimeoutError(Exception):
     """ This defines an Exception that we can use if our system call times out """
@@ -32,103 +32,21 @@ class Sysutils:
           1) exit code
           2) STDOUT
           3) STDERR
-
-        I think this could possibly be better done using the subprocess module, but
-        that requires Python 2.4 and we need to support Python 2.3+.
         """
 
-        out = ""
-        err = ""
-        ret = -1
-        # although using the signal module makes life 
-        # easier, it looks like it doesn't play nicely with popen3 so
-        # we need to handle the timing manually instead of the using
-        # SIGALRM
+        p = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        signal.signal(signal.SIGALRM, alarm_handler)
+        signal.alarm(timeout)
         try:
-            start = time.time()
-            child = popen2.Popen3(command, capturestderr=1)
-
-            # Set the child's STDERR to non blocking if possible.
-            # This prevents the child from hanging due to it blocking on stderr 
-            # or stdout 
-            err_fd = child.childerr.fileno()
-            flags = fcntl.fcntl(err_fd, fcntl.F_GETFL, 0) 
-            flags |= os.O_NONBLOCK
-            fcntl.fcntl(err_fd, fcntl.F_SETFL, flags)
-
-            # do the same for stdout            
-            out_fd = child.fromchild.fileno()
-            flags = fcntl.fcntl(out_fd, fcntl.F_GETFL, 0) 
-            flags |= os.O_NONBLOCK
-            fcntl.fcntl(out_fd, fcntl.F_SETFL, flags)
-
-            # We are going to loop and read from STDOUT and STDERR.  When they are
-            # hot but return 0 bytes we know that they have been closed by our child.
-            # Loop until both of them have been closed or we hit the timeout.
-            fds = [out_fd, err_fd]
-            while True:
-                if not fds:
-                    # When we have no more fds to read from we are done
-                    break
-                
-                interval = (start + timeout) - time.time()
-                ready_fds = select.select(fds, [], [], interval)
-                if ready_fds[0] != []:
-                    new_fds = []  # new_fds keeps track of fds that are not closed.
-                    for fd in fds:
-                        # Either there is out/err to read or else we will get 0 bytes
-                        # and that indicates that the child closed that pipe.
-                        if fd not in ready_fds[0]:
-                            new_fds.append(fd)
-                        else:
-                            new_data = os.read(fd, 2048)
-                            if len(new_data) == 0:
-                                # This indicates that the fd is closed by the child.
-                                # We will not add it to new_fds so that we stop
-                                # select()ing on it.
-                                pass
-                            else:
-                                new_fds.append(fd)
-                                if fd == out_fd:
-                                    out += new_data
-                                elif fd == err_fd:
-                                    err += new_data
-
-                    fds = new_fds
-                                  
-                if ((time.time() - start) > timeout):
-                    # probe has been running for more than timeout seconds,
-                    # raise an exception to time out the execution
-                    raise TimeoutError
-
-            # So now that both STDOUT and STDERR have been closed we need to also wait
-            # for the process to finish so that we can reap it and avoid a zombie.
-            # This is a rare case that probably indicates that the child forcibly closed
-            # STDOUT and STDERR and intends to continue running.
-            while True:
-                if child.poll() != -1:
-                    break
-
-                if (time.time() - start) > timeout:
-                    raise TimeoutError
-
-                time.sleep(1)
-
-            # When we are finally done we can grab the return code from the child.  This
-            # should not block because we will only get here if child.poll() told us that
-            # the child process is finished.
-            ret = child.wait()
-            
-        except IOError, ex: # from fcntl calls
-            self.rsv.log("ERROR", "Error while changing to non-blocking output")
-            os.kill(child.pid, signal.SIGKILL)
+            (stdout, stderr) = p.communicate()
+            signal.alarm(0)
         except TimeoutError:
             self.rsv.log("ERROR", "Command timed out (timeout=%s): %s" % (timeout, command))
             os.kill(child.pid, signal.SIGKILL)
             raise TimeoutError("Command timed out (timeout=%s)" % timeout)
 
-        self.rsv.log("INFO", "Exit code of job: %s" % ret)
-        return (ret, out, err)
+        self.rsv.log("INFO", "Exit code of job: %s" % p.returncode)
+        return (p.returncode, stdout, stderr)
 
 
     def switch_user(self, user, desired_uid, desired_gid):
@@ -204,3 +122,23 @@ class Sysutils:
                 contents = ""
             
         return contents
+
+
+    def which(self, program):
+        """ Examine the path for supplied binary.  Return path to binary or None if not found """
+        self.rsv.log("DEBUG", "Looking for binary named '%s'" % program)
+        
+        fpath, fname = os.path.split(program)
+        if fpath:
+            if is_exe(program):
+                self.rsv.log("DEBUG", "Fully qualified program %s is a valid executable." % program)
+                return program
+        else:
+            for path in os.environ["PATH"].split(os.pathsep):
+                exe_file = os.path.join(path, program)
+                if os.path.isfile(exe_file) and os.access(exe_file, os.X_OK):
+                    self.rsv.log("DEBUG", "Found program '%s' at '%s'" % (program, exe_file))
+                    return exe_file
+
+        self.rsv.log("DEBUG", "Did not find program '%s'" % program)
+        return None

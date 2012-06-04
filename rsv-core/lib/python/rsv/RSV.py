@@ -395,9 +395,8 @@ class RSV:
         self.log("INFO", "Using service certificate proxy", 4)
 
         hours_til_expiry = 6
-        seconds_til_expiry = hours_til_expiry * 60 * 60
-        (ret, out, err) = self.run_command("%s x509 -in %s -noout -enddate -checkend %s" %
-                                           (OPENSSL_EXE, proxy, seconds_til_expiry))
+        seconds_til_expiry = str(hours_til_expiry * 60 * 60)
+        (ret, out, err) = self.run_command([OPENSSL_EXE, "x509", "-in", proxy, "-noout", "-enddate", "-checkend", seconds_til_expiry])
 
         if ret == 0:
             self.log("INFO", "Service certificate valid for at least %s hours." % hours_til_expiry, 4)
@@ -405,13 +404,13 @@ class RSV:
             self.log("INFO", "Service certificate proxy expired or expiring within %s hours.  Renewing it." %
                     hours_til_expiry, 4)
 
-            extra_args = ""
+            cmd = ["grid-proxy-init", "-cert", cert, "-key", key, "-valid", "12:00", "-debug", "-out", proxy]
             if self.use_legacy_proxy():
                 self.log("INFO", "Generating a legacy Globus proxy because it was requested.", 4)
-                extra_args += "-old "
+                # This should come right after "grid-proxy-init"
+                cmd.insert(1, "-old")
                 
-            (ret, out, err) = self.run_command("grid-proxy-init %s -cert %s -key %s -valid 12:00 -debug -out %s" %
-                                               (extra_args, cert, key, proxy))
+            (ret, out, err) = self.run_command(cmd)
 
             if ret:
                 self.results.service_proxy_renewal_failed(metric, cert, key, proxy, out, err)
@@ -441,8 +440,8 @@ class RSV:
         # so this check might need to be adjusted if that behavior is more understood.
         minutes_til_expiration = 10
         seconds_til_expiration = minutes_til_expiration * 60
-        (ret, out, err) = self.run_command("%s x509 -in %s -noout -enddate -checkend %s" %
-                                           (OPENSSL_EXE, proxy_file, seconds_til_expiration))
+        (ret, out, err) = self.run_command([OPENSSL_EXE, "x509", "-in", proxy_file, "-noout", "-enddate", "-checkend", seconds_til_expiration])
+        
         if ret:
             self.results.expired_user_proxy(metric, proxy_file, out, minutes_til_expiration)
             sys.exit(1)
@@ -461,7 +460,7 @@ class RSV:
             # Use the timeout declared in the config file
             timeout = self.config.getint("rsv", "job-timeout")
             
-        self.log("INFO", "Running command with timeout (%s seconds):\n\t%s" % (timeout, command))
+        self.log("INFO", "Running command with timeout (%s seconds):\n\t%s" % (timeout, " ".join(command)))
         return self.sysutils.system(command, timeout)
 
 

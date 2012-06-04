@@ -34,10 +34,10 @@ def ping_test(rsv, metric):
     # Send a single ping, with a timeout.  We just want to know if we can reach
     # the remote host, we don't care about the latency unless it exceeds the timeout
     try:
-        cmd = "/bin/ping -W 3 -c 1 %s" % host
+        cmd = ["/bin/ping", "-W", "3", "-c", "1", host]
         (ret, out, err) = rsv.run_command(cmd)
     except Sysutils.TimeoutError, err:
-        rsv.results.ping_timeout(metric, cmd, err)
+        rsv.results.ping_timeout(metric, " ".join(cmd), err)
         sys.exit(1)
 
     # If we can't ping the host, don't bother doing anything else
@@ -159,10 +159,7 @@ def execute_local_job(rsv, metric):
     if metric.config_val("probe-spec", "v3") and rsv.get_extra_globus_rsl():
         args += " --extra-globus-rsl %s" % rsv.get_extra_globus_rsl()
 
-    job = "%s -m %s -u %s %s" % (metric.executable,
-                                 metric.name,
-                                 metric.host,
-                                 args)
+    job = [metric.executable, "-m", metric.name, "-u", metric.host, args]
 
     # A metric can define a custom timeout, otherwise we'll default to the RSV global
     # settings for this value.  The custom timeout was added because the pigeon probe
@@ -176,13 +173,13 @@ def execute_local_job(rsv, metric):
         (ret, out, err) = rsv.run_command(job, job_timeout)
     except Sysutils.TimeoutError, err:
         os.environ = original_environment
-        rsv.results.job_timed_out(metric, job, err)
+        rsv.results.job_timed_out(metric, " ".join(job), err)
         return
 
     os.environ = original_environment
 
     if ret:
-        rsv.results.local_job_failed(metric, job, out, err)
+        rsv.results.local_job_failed(metric, " ".join(job), out, err)
         return
 
     parse_job_output(rsv, metric, out, err)
@@ -208,19 +205,14 @@ def execute_grid_job(rsv, metric):
     if not shar_dir:
         return
 
+    job = ["globus-job-run", "%s/jobmanager-%s" % (metric.host, jobmanager),
+           "-s", shar_file, "--", "-m", metric.name, "-u", metric.host, args]
+
     # Anthony Tiradani uses extra RSL to get his jobs to run with priority at Fermi
     # This is done by passing -x to globus-job-run
-    extra_globus_rsl = ""
     if rsv.get_extra_globus_rsl():
-        extra_globus_rsl = "-x %s" % rsv.get_extra_globus_rsl()
-
-    job = "globus-job-run %s/jobmanager-%s %s -s %s -- -m %s -u %s %s" % (metric.host,
-                                                                          jobmanager,
-                                                                          extra_globus_rsl,
-                                                                          shar_file,
-                                                                          metric.name,
-                                                                          metric.host,
-                                                                          args)
+        job.insert(2, "-x")
+        job.insert(3, rsv.get_extra_globus_rsl())
 
     # A metric can define a custom timeout, otherwise we'll default to the RSV global
     # settings for this value.  The custom timeout was added because the pigeon probe
@@ -235,14 +227,14 @@ def execute_grid_job(rsv, metric):
     except Sysutils.TimeoutError, err:
         os.environ = original_environment
         shutil.rmtree(shar_dir)
-        rsv.results.job_timed_out(metric, job, err)
+        rsv.results.job_timed_out(metric, " ".join(job), err)
         return
 
     os.environ = original_environment
     shutil.rmtree(shar_dir)
 
     if ret:
-        rsv.results.grid_job_failed(metric, job, out, err)
+        rsv.results.grid_job_failed(metric, " ".join(job), out, err)
 
     parse_job_output(rsv, metric, out, err)
     return
@@ -256,8 +248,9 @@ def prepare_shar_file(rsv, metric):
     use a perl script to do the extraction followed by executing the necessary script """
 
     # Check for shar
-    (ret, out, err) = rsv.run_command("which shar")
-    if ret != 0:
+    utils = Sysutils.Sysutils(rsv)
+    path = utils.which("shar")
+    if not path:
         rsv.results.shar_not_installed(metric)
         return (None, None)
 
@@ -309,11 +302,15 @@ __DATA__""" % metric.name)
 
     # Create the shar file
     transfer_files = metric.get_transfer_files()
-    cmd = "shar -f %s %s >> %s" % (metric.executable, transfer_files, shar_file)
+    cmd = ["shar", "-f", metric.executable, transfer_files]
     (ret, out, err) = rsv.run_command(cmd)
     if ret != 0:
         rsv.results.shar_creation_failed(metric, out, err)
         return (None, None)
+
+    f = open(shar_file, 'a')
+    f.write(out)
+    f.close()
 
     return (tempdir, shar_file)
     
