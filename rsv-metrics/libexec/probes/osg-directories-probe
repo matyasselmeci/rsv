@@ -34,21 +34,38 @@ my $critical = 0;
 my $warning = 0;
 my $details = "";
 foreach my $dir (keys %dirs) {
-    my $path = $ENV{$dir};
-    
-    if(!$path or ($path eq "UNAVAILABLE") or (!-d $path)) {
+    if(!defined($ENV{$dir})) {
         if($dirs{$dir}{isRequired}) {
             if($dirs{$dir}{isCritical}) {
+                $details .= "The required $dir environment variable is not set. (CRITICAL)\n\n";
                 $critical++;
-                $details .= "Required and critical directory is not set or non-existent ($dir=$path)\n\n";
             }
             else {
+                $details .= "The required $dir environment variable is not set.\n\n";
                 $warning++;
-                $details .= "Required directory is not set or non-existent ($dir=$path)\n\n";
             }
         }
         else {
-            $details .= "Non-required directory is not set or non-existent ($dir=$path)\n\n";
+            $details .= "The non-required $dir environment variable is not set.\n\n";
+        }
+        next;
+    }
+
+    my $path = $ENV{$dir};
+    
+    if(($path eq "UNAVAILABLE") or (!-d $path)) {
+        if($dirs{$dir}{isRequired}) {
+            if($dirs{$dir}{isCritical}) {
+                $critical++;
+                $details .= "Required and critical directory is non-existent ($dir=$path)\n\n";
+            }
+            else {
+                $warning++;
+                $details .= "Required directory is non-existent ($dir=$path)\n\n";
+            }
+        }
+        else {
+            $details .= "Non-required directory is non-existent ($dir=$path)\n\n";
         }
         next;
     }
