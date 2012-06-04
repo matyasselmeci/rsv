@@ -80,17 +80,17 @@ class Results:
 
         # Create a record with a local timestamp.
         local_record = record
-        match = re.search("timestamp: ([\w\:\-]+)", local_record)
+        match = re.search("timestamp: ([\w:\-]+)", local_record)
         if match:
             local_timestamp = utc_to_local(match.group(1))
-            local_record = re.sub("timestamp: [\w\-\:]+", "timestamp: %s" % local_timestamp, local_record)
+            local_record = re.sub("timestamp: [\w\-:]+", "timestamp: %s" % local_timestamp, local_record)
 
         # Create a record with the epoch timestamp
         epoch_record = record
-        match = re.search("timestamp: ([\w\:\-]+)", epoch_record)
+        match = re.search("timestamp: ([\w:\-]+)", epoch_record)
         if match:
             local_timestamp = utc_to_epoch(match.group(1))
-            epoch_record = re.sub("timestamp: [\w\-\:]+", "timestamp: %s" % local_timestamp, epoch_record)
+            epoch_record = re.sub("timestamp: [\w\-:]+", "timestamp: %s" % local_timestamp, epoch_record)
 
         return self.create_records(metric, record, local_record, epoch_record, stderr)
 
