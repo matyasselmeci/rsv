@@ -22,6 +22,7 @@ def process_options(arguments=None):
 
     Run a one-time test:
     --run [--all-enabled] --host <HOST> METRIC [METRIC ...]
+    --test (same options and behavior as --run but w/o generating records)
     
     Show information about enabled and installed metrics:
     --list [ --wide ] [ --all ] [ --cron-times ] [ <pattern> ]
@@ -54,6 +55,9 @@ def process_options(arguments=None):
                         "Example: rsv-control -r --host foo.example.com org.osg.general.osg-version")
     group.add_option("-r", "--run", action="store_true", dest="run", default=False,
                      help="Run the supplied list of metrics against the specified host.")
+    group.add_option("--test", action="store_true", dest="test", default=False,
+                     help="Same as --run but do not generate records " +
+                          "(therefore nothing goes to Gratia, HTML page, etc).")
     group.add_option("--all-enabled", action="store_true", dest="all_enabled", default=False,
                      help="Run all enabled metrics serially.")
     group.add_option("--extra-config-file", dest="extra_config_file", default=None,
@@ -113,6 +117,12 @@ def process_options(arguments=None):
     #
     # Validate options
     #
+
+    # 'test' is the same as 'run' except that we don't generate records.
+    # We will implement it by doing all the same things as run but add a check when generating records.
+    if options.test:
+        options.run = True
+        
 
     # Check that we got exactly one command
     number_of_commands = len([i for i in [options.run, options.enable, options.disable, options.on,
@@ -180,6 +190,9 @@ def main_rsv_control():
             return False
             
         if options.run:
+            if options.test:
+                rsv.echo('NOTE: Records will not be generated because you specified --test.')
+                rsv.echo('      If you want record generation, use --run instead of --test.')
             return run_metric.main(rsv, options, args)
         elif options.on:
             return actions.dispatcher(rsv, "start", options, args)

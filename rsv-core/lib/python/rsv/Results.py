@@ -54,8 +54,9 @@ class Results:
     """ A class containing code to handle publishing the result records """
     rsv = None
 
-    def __init__(self, rsv):
+    def __init__(self, rsv, options):
         self.rsv = rsv
+        self.options = options
 
 
     def wlcg_result(self, metric, record, stderr):
@@ -129,24 +130,21 @@ class Results:
     def create_records(self, metric, utc_summary, local_summary, epoch_summary, stderr):
         """ Generate a result record for each consumer, and print to the screen """
 
-        #
-        # Create a record for each consumer
-        #
-        for consumer in self.rsv.get_enabled_consumers():
-            self.create_consumer_record(metric, consumer, utc_summary, local_summary, epoch_summary)
-
-        # 
         # Print the local summary to the screen
-        #
         self.rsv.log("DEBUG", "STDERR from metric:\n%s\n" % stderr)
         self.rsv.log("INFO", "Result:\n") # separate final output from debug output
         self.rsv.echo(local_summary)
 
-        #
+        # We don't generate records when run with --test
+        if self.options.test:
+            self.rsv.echo('No records have been generated because --test was used.')
+        else:
+            for consumer in self.rsv.get_enabled_consumers():
+                self.create_consumer_record(metric, consumer, utc_summary, local_summary, epoch_summary)
+
         # enhance - should we have different exit codes based on status?  I think
         # that just running a probe successfully should be a 0 exit status, but
         # maybe there should be a different mode?
-        #
         return 0
 
 

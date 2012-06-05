@@ -44,7 +44,7 @@ class RSV:
 
         # Instantiate our helper objects
         self.sysutils = Sysutils.Sysutils(self)
-        self.results  = Results.Results(self)
+        self.results  = Results.Results(self, options)
 
         # Setup the logger
         self.init_logging(self.options.verbose)
