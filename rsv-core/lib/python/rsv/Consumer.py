@@ -1,7 +1,6 @@
 #!/usr/bin/python
 
 import os
-#unused import re
 import sys
 import ConfigParser
 

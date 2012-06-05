@@ -7,14 +7,11 @@ import sys
 import copy
 import shutil
 import tempfile
-#unused import ConfigParser
-#unused from optparse import OptionParser
 
 # RSV libraries
 import RSV
 import Metric
 import CondorG
-#unused import Results
 import Sysutils
 
 

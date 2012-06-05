@@ -5,7 +5,6 @@ import re
 import pwd
 import time
 import commands
-#unused import tempfile
 from time import strftime
 
 import Host

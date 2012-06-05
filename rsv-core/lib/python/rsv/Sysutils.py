@@ -5,8 +5,6 @@ import os
 import re
 import sys
 import time
-#unused import fcntl
-#unused import select
 import signal
 import subprocess
 
@@ -131,8 +129,7 @@ class Sysutils:
 
     def which(self, program):
         """ Examine the path for supplied binary.  Return path to binary or None if not found """
-        #def is_exe(fpath):
-        #    return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
         self.rsv.log("DEBUG", "Looking for binary named '%s'" % program)
         
         fpath, fname = os.path.split(program)
