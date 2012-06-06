@@ -165,6 +165,15 @@ def dispatcher(rsv, action, options, jobs=None):
             rsv.echo("ERROR: condor-cron is not running.")
             return False
 
+    # If we are given a hostname but no list of jobs, assume that we want to act
+    # on all jobs that are enabled for that host.  This only applies to starting
+    # and stopping, but not to enabling and disabling (since we couldn't know the
+    # metric list in those cases)
+    if action in ('start', 'stop') and hostname and not jobs:
+        host = Host.Host(hostname, rsv)
+        jobs = host.get_enabled_metrics()
+
+
     # 
     # If we are not passed specific jobs to start, start all metrics and consumers
     #

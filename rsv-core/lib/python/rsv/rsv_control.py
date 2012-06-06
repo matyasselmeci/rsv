@@ -35,8 +35,8 @@ def process_options(arguments=None):
     --disable --host <host-name> METRIC|CONSUMER [METRIC|CONSUMER ...]
 
     Start and stop metrics and consumers:
-    --on  [--host <host-name> METRIC|CONSUMER ...]
-    --off [--host <host-name> METRIC|CONSUMER ...]
+    --on  [--host <host-name> [METRIC|CONSUMER ...]]
+    --off [--host <host-name> [METRIC|CONSUMER ...]]
 
     Other commands are available, run with --help to see full usage.
     """
