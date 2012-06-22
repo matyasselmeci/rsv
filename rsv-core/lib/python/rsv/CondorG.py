@@ -82,6 +82,7 @@ class CondorG:
         submit_file += "Log = %s\n" % self.log
         submit_file += "Output = %s\n" % self.out
         submit_file += "Error = %s\n\n" % self.err
+        submit_file += "Notification = never\n"
         submit_file += "WhenToTransferOutput = ON_EXIT_OR_EVICT\n\n"
         submit_file += "Queue\n"
 
