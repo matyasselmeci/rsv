@@ -207,10 +207,10 @@ class Metric:
         
         self.rsv.log("INFO", "Forming arguments:")
         args_section = self.name + " args"
-        args = ""
+        args = []
         try:
             for option in self.config.options(args_section):
-                args += "--%s %s " % (option, self.config.get(args_section, option))
+                args += ["--%s" % option, self.config.get(args_section, option)]
         except ConfigParser.NoSectionError:
             self.rsv.log("INFO", "No '%s' section found" % args_section, 4)
 
@@ -220,10 +220,10 @@ class Metric:
             proxy_file = self.rsv.get_proxy()
             if proxy_file:
                 self.rsv.log("INFO", "Adding -x because probe version is v3", 4)
-                args += "-x %s " % proxy_file
+                args += ["-x", proxy_file]
 
             self.rsv.log("INFO", "Adding --verbose because probe version is v3", 4)
-            args += "--verbose "
+            args += ["--verbose"]
 
 
         self.rsv.log("INFO", "Arguments: '%s'" % args, 4)
@@ -315,6 +315,7 @@ class Metric:
             self.rsv.log("INFO", "No files to transfer are declared.")
             return None
 
+        transfer_files = transfer_files.split()
         return transfer_files
 
 

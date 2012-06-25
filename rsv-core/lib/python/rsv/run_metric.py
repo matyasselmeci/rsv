@@ -155,9 +155,9 @@ def execute_local_job(rsv, metric):
     # Anthony Tiradani uses extra RSL to get his jobs to run with priority at Fermi
     # This is done for old style metrics by passing --extra-globus-rsl.
     if metric.config_val("probe-spec", "v3") and rsv.get_extra_globus_rsl():
-        args += " --extra-globus-rsl %s" % rsv.get_extra_globus_rsl()
+        args.append("--extra-globus-rsl", rsv.get_extra_globus_rsl())
 
-    job = [metric.executable, "-m", metric.name, "-u", metric.host, args]
+    job = [metric.executable, "-m", metric.name, "-u", metric.host] + args
 
     # A metric can define a custom timeout, otherwise we'll default to the RSV global
     # settings for this value.  The custom timeout was added because the pigeon probe
@@ -204,7 +204,7 @@ def execute_grid_job(rsv, metric):
         return
 
     job = ["globus-job-run", "%s/jobmanager-%s" % (metric.host, jobmanager),
-           "-s", shar_file, "--", "-m", metric.name, "-u", metric.host, args]
+           "-s", shar_file, "--", "-m", metric.name, "-u", metric.host] + args
 
     # Anthony Tiradani uses extra RSL to get his jobs to run with priority at Fermi
     # This is done by passing -x to globus-job-run
@@ -306,7 +306,7 @@ __DATA__""" % metric.name)
 
     # Create the shar file
     transfer_files = metric.get_transfer_files()
-    cmd = ["shar", "-f", metric.executable, transfer_files]
+    cmd = ["shar", "-f", metric.executable] + transfer_files
     (ret, out, err) = rsv.run_command(cmd)
     if ret != 0:
         rsv.results.shar_creation_failed(metric, out, err)

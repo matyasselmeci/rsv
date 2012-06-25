@@ -84,7 +84,7 @@ class CondorG:
 
         transfer_files = metric.get_transfer_files()
         if transfer_files:
-            submit_file += "transfer_input_files = %s\n" % transfer_files
+            submit_file += "transfer_input_files = %s\n" % ", ".join(transfer_files)
             
         submit_file += "Log = %s\n" % self.log
         submit_file += "Output = %s\n" % self.out
