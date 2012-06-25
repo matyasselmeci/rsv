@@ -3,6 +3,7 @@
 # Standard libraries
 import re
 import os
+import pwd
 import sys
 import copy
 import shutil
@@ -253,6 +254,12 @@ def prepare_shar_file(rsv, metric):
 
     # Make a temporary path to create the shar file
     parent_dir = os.path.join("/", "var", "tmp", "rsv")
+    if not os.path.exists(parent_dir):
+        # /var/tmp/rsv can be periodically deleted by system cleanup utilities so we sometimes
+        # have to re-create it
+        os.mkdir(parent_dir, 0755)
+        (uid, gid) = pwd.getpwnam('rsv')[2:4]
+        os.chown(parent_dir, uid, gid)
     tempdir = tempfile.mkdtemp(prefix="shar-", dir=parent_dir)
     shar_file = os.path.join(tempdir, "shar.pl")
 

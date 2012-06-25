@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import pwd
 import sys    # for sys.exit
 import shutil
 import tempfile
@@ -46,6 +47,12 @@ class CondorG:
 
         # Make a temporary directory to store submit file, input, output, and log
         parent_dir = os.path.join("/", "var", "tmp", "rsv")
+        if not os.path.exists(parent_dir):
+            # /var/tmp/rsv can be periodically deleted by system cleanup utilities so we sometimes
+            # have to re-create it
+            os.mkdir(parent_dir, 0755)
+            (uid, gid) = pwd.getpwnam('rsv')[2:4]
+            os.chown(parent_dir, uid, gid)
         self.tempdir = tempfile.mkdtemp(prefix="condor_g-", dir=parent_dir)
         self.rsv.log("INFO", "Condor-G working directory: %s" % self.tempdir)
         
