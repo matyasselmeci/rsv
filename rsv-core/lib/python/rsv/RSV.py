@@ -445,7 +445,7 @@ class RSV:
         # doesn't seem to like a proxy that has a lifetime of less than 3 hours anyways,
         # so this check might need to be adjusted if that behavior is more understood.
         minutes_til_expiration = 10
-        seconds_til_expiration = minutes_til_expiration * 60
+        seconds_til_expiration = str(minutes_til_expiration * 60)
         (ret, out, err) = self.run_command([OPENSSL_EXE, "x509", "-in", proxy_file, "-noout", "-enddate", "-checkend", seconds_til_expiration])
         
         if ret:
