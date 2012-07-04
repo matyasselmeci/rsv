@@ -1,39 +1,54 @@
-# Rotate daily
-daily
-
-# Keep a week's worth
-rotate 7
-
-# Compress old files
-compress
-compressoptions -9f
-
-# Truncate, instead of moving, files to avoid problems with apps
-copytruncate
-
-# Just ignore it if they're not there
-missingok
 
 /var/log/rsv/consumers/html-consumer.log {
+  daily
   rotate 1
+  compress
+  compressoptions -9f
+  copytruncate
+  missingok
 }
 /var/log/rsv/consumers/html-consumer.output {
   monthly
   size=1M
+  rotate 7
+  compress
+  compressoptions -9f
+  copytruncate
+  missingok
 }
 
 /var/log/rsv/consumers/gratia-consumer.log {
+  daily                                          
   rotate 1
+  compress
+  compressoptions -9f
+  copytruncate
+  missingok
 }
 /var/log/rsv/consumers/gratia-consumer.output {
   monthly
   size=1M
+  rotate 7
+  compress
+  compressoptions -9f
+  copytruncate
+  missingok
 }
 
 /var/log/rsv/consumers/nagios-consumer.log {
+  daily
   rotate 1
+  compress
+  compressoptions -9f
+  copytruncate
+  missingok
 }
 /var/log/rsv/consumers/nagios-consumer.output {
   monthly
   size=1M
+  rotate 7
+  compress
+  compressoptions -9f
+  copytruncate
+  missingok
 }
