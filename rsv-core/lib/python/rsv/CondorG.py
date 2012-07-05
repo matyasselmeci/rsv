@@ -60,18 +60,29 @@ class CondorG:
         self.out = os.path.join(self.tempdir, "%s.out" % metric.name)
         self.err = os.path.join(self.tempdir, "%s.err" % metric.name)
 
-        # This is Globus specific.  When we support CREAM we need to modify this section
-        jobmanager = metric.config_get("jobmanager")
-        if not jobmanager:
-            self.rsv.log("CRITICAL", "CondorG->submit: jobmanager not defined in config")
-            # TODO - this should not exit
-            sys.exit(1)
-
         #
         # Build the submit file
         #
         submit_file = "Universe = grid\n"
-        submit_file += "grid_resource = gt2 %s/jobmanager-%s\n\n" % (metric.host, jobmanager)
+        if metric.config_get("condor-ce"):
+            collector_host = metric.config_get("condor-ce-collector")
+            if not collector_host:
+                collector_host = "%s:9619" % metric.host
+            schedd_name = metric.config_get("condor-ce-schedd")
+            if not schedd_name:
+                schedd_name = metric.host
+            submit_file += "grid_resource = condor %s %s\n\n" % (schedd_name, collector_host)
+            submit_file += "remote_universe = local\n"
+            if 'X509_USER_PROXY' in os.environ:
+                submit_file += "x509userproxy = %s\n" % os.environ['X509_USER_PROXY']
+        else:
+            jobmanager = metric.config_get("jobmanager")
+            if not jobmanager:
+                self.rsv.log("CRITICAL", "CondorG->submit: jobmanager not defined in config")
+                # TODO - this should not exit because it causes 'rsv-control --run --all-enabled' to end
+                sys.exit(1)
+            submit_file += "grid_resource = gt2 %s/jobmanager-%s\n\n" % (metric.host, jobmanager)
+
         submit_file += "Executable = %s\n" % metric.executable
 
         args = "-m %s -u %s %s" % (metric.name, metric.host, metric.get_args_string())
