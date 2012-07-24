@@ -116,8 +116,7 @@ class NagiosConsumer(RSVConsumer.RSVConsumer):
 	theurl=string.replace(theurl,"HOST",HOST)
 	theurl=string.replace(theurl,"PLUGIN_OUTPUT",PLUGIN_OUTPUT)
 	theurl=string.replace(theurl,"PLUGIN_STATE",PLUGIN_STATE)
-
-	# now the user name and password
+        theurl=string.replace(theurl,"%0A", "%2B")
 
 	req = urllib2.Request(theurl)
 	try:
