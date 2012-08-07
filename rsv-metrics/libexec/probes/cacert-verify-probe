@@ -61,8 +61,8 @@ Expiration date and validity are not checked.
     self.supported_metrics = [metric]
     ## Specific options and defaults
     self.ca_certs_dir = None
-    # default Error after 72 Hrs
-    self.errorHrs = 3*24 
+    # default Error after 192 Hrs
+    self.errorHrs = 8*24 
     self.tempdir = rsvprobe.get_temp_dir()
     # $o{'errorFile'}  =  $o{'VDT_LOCATION_LOCAL'}."/osg-rsv/logs/probes/.$o{'hostName'}.cacert_verify.err" if (! $o{'errorFile'}) 
     self.error_file = os.path.join(self.tempdir, "localhost.cacert_verify.err")
