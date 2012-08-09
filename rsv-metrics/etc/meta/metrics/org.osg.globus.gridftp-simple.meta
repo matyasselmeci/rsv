@@ -2,7 +2,7 @@
 default-cron-interval = 8 * * * *
 
 execute = local
-service-type = OSG-GridFTP
+service-type = GridFTP
 output-format = brief
 enable-by-default = true
 
