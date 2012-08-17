@@ -233,7 +233,7 @@ Additionally it makes sure that all IGTF CAs are installed.
       local_url = local_urls[1][grid_type]
     elif ca_format_type != 0:
       self.return_unknown("ERROR: CA Certs Directory %s has unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type))
-    self.add_message("Grid type is %s. CA format type is %s. URL with CA distribution: %s" % (grid_type, ca_format_type, local_url))
+    self.add_message("Grid type is %s. CA format type is %s. URL with CA distribution: %s" % (rsvprobe.get_grid_type_string(grid_type), ca_format_type, local_url))
     cert_files = rsvprobe.list_directory(certdir, [cert_ext])
     if not cert_files:
       self.return_unknown("ERROR: CA Certs Directory %s contains no certificate files (*.%s).. Setting metric to unknown." % (certdir, cert_ext))

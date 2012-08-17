@@ -207,6 +207,16 @@ def get_grid_type():
       return 1
   return 0 
 
+def get_grid_type_string(gtype=-1):
+  "Return the translation of the gtype provided 1:OSG-ITB, 0:OSG, or the value from Site_Information"
+  if gtype == 0:
+    grid_type = "OSG"
+  elif gtype == 1:
+    grid_type = "OSG-ITB"
+  else:
+    grid_type = get_config_val("group", "Site Information")
+  return grid_type
+
 def get_temp_dir():
   "Return the a temporary directory to store data across executions."
   # Should I create a directory per user?
