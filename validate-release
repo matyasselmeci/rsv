@@ -62,4 +62,5 @@ if errors:
     print "There were %s error." % errors
     sys.exit(1)
 else:
+    print "Success"
     sys.exit(0)
