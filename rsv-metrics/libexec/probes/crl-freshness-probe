@@ -64,7 +64,7 @@ class CRLProbe(rsvprobe.RSVProbe):
     self.error_file = os.path.join(self.tempdir, "localhost.crl_verify.err")
     self.test_type = 'osg'
     self.help_message = """IMPORTANT NOTE: This is a site-level probe that checks if the CRLs have been updated recently.
-This probe downloads a file contains a list of md5sum from a central location.
+This probe downloads a file containing a list of md5sum from a central location.
 This list is compared against the md5sum of the files in the site CA install.
 Additionally it makes sure that all IGTF CAs are installed.
 """
@@ -287,8 +287,8 @@ errHrs:    Number hours since the failing downloads before an error is issued
       #  local_hash = ca_info['hash']
       #if not os.path.isfile(os.path.join(certdir, "%s.0" % local_hash)):
       self.add_warning(
-        "MISSING: CRL file for %s (type %s) is missing. OSG policy requires CRL for every CA distributed by OSG." % 
-        (local_hash, ca_format_type))
+        "MISSING: CRL file for %s (%s/%s, type %s) is missing. OSG policy requires CRL for every CA distributed by OSG." %
+        (name, ca_info['newhash'], ca_info['hash'], ca_format_type))
       missing_count += 1
 
     # Step 4: See if the warning should be escalated to an error
