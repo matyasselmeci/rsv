@@ -16,7 +16,7 @@ my $glue_ce_info_host_name = $options{u};
 find_binaries("condor_status");
 
 # Want to get a list of the attributes whose names start with 'isClassadValid'
-chomp(my @test_attrib_lines = qx{condor_status -l -pool $collector -constraint 'GlueCEInfoHostName == "$glue_ce_info_host_name"' | grep -E "^isClassadValid[^ ]* =" | sort | uniq});
+chomp(my @test_attrib_lines = qx{condor_status -l -pool '$collector' -constraint 'GlueCEInfoHostName == "$glue_ce_info_host_name"' | grep -E "^isClassadValid[^ ]* =" | sort | uniq});
 
 if (! @test_attrib_lines) {
     print "CRITICAL\n";
@@ -24,10 +24,10 @@ if (! @test_attrib_lines) {
     exit 0;
 }
 
-my $classad_valid_cmd = qq{condor_status -pool $collector -constraint 'GlueCEInfoHostName == "$glue_ce_info_host_name"' -format 'GlueSiteName=%s\n' GlueSiteName -format 'GlueCEInfoContactString=%s\n' GlueCEInfoContactString -format 'Name=%s\n' Name};
+my $classad_valid_cmd = qq{condor_status -pool '$collector' -constraint 'GlueCEInfoHostName == "$glue_ce_info_host_name"' -format 'GlueSiteName=%s\n' GlueSiteName -format 'GlueCEInfoContactString=%s\n' GlueCEInfoContactString -format 'Name=%s\n' Name};
 foreach my $attrib_line (@test_attrib_lines) {
     my ($attrib_name) = split ' ', $attrib_line;
-    $classad_valid_cmd .= " -format '${attrib_name}=%d\\n' $attrib_name";
+    $classad_valid_cmd .= " -format '${attrib_name}=%d\\n' '$attrib_name'";
 }
 
 chomp(my @classad_array = `$classad_valid_cmd`);
