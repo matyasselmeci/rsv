@@ -41,7 +41,7 @@ my $remote_file = basename($local_file) . ".$time.$$";
 my $remote_uri = "srm://$options{u}/$options{'srm-webservice-path'}?SFN=$options{'srm-destination-dir'}/$remote_file";
 
 # TODO - might need '-x509_user_proxy=' included in here
-my $srm_copy_cmd = "srm-copy $local_uri $remote_uri 2>&1";
+my $srm_copy_cmd = "srm-copy '$local_uri' '$remote_uri' 2>&1";
 my $out = `$srm_copy_cmd`;
 if($? != 0) {
     print "CRITICAL\n";
@@ -60,11 +60,13 @@ else {
 # Transfer file back from remote server
 #
 
-my $new_local_file = "/tmp/$remote_file";
+# $new_local_file must have a different basename than $remote_file or else the
+# script will break if the probe is running on the same host as the srm server.
+my $new_local_file = "/tmp/${remote_file}.copy";
 my $new_local_uri = "file://$new_local_file";
 
 # TODO - might need '-x509_user_proxy=' included in here
-$srm_copy_cmd = "srm-copy $remote_uri $new_local_uri 2>&1";
+$srm_copy_cmd = "srm-copy '$remote_uri' '$new_local_uri' 2>&1";
 $out = `$srm_copy_cmd`;
 if($? != 0) {
     print "CRITICAL\n";
