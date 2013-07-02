@@ -197,28 +197,29 @@ EOF
   ################################
   # Check number of files in data area, per file type (SOFTWARE-563).
 
-  # (the @{[<...>]} construct here forces glob to run in list context)
-  my $n_certinfo_files   = @{[ <$datafolder/gratia_certinfo_*> ]};
-  my $n_classad_records  = @{[ <$datafolder/history.*>         ]};
-  my $n_quarantine_files = @{[ <$datafolder/quarantine/*>      ]};
-  my @unsent_records     =     <$workingfolder/*/*>              ;
+  # (the @{[...]} construct here forces glob to run in list context)
+  my $n_certinfo_files   = @{[ glob("$datafolder/gratia_certinfo_*") ]};
+  my $n_classad_records  = @{[ glob("$datafolder/history.*"        ) ]};
+  my $n_quarantine_files = @{[ glob("$datafolder/quarantine/*"     ) ]};
+  my @unsent_records     = glob("$workingfolder/*/*");
+  my $n_unsent_records   = @unsent_records;
   my %unsent_by_dir;
-  for (@unsent_records) {
-    m{(.+)/[^/]+$};
-    ++$unsent_by_dir{$1};
+  for my $rec (@unsent_records) {
+    my ($dir) = ($rec =~ m{(.+)/[^/]+$});
+    ++$unsent_by_dir{$dir};
   }
-  $unsent_by_dir{$workingfolder} = 0 if @unsent_records == 0;
+  $unsent_by_dir{$workingfolder} = 0 if $n_unsent_records == 0;
 
   my $ndata = $n_certinfo_files + $n_classad_records + $n_quarantine_files 
-            + @unsent_records;
+            + $n_unsent_records;
 
   $message = join("\n  ",
     "$ndata total gratia files found:",
     "$n_certinfo_files gratia_certinfo files under $datafolder/",
     "$n_classad_records classad records under $datafolder/",
     "$n_quarantine_files quarantine files under $datafolder/quarantine/",
-    map "$unsent_by_dir{$_} unsent collector records under $_",
-        sort keys %unsent_by_dir
+    map("$unsent_by_dir{$_} unsent collector records under $_",
+        sort keys %unsent_by_dir)
   ) . "\n";
 
   if ($ndata > 10000) {
