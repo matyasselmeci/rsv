@@ -168,12 +168,11 @@ EOF
   # Check size of reprocessing queue
   init_find_counts();
 
-  # This code was modified by Scot Kronenfeld on 2012-02-21 to fix a bug in JIRA
-  # ticket SOFTWARE-535.  The logic is replicating the behavior in GratiaCore.py,
-  # specifically in the ProbeConfiguration.getFilenameFragment() function.  If
-  # that changes, this might become invalid, so I added a warning in case the 
-  # directory does not exist.
-  (my $subdir = "subdir.${probename}_$soaphost") =~ s|[:/]|_|g;
+  # This replicates the behavior of OpenNewRecordFile() from gratia/common/sandbox_mgmt.py, Gratia version 1.13.9
+  # which uses ProbeConfiguration.getFilenameFragment() from gratia/common/common/probe_config.py
+  # If that changes, this might become invalid, hence the warning if the directory does not exist.
+  # See also SOFTWARE-535.
+  my $subdir = "subdir." . ProbeConfiguration_getFilenameFragment($probename, $soaphost);
   $subdir = "$workingfolder/gratiafiles/$subdir";
   if(!-e $subdir) {
       setWarning();
@@ -749,6 +748,15 @@ sub process_find_leaf {
   }
   ++$file_count;
   ++$old_file_count if int(-M _) > 7;
+}
+
+# based on ProbeConfiguration.getFilenameFragment() from gratia/common/probe_config.py
+# Gratia version 1.13.9, 2013-03-29
+sub ProbeConfiguration_getFilenameFragment {
+    my ($probename, $soaphost) = @_;
+    my $fragment = "${probename}_$soaphost";
+    $fragment =~ s{[:/]}{_}g;
+    return $fragment;
 }
 
 __END__
