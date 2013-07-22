@@ -173,7 +173,10 @@ def get_java_used_by_tomcat():
     # so call that function as well.
     # We need to use a bash helper script to do this.
 
-    cmd = ("bash", os.path.join(os.getcwd(), "worker-scripts", "java-version-probe-worker"))
+    worker_script_path = os.path.join(os.getcwd(), "worker-scripts", "java-version-probe-worker")
+    if not os.path.exists(worker_script_path):
+        worker_script_path = os.path.join(os.getcwd(), "java-version-probe-worker")
+    cmd = ("bash", worker_script_path)
     output, _, returncode = run_with_subprocess(cmd)
 
     if returncode == 1:
