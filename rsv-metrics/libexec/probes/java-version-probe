@@ -1,93 +1,193 @@
 #!/usr/bin/python
 
+import os
 import re
 import subprocess
+import sys
 
 import rsvprobe
 
+
+def run_with_subprocess(cmd):
+    """Run a command using subprocess, returning a tuple of (output, error,
+    returncode) where output and error are the contents of stdout and stderr,
+    respectively. Forces 'C' locale in case we need to parse the output.
+
+    """
+    new_env = dict(os.environ, LC_ALL='C')
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=new_env)
+    output, error = proc.communicate()
+    returncode = proc.returncode
+
+    return (output, error, returncode)
+
+
+def real_which(program):
+    """Returns the real path to a program, with all symlinks resolved."""
+    which_file = rsvprobe.which(program)
+    if which_file:
+        return os.path.realpath(which_file)
+    else:
+        return None
+
+
+def rpm_query_files(*filepaths):
+    """Return a list of RPMs owning the files in 'filepaths'."""
+    if filepaths:
+        # The 'PACKAGE:' string is used to filter out errors -- any line not
+        # containing it will be discarded.
+        cmd = (['rpm', '--query', '--file',
+                r'--queryformat=PACKAGE:%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n'] +
+               list(filepaths))
+        output, error, returncode = run_with_subprocess(cmd)
+
+        return [line.lstrip('PACKAGE:') for line in output.split("\n") if line.startswith('PACKAGE:')]
+    else:
+        return []
+
+
+def rpm_query_whatprovides(*dependencies):
+    """Return a list of RPMs that provide the dependencies in
+    'dependencies'.
+
+    """
+    if dependencies:
+        # The 'PACKAGE:' string is used to filter out errors -- any line not
+        # containing it will be discarded.
+        cmd = (['rpm', '--query', '--whatprovides',
+                r'--queryformat=PACKAGE:%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n'] +
+               list(dependencies))
+        output, error, returncode = run_with_subprocess(cmd)
+
+        return [line.lstrip('PACKAGE:') for line in output.split("\n") if line.startswith('PACKAGE:')]
+    else:
+        return []
+
+
+# Functions to get a list of installed JREs/JDKs
+# We just look for the appropriate dependencies. Note that 'jdk' (Oracle JDK 6)
+# does not provide 'java' or 'java-devel' (though its helper package
+# java-1.6.0-sun-compat does) so we search for that one specifically.
+
+def get_installed_jre_packages():
+    """Return a list of all JREs installed."""
+    return sorted(rpm_query_whatprovides('java', 'java7', 'jdk'))
+
+def get_installed_jdk_packages():
+    """Return a list of all JDKs installed."""
+    return sorted(rpm_query_whatprovides('java-devel', 'java7-devel', 'jdk'))
+
+
+def get_java_binary_version(java_binary):
+    """Return a description (multi-line string) of the following:
+        1. The version string of a Java binary (searching $PATH if needed), as reported by running "'java_binary' -version"
+        2. The real path to the binary
+        3. Which RPM (if any) provides that binary
+
+    """
+    cmd = (java_binary, '-version')
+    _, version_output, returncode = run_with_subprocess(cmd) # '-version' output goes onto stderr
+
+    if returncode == 0:
+        full_path = real_which(java_binary)
+        ret = "Version: %s\nFull path: %s\n" % (version_output, full_path)
+        providers = rpm_query_files(full_path)
+        if providers:
+            ret += "Provided by: %s\n" % ", ".join(providers)
+        else:
+            ret += "Not provided by an RPM\n"
+        return ret
+    else:
+        return "Not found\n"
+
+
+def get_jre_in_path():
+    return get_java_binary_version('java')
+
+def get_jdk_in_path():
+    return get_java_binary_version('javac')
+
+
+def get_java_used_by_tomcat():
+    """Get version info of Java used by Tomcat webapps. See
+    get_java_used_by_tomcat for the format.
+
+    """
+    if not rpm_query_whatprovides('tomcat5', 'tomcat6'):
+        return "Tomcat packages not found\n"
+
+    # Files by the init script are sourced in the following order:
+    #   /etc/tomcat[56]/tomcat[56].conf
+    #   /etc/sysconfig/tomcat[56]
+    # except if JAVA_HOME is already set in the environment, that value is used.
+    #
+    # The actual script that starts the tomcat daemon (/usr/sbin/tomcat) uses
+    # a bash function from jpackage-utils called set_javacmd to get the Java interpreter to use,
+    # so call that function as well.
+    # We need to use a bash helper script to do this.
+
+    cmd = ("bash", os.path.join(os.getcwd(), "worker-scripts", "java-version-probe-worker"))
+    output, _, returncode = run_with_subprocess(cmd)
+
+    # TODO Error conditions?
+    if returncode == 1:
+        return "Could not determine Java used by Tomcat\n"
+    else:
+        java_binary = os.path.realpath(output.strip())
+        return get_java_binary_version(java_binary)
+
+
 class JavaVersionProbe(rsvprobe.RSVProbe):
     """Probe listing the versions of Java that are available, and which ones
-    are in use.
-    For now, we're just reporting info, so this probe will always be OK.
+    are in use.  For now, we're just reporting info, so this probe will always
+    be OK.
+
     """
 
     def run(self):
         """Main routine for the probe"""
         self.parseopt()
-        out_msg = ""
-        out_msg += "Available JVM packages:\n" + self.get_installed_jvm_packages()
-        out_msg += "\n'java' command version:\n" + self.get_jre_in_path()
-        out_msg += "\n'javac' command version:\n" + self.get_jdk_in_path()
-        out_msg += "\nJava used by tomcat:\n" + self.get_java_used_by_tomcat()
+        details = "\n"
+        details += "Available JREs:\n"
 
-        self.return_ok(out_msg)
+        jres = get_installed_jre_packages()
+        if not jres:
+            details += "None found."
+        else:
+            details += "\n".join(jres)
+        details += "\n\n"
 
-    def get_installed_jvm_packages(self):
-        """Return a list of all JVMs installed. The easiest way is to look for
-        the appropriate RPMs."""
-        cmd = ('rpm', '--query', '--all', r'--queryformat=%{NAME}-%{VERSION}\n')
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-        output = proc.communicate()[0]
-        err = proc.returncode
-        if err:
-            # No installed JVMs
-            return ""
+        details += "java command in path:\n"
+        details += get_jre_in_path()
+        details += "\n\n"
 
-        jvms = ()
-        java_pattern = re.compile(
-            r'''(?:java|jdk)-1\.\d\.\d'''
-        for line in output:
-            stripped_line = line.strip()
-            if java_pattern.match(stripped_line):
-                jvms.append(stripped_line)
+        details += "Available JDKs:\n"
 
-        return "\n".join(jvms)
+        jdks = get_installed_jdk_packages()
+        if not jdks:
+            details += "None found."
+        else:
+            details += "\n".join(jdks)
 
-    def get_jre_in_path(self):
-        """Get the version of the JRE (= version of 'java' command that is in $PATH)"""
-        cmd = ('java', '-version')
-        proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
-        output = proc.communicate()[1] # '-version' output goes onto stderr
-        err = proc.returncode
+        details += "\n\n"
+        details += "javac command in path:\n"
+        details += get_jdk_in_path()
+        details += "\n\n"
 
-        # TODO What error conditions might there be?
-        if err:
-            return ""
+        details += "java used by Tomcat:\n"
+        details += get_java_used_by_tomcat()
+        details += "\n"
 
-        return output
+        self.return_ok("Java packages queried.\n" + details)
 
-    def get_jdk_in_path(self):
-        """Get the version of the JDK (= version of 'javac' command in $PATH)"""
-        cmd = ('javac', '-version')
-        proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
-        output = proc.communicate()[1] # '-version' output goes onto stderr
-        err = proc.returncode
 
-        # TODO What error conditions might there be?
-        if err:
-            return ""
 
-        return output
-
-    def get_java_used_by_tomcat(self):
-        """Get version of Java used by Tomcat webapps"""
-        # This is the tricky one.
-        # If tomcat is running, perhaps I can look at its command line, find which 'java' it's using and look at that.
-        # If tomcat is not running, I need to replicate at least part of the behavior in /usr/sbin/tomcat[56] to figure out how it picks which Java to run.
-        # There are several places where I need to check:
-        #   * /etc/init.d/tomcat[56] -- it should not get modified, but might have been
-        #   * /etc/sysconfig/tomcat[56] -- JAVA_HOME may or may not get set there
-        #   * /etc/tomcat[56]/tomcat[56].conf -- ditto (/etc/sysconfig/tomcat[56] takes precedence)
-        #   * Whatever set_javacmd from /usr/share/java-utils/java-functions finds
-        # Plus, JAVA_HOME might already be defined -- though there is no guarantee that the rsv user's environment will match the tomcat user's environment
-        # TODO: What if the running tomcat is using a different Java than what is configured on the file system?
-
-        return
 
 
 def main():
     probe = JavaVersionProbe()
     probe.run()
+    return 0
 
 
 if __name__ == '__main__':

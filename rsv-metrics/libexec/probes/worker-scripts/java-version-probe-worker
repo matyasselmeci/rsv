@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# Tries to determine which Java Tomcat uses
+tomcatv=
+rpm -q tomcat5 &> /dev/null && tomcatv=tomcat5
+rpm -q tomcat6 &> /dev/null && tomcatv=tomcat6
+
+[[ -z $tomcatv ]] && {
+    # No tomcat. Shouldn't happen.
+    exit 1
+}
+
+[[ -r /etc/$tomcatv/$tomcatv.conf ]] && . /etc/$tomcatv/$tomcatv.conf
+[[ -r /etc/sysconfig/$tomcatv ]] && . /etc/sysconfig/$tomcatv
+
+if [[ -r /usr/share/java-utils/java-functions ]]; then
+    . /usr/share/java-utils/java-functions
+    set_javacmd
+    echo ${JAVACMD}
+else
+    if [[ -n $JAVA_HOME && -x $JAVA_HOME/bin/java ]]; then
+        echo $JAVA_HOME/bin/java
+    else
+        exit 1
+    fi
+fi
+
+
+
