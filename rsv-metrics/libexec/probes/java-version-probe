@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 
 import os
 import re
@@ -64,6 +64,34 @@ def rpm_query_whatprovides(*dependencies):
         return []
 
 
+# Helper functions for YAML output, which is indent-sensitive
+def indent_multiline_string(in_string, spaces):
+    """Indent each line of a multi-line string by 'spaces' spaces. Do not
+    indent single-line strings.
+
+    """
+    if in_string.find("\n") != -1:
+        return "\n".join([(' ' * spaces) + line for line in in_string.split("\n")])
+    else:
+        return in_string
+
+
+def list_to_string(in_list):
+    """Convert a python list to a string containing its YAML representation.
+    The Python list [] is represented as the YAML string '[]' and is on the same
+    line as its label. The Python list [1,2,3] is represented as the YAML string
+    '- 1
+    - 2
+    - 3'
+    and is on lines following its label.
+
+    """
+    if not in_list:
+        return "[]"
+    else:
+        return "\n  - " + "\n  - ".join(in_list)
+
+
 # Functions to get a list of installed JREs/JDKs
 # We just look for the appropriate dependencies. Note that 'jdk' (Oracle JDK 6)
 # does not provide 'java' or 'java-devel' (though its helper package
@@ -78,11 +106,16 @@ def get_installed_jdk_packages():
     return sorted(rpm_query_whatprovides('java-devel', 'java7-devel', 'jdk'))
 
 
+
 def get_java_binary_version(java_binary):
-    """Return a description (multi-line string) of the following:
+    """Return the following:
         1. The version string of a Java binary (searching $PATH if needed), as reported by running "'java_binary' -version"
         2. The real path to the binary
         3. Which RPM (if any) provides that binary
+    The string '(Not found)' is returned if the binary can't be executed or
+    returns an error. Otherwise, the string is a YAML hash containing the keys
+    'Version' (a multiline string), 'Full path' (a string) and 'Provided by' (a
+    string).
 
     """
     cmd = (java_binary, '-version')
@@ -90,31 +123,45 @@ def get_java_binary_version(java_binary):
 
     if returncode == 0:
         full_path = real_which(java_binary)
-        ret = "Version: %s\nFull path: %s\n" % (version_output, full_path)
         providers = rpm_query_files(full_path)
         if providers:
-            ret += "Provided by: %s\n" % ", ".join(providers)
+            # In theory we can have multiple providers, but in practice that won't happen
+            provider_str = providers[0]
         else:
-            ret += "Not provided by an RPM\n"
+            provider_str = "(Non-RPM install)"
+        ret = """
+Version: |
+%s
+Full path: %s
+Provided by: %s
+""" % (indent_multiline_string(version_output, 2), full_path, provider_str)
         return ret
     else:
-        return "Not found\n"
+        return "(Not found)"
 
 
 def get_jre_in_path():
+    """Get the version info of the current JRE by looking at the 'java' binary
+    in $PATH. See get_java_binary_version for format.
+
+    """
     return get_java_binary_version('java')
 
 def get_jdk_in_path():
+    """Get the version info of the current JDK by looking at the 'javac' binary
+    in $PATH. See get_java_binary_version for format.
+
+    """
     return get_java_binary_version('javac')
 
 
 def get_java_used_by_tomcat():
     """Get version info of Java used by Tomcat webapps. See
-    get_java_used_by_tomcat for the format.
+    get_java_binary_version for the format.
 
     """
     if not rpm_query_whatprovides('tomcat5', 'tomcat6'):
-        return "Tomcat packages not found\n"
+        return "(Tomcat packages not found)"
 
     # Files by the init script are sourced in the following order:
     #   /etc/tomcat[56]/tomcat[56].conf
@@ -129,9 +176,8 @@ def get_java_used_by_tomcat():
     cmd = ("bash", os.path.join(os.getcwd(), "worker-scripts", "java-version-probe-worker"))
     output, _, returncode = run_with_subprocess(cmd)
 
-    # TODO Error conditions?
     if returncode == 1:
-        return "Could not determine Java used by Tomcat\n"
+        return "(UNKNOWN)"
     else:
         java_binary = os.path.realpath(output.strip())
         return get_java_binary_version(java_binary)
@@ -142,41 +188,47 @@ class JavaVersionProbe(rsvprobe.RSVProbe):
     are in use.  For now, we're just reporting info, so this probe will always
     be OK.
 
+    Output is in YAML so it is human-readable and can be parsed by an
+    aggregator script. The following keys/values are used:
+
+    'Installed JRE RPMs': A list of strings
+    'java command in path': A hash or the string '(Not found)', see
+        get_java_binary_version for format
+    'Installed JDK RPMs': A list of strings
+    'javac command in path': A hash or the string '(Not found)', see
+        get_java_binary_version for format
+    'java used by Tomcat': A hash (see get_java_binary_version) or one of the
+        following strings: '(Tomcat packages not found)', '(UNKNOWN)',
+        '(Not found)'
+
     """
 
     def run(self):
         """Main routine for the probe"""
         self.parseopt()
-        details = "\n"
-        details += "Available JREs:\n"
+        details = "---\n"
 
         jres = get_installed_jre_packages()
-        if not jres:
-            details += "None found."
-        else:
-            details += "\n".join(jres)
+        details += "Installed JRE RPMs: " + list_to_string(jres)
         details += "\n\n"
 
-        details += "java command in path:\n"
-        details += get_jre_in_path()
+        details += "java command in path: "
+        details += indent_multiline_string(get_jre_in_path(), 2)
         details += "\n\n"
-
-        details += "Available JDKs:\n"
 
         jdks = get_installed_jdk_packages()
-        if not jdks:
-            details += "None found."
-        else:
-            details += "\n".join(jdks)
+        details += "Installed JDK RPMs: " + list_to_string(jdks)
 
         details += "\n\n"
-        details += "javac command in path:\n"
-        details += get_jdk_in_path()
+        details += "javac command in path: "
+        details += indent_multiline_string(get_jdk_in_path(), 2)
         details += "\n\n"
 
-        details += "java used by Tomcat:\n"
-        details += get_java_used_by_tomcat()
-        details += "\n"
+        details += "java used by Tomcat: "
+        details += indent_multiline_string(get_java_used_by_tomcat(), 2)
+        details += "\n\n"
+
+        details += "---\n"
 
         self.return_ok("Java packages queried.\n" + details)
 
