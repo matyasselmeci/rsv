@@ -5,6 +5,9 @@ import re
 import subprocess
 import sys
 
+
+sys.path.insert(0, '.')
+
 import rsvprobe
 
 
@@ -99,11 +102,13 @@ def list_to_string(in_list):
 
 def get_installed_jre_packages():
     """Return a list of all JREs installed."""
-    return sorted(rpm_query_whatprovides('java', 'java7', 'jdk'))
+    # Convert to a set and back to a list again to uniqueify.
+    return sorted(list(set(rpm_query_whatprovides('java', 'java7', 'jdk'))))
 
 def get_installed_jdk_packages():
     """Return a list of all JDKs installed."""
-    return sorted(rpm_query_whatprovides('java-devel', 'java7-devel', 'jdk'))
+    # Convert to a set and back to a list again to uniqueify.
+    return sorted(list(set(rpm_query_whatprovides('java-devel', 'java7-devel', 'jdk'))))
 
 
 
@@ -205,6 +210,13 @@ class JavaVersionProbe(rsvprobe.RSVProbe):
         '(Not found)'
 
     """
+    def __init__(self):
+        rsvprobe.RSVProbe.__init__(self)
+        self.metric = ""
+        metric = rsvprobe.RSVMetric("OSG-CE", "org.osg.general.java-version", rsvprobe.RSVMetric.STATUS)
+        metric.service_version = ">= OSG CE 1.0.0"
+        metric.probe_type = "OSG-CE"
+        self.supported_metrics = [metric]
 
     def run(self):
         """Main routine for the probe"""

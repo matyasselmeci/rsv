@@ -2,7 +2,7 @@
 default-cron-interval = 47 * * * *
 
 execute = grid
-transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm /usr/libexec/rsv/probes/worker-scripts/java-version-probe-worker
+transfer-files = /usr/libexec/rsv/probes/rsvprobe.py /usr/libexec/rsv/probes/worker-scripts/java-version-probe-worker
 service-type = OSG-CE
 output-format = brief
 enable-by-default = true
