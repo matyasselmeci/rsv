@@ -1,0 +1,94 @@
+#!/usr/bin/python
+
+import re
+import subprocess
+
+import rsvprobe
+
+class JavaVersionProbe(rsvprobe.RSVProbe):
+    """Probe listing the versions of Java that are available, and which ones
+    are in use.
+    For now, we're just reporting info, so this probe will always be OK.
+    """
+
+    def run(self):
+        """Main routine for the probe"""
+        self.parseopt()
+        out_msg = ""
+        out_msg += "Available JVM packages:\n" + self.get_installed_jvm_packages()
+        out_msg += "\n'java' command version:\n" + self.get_jre_in_path()
+        out_msg += "\n'javac' command version:\n" + self.get_jdk_in_path()
+        out_msg += "\nJava used by tomcat:\n" + self.get_java_used_by_tomcat()
+
+        self.return_ok(out_msg)
+
+    def get_installed_jvm_packages(self):
+        """Return a list of all JVMs installed. The easiest way is to look for
+        the appropriate RPMs."""
+        cmd = ('rpm', '--query', '--all', r'--queryformat=%{NAME}-%{VERSION}\n')
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+        output = proc.communicate()[0]
+        err = proc.returncode
+        if err:
+            # No installed JVMs
+            return ""
+
+        jvms = ()
+        java_pattern = re.compile(
+            r'''(?:java|jdk)-1\.\d\.\d'''
+        for line in output:
+            stripped_line = line.strip()
+            if java_pattern.match(stripped_line):
+                jvms.append(stripped_line)
+
+        return "\n".join(jvms)
+
+    def get_jre_in_path(self):
+        """Get the version of the JRE (= version of 'java' command that is in $PATH)"""
+        cmd = ('java', '-version')
+        proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
+        output = proc.communicate()[1] # '-version' output goes onto stderr
+        err = proc.returncode
+
+        # TODO What error conditions might there be?
+        if err:
+            return ""
+
+        return output
+
+    def get_jdk_in_path(self):
+        """Get the version of the JDK (= version of 'javac' command in $PATH)"""
+        cmd = ('javac', '-version')
+        proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
+        output = proc.communicate()[1] # '-version' output goes onto stderr
+        err = proc.returncode
+
+        # TODO What error conditions might there be?
+        if err:
+            return ""
+
+        return output
+
+    def get_java_used_by_tomcat(self):
+        """Get version of Java used by Tomcat webapps"""
+        # This is the tricky one.
+        # If tomcat is running, perhaps I can look at its command line, find which 'java' it's using and look at that.
+        # If tomcat is not running, I need to replicate at least part of the behavior in /usr/sbin/tomcat[56] to figure out how it picks which Java to run.
+        # There are several places where I need to check:
+        #   * /etc/init.d/tomcat[56] -- it should not get modified, but might have been
+        #   * /etc/sysconfig/tomcat[56] -- JAVA_HOME may or may not get set there
+        #   * /etc/tomcat[56]/tomcat[56].conf -- ditto (/etc/sysconfig/tomcat[56] takes precedence)
+        #   * Whatever set_javacmd from /usr/share/java-utils/java-functions finds
+        # Plus, JAVA_HOME might already be defined -- though there is no guarantee that the rsv user's environment will match the tomcat user's environment
+        # TODO: What if the running tomcat is using a different Java than what is configured on the file system?
+
+        return
+
+
+def main():
+    probe = JavaVersionProbe()
+    probe.run()
+
+
+if __name__ == '__main__':
+    sys.exit(main())
