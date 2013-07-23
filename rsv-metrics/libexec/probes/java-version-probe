@@ -171,7 +171,6 @@ def get_java_used_by_tomcat():
     # Files by the init script are sourced in the following order:
     #   /etc/tomcat[56]/tomcat[56].conf
     #   /etc/sysconfig/tomcat[56]
-    # except if JAVA_HOME is already set in the environment, that value is used.
     #
     # The actual script that starts the tomcat daemon (/usr/sbin/tomcat) uses
     # a bash function from jpackage-utils called set_javacmd to get the Java interpreter to use,
