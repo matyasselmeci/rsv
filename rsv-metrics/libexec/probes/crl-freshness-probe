@@ -287,7 +287,13 @@ errHrs:    Number hours since the failing downloads before an error is issued
       #  local_hash = ca_info['hash']
       #if not os.path.isfile(os.path.join(certdir, "%s.0" % local_hash)):
       self.add_warning(
-        "MISSING: CRL file for %s (%s/%s, type %s) is missing. OSG policy requires CRL for every CA distributed by OSG." %
+        ("MISSING: CRL file for %s (%s/%s, type %s) is missing. OSG policy requires CRL for every CA distributed by OSG.\n"
+         "- Has fetch-crl run recently?  (See /etc/cron.d/fetch-crl*)\n"
+         "- See fetch-crl output (mailed to root by cron or sent to syslog), "
+         "or try running fetch-crl by hand to inspect its output.\n"
+         "- More info on troubleshooting this probe can be found at: "
+         "https://www.opensciencegrid.org/bin/view/Documentation/Release3/RsvProbeCrlFreshnessProbe\n"
+         "- For more help, submit a ticket to the GOC at: https://ticket.grid.iu.edu/") %
         (name, ca_info['newhash'], ca_info['hash'], ca_format_type))
       missing_count += 1
 
