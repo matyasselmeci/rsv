@@ -10,6 +10,11 @@ sys.path.insert(0, '.')
 
 import rsvprobe
 
+# Helper script error codes
+E_OK = 0
+E_ERROR = 1
+E_COMPONENT_NOT_INSTALLED = 2
+E_UNKNOWN_COMPONENT = 3
 
 def run_with_subprocess(cmd):
     """Run a command using subprocess, returning a tuple of (output, error,
@@ -92,7 +97,7 @@ def list_to_string(in_list):
     if not in_list:
         return "[]"
     else:
-        return "\n  - " + "\n  - ".join(in_list)
+        return "\n- " + "\n- ".join(in_list)
 
 
 # Functions to get a list of installed JREs/JDKs
@@ -138,8 +143,7 @@ def get_java_binary_version(java_binary):
 Version: |
 %s
 Full path: %s
-Provided by: %s
-""" % (indent_multiline_string(version_output, 2), full_path, provider_str)
+Provided by: %s""" % (indent_multiline_string(version_output, 2), full_path, provider_str)
         return ret
     else:
         return "(Not found)"
@@ -160,30 +164,23 @@ def get_jdk_in_path():
     return get_java_binary_version('javac')
 
 
-def get_java_used_by_tomcat():
-    """Get version info of Java used by Tomcat webapps. See
-    get_java_binary_version for the format.
+def get_java_used_by_component(component):
+    """Get version info of Java used by a specific component, such as Tomcat.
+    See get_java_binary_version for the format.
 
     """
-    if not rpm_query_whatprovides('tomcat5', 'tomcat6'):
-        return "(Tomcat packages not found)"
-
-    # Files by the init script are sourced in the following order:
-    #   /etc/tomcat[56]/tomcat[56].conf
-    #   /etc/sysconfig/tomcat[56]
-    #
-    # The actual script that starts the tomcat daemon (/usr/sbin/tomcat) uses
-    # a bash function from jpackage-utils called set_javacmd to get the Java interpreter to use,
-    # so call that function as well.
-    # We need to use a bash helper script to do this.
+    # Since most services choose which Java to run from the environment, or by
+    # sourcing a file, we need a bash helper script to do the actual work.
 
     worker_script_path = os.path.join(os.getcwd(), "worker-scripts", "java-version-probe-worker")
     if not os.path.exists(worker_script_path):
         worker_script_path = os.path.join(os.getcwd(), "java-version-probe-worker")
-    cmd = ("bash", worker_script_path)
+    cmd = ("bash", worker_script_path, component)
     output, _, returncode = run_with_subprocess(cmd)
 
-    if returncode == 1:
+    if returncode == E_COMPONENT_NOT_INSTALLED:
+        return "(Not found)"
+    elif returncode != E_OK:
         return "(UNKNOWN)"
     else:
         java_binary = os.path.realpath(output.strip())
@@ -204,11 +201,14 @@ class JavaVersionProbe(rsvprobe.RSVProbe):
     'Installed JDK RPMs': A list of strings
     'javac command in path': A hash or the string '(Not found)', see
         get_java_binary_version for format
-    'java used by Tomcat': A hash (see get_java_binary_version) or one of the
-        following strings: '(Tomcat packages not found)', '(UNKNOWN)',
-        '(Not found)'
+    'java used by <component>': A hash (see get_java_binary_version) or one of
+        the following strings: '(UNKNOWN)', '(Not found)'.
+        <component> is one of the components in 'known_components'
 
     """
+
+    known_components = ['bestman2', 'hadoop-0.20', 'hadoop', 'tomcat', 'xrootd-hdfs']
+
     def __init__(self):
         rsvprobe.RSVProbe.__init__(self)
         self.metric = ""
@@ -216,35 +216,29 @@ class JavaVersionProbe(rsvprobe.RSVProbe):
         metric.service_version = ">= OSG CE 1.0.0"
         metric.probe_type = "OSG-CE"
         self.supported_metrics = [metric]
+        self.details = "---\n"
+
+    def add_details_item(self, label, text):
+        self.details += label + ": "
+        self.details += indent_multiline_string(text, 2)
+        self.details += "\n\n"
 
     def run(self):
         """Main routine for the probe"""
         self.parseopt()
-        details = "---\n"
 
         jres = get_installed_jre_packages()
-        details += "Installed JRE RPMs: " + list_to_string(jres)
-        details += "\n\n"
-
-        details += "java command in path: "
-        details += indent_multiline_string(get_jre_in_path(), 2)
-        details += "\n\n"
-
+        self.add_details_item('Installed JRE RPMs', list_to_string(jres))
+        self.add_details_item('java command in path', get_jre_in_path())
         jdks = get_installed_jdk_packages()
-        details += "Installed JDK RPMs: " + list_to_string(jdks)
+        self.add_details_item('Installed JDK RPMs', list_to_string(jdks))
+        self.add_details_item('javac command in path', get_jdk_in_path())
 
-        details += "\n\n"
-        details += "javac command in path: "
-        details += indent_multiline_string(get_jdk_in_path(), 2)
-        details += "\n\n"
+        for component in self.known_components:
+            self.add_details_item('java used by ' + component, get_java_used_by_component(component))
+        self.details += "---\n"
 
-        details += "java used by Tomcat: "
-        details += indent_multiline_string(get_java_used_by_tomcat(), 2)
-        details += "\n\n"
-
-        details += "---\n"
-
-        self.return_ok("Java packages queried.\n" + details)
+        self.return_ok("Java packages queried.\n" + self.details)
 
 
 
