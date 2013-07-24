@@ -73,6 +73,7 @@ print_hadoop_java () {
 print_hadoop_0_20_java () {
     rpm -q hadoop-0.20 &> /dev/null || return $E_COMPONENT_NOT_INSTALLED
     (
+        safe_source /etc/default/hadoop-0.20 # needed to get HADOOP_HOME
         safe_source /usr/lib/hadoop-0.20/bin/hadoop-config.sh
         if [[ -n $JAVA_HOME && -x $JAVA_HOME/bin/java ]]; then
             echo "$JAVA_HOME/bin/java"
