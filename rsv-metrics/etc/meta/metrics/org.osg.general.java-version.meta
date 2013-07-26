@@ -1,5 +1,5 @@
 [org.osg.general.java-version]
-default-cron-interval = 47 * * * *
+default-cron-interval = 47 */6 * * *
 
 execute = grid
 transfer-files = /usr/libexec/rsv/probes/rsvprobe.py /usr/libexec/rsv/probes/worker-scripts/java-version-probe-worker
