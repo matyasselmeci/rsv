@@ -64,12 +64,26 @@ else
   echo "cannot find condor logs" >> $rsvlog
 fi
 
-echo "Trying to copy condor_conf file..." >> $rsvlog
+echo "Trying to copy condor-cron config files..." >> $rsvlog
 if [ -r /etc/condor-cron/condor_config ]; then
   cp /etc/condor-cron/condor_config $rsvfiledir
   echo "copied condor_config"      >> $rsvlog
 else
   echo "cannot find condor_config" >> $rsvlog
+fi
+if [ -d /etc/condor-cron/config.d ]; then
+  cp -r /etc/condor-cron/config.d $rsvfiledir/condor-cron-config.d
+  echo "copied condor-cron/config.d as condor-cron-config.d" >> $rsvlog
+else
+  echo "cannot find condor-cron/config.d" >> $rsvlog
+fi
+
+echo "Trying to copy condor-cron sysconfig file..." >> $rsvlog
+if [ -r /etc/sysconfig/condor-cron ]; then
+  cp /etc/sysconfig/condor-cron $rsvfiledir/condor-cron-sysconfig
+  echo "copied sysconfig/condor-cron as condor-cron-sysconfig" >> $rsvlog
+else
+  echo "cannot find sysconfig/condor-cron" >> $rsvlog
 fi
 
 
