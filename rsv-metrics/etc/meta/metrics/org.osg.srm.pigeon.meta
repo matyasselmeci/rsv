@@ -6,7 +6,7 @@ service-type = OSG-SRM
 output-format = wlcg-multiple
 probe-spec = v3
 enable-by-default = false
-timeout = 1800
+job-timeout = 1800
 
 [org.osg.srm.pigeon env]
 PERL5LIB = PREPEND | /usr/libexec/rsv/probes
