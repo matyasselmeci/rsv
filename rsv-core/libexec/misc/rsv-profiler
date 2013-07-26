@@ -88,9 +88,9 @@ fi
 
 
 echo "Installed packages..." >> $rsvlog
-rpm -qa | grep condor >> $rsvfiledir 2>&1
-rpm -qa | grep rsv    >> $rsvfiledir 2>&1
-echo ""               >> $rsvfiledir
+rpm -qa | grep condor >> $rsvlog 2>&1
+rpm -qa | grep rsv    >> $rsvlog 2>&1
+echo ""               >> $rsvlog
 
 
 ##
@@ -186,3 +186,5 @@ fi
 
 tar czf rsv-profiler.tar.gz $filedirname
 rm -fr $filedirname
+
+# vi:sw=2 sts=2
