@@ -273,17 +273,33 @@ class Metric:
 
 
     def get_timeout(self):
-        """ Return the jobs custom timeout setting, or None """
+        """ Return the job's custom timeout setting, or None """
+
+        # check 'timeout' option first, but generate a warning if used
         try:
-            timeout = self.config.getint(self.name, "timeout")
+            timeout = self.config.getint(self.name, 'timeout')
             self.rsv.log("INFO", "Custom timeout (%s seconds) is set for metric '%s'" % (timeout, self.name))
+            self.rsv.log("WARNING", ("Deprecated 'timeout' option used for metric '%s', " 
+                                     "please use 'job-timeout' instead") % self.name)
             return timeout
         except ValueError:
             self.rsv.log("WARNING", "A non-integer value is set for timeout for metric '%s'" % self.name)
+        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+            # It's expected that this won't be defined most of the time
+            pass
+
+        # then try 'job-timeout'
+        try:
+            timeout = self.config.getint(self.name, 'job-timeout')
+            self.rsv.log("INFO", "Custom job-timeout (%s seconds) is set for metric '%s'" % (timeout, self.name))
+            return timeout
+        except ValueError:
+            self.rsv.log("WARNING", "A non-integer value is set for job-timeout for metric '%s'" % self.name)
             return None
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
             # It's expected that this won't be defined most of the time
             return None
+
 
     def get_settings(self):
         """ Get settings that need to be passed to rsv-control.  This is different than
