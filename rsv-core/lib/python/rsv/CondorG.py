@@ -64,7 +64,7 @@ class CondorG:
         # Build the submit file
         #
         submit_file = "Universe = grid\n"
-        if metric.config_get("condor-ce"):
+        if metric.config_get("condor-ce") or metric.ce_type == 'htcondor':
             collector_host = metric.config_get("condor-ce-collector")
             if not collector_host:
                 collector_host = "%s:9619" % metric.host

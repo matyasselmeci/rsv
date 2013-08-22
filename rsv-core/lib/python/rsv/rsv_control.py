@@ -21,7 +21,7 @@ def process_options(arguments=None):
     Level settings - 0=print nothing, 1=normal, 2=info, 3=debug
 
     Run a one-time test:
-    --run [--all-enabled] --host <HOST> METRIC [METRIC ...]
+    --run [--all-enabled] [--ce-type gram|htcondor] --host <HOST> METRIC [METRIC ...]
     --test (same options and behavior as --run but w/o generating records)
     
     Show information about enabled and installed metrics:
@@ -107,6 +107,9 @@ def process_options(arguments=None):
                      help="Run the RSV profiler")
     group.add_option("--no-ping", action="store_true", dest="no_ping", default=False,
                      help="Skip the ping test against the host being monitored")
+    group.add_option("--ce-type", dest="ce_type", default="gram",
+                     help="Which CE type to use for remote tests. "
+                     "Valid values are 'gram' for Globus GRAM, and 'htcondor' for HTCondor-CE")
     parser.add_option_group(group)
 
     if arguments is None:
@@ -122,13 +125,13 @@ def process_options(arguments=None):
     # We will implement it by doing all the same things as run but add a check when generating records.
     if options.test:
         options.run = True
-        
+
 
     # Check that we got exactly one command
     number_of_commands = len([i for i in [options.run, options.enable, options.disable, options.on,
                                           options.off, options.list, options.job_list, options.verify,
                                           options.show_config, options.profile] if i])
-    
+
     if number_of_commands > 1:
         parser.error("You can use only one command.")
     if number_of_commands == 0:
@@ -148,6 +151,9 @@ def process_options(arguments=None):
             parser.error("You must provide a list of metrics to run or else pass the " +
                          "--all-enabled flag to run all enabled metrics")
 
+    if options.ce_type:
+        if not (options.ce_type == 'gram' or options.ce_type == 'htcondor'):
+            parser.error("Invalid value for --ce-type. Valid values are 'gram' and 'htcondor'")
 
     return options, args
 

@@ -42,9 +42,13 @@ class Metric:
 
         if not self.validate_config():
             self.rsv.log("ERROR", "Metric %s is not configured correctly." % self.name)
-            
+
+        self.ce_type = None
+        if options.ce_type:
+            self.ce_type = options.ce_type
+
         return
-    
+
 
     def load_config_file(self, file, required=0):
         """ Load a single configuration file """
