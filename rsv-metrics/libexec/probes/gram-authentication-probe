@@ -8,9 +8,16 @@ print_output_header();
 
 my %options = process_command_line();
 
-find_binaries("globusrun");
+my $cmd;
+if (exists($options{htcondor_ce}) && $options{htcondor_ce}) {
+    find_binaries("condor_ce_ping");
+    $cmd = "condor_ce_ping -pool '$options{u}' -table READ WRITE DAEMON";
+}
+else {
+    find_binaries("globusrun");
+    $cmd = "globusrun -a -r '$options{u}'";
+}
 
-my $cmd = "globusrun -a -r '$options{u}'";
 my $output = `$cmd`;
 
 if($? == 0) {
