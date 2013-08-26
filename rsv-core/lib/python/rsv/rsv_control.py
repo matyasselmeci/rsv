@@ -21,7 +21,7 @@ def process_options(arguments=None):
     Level settings - 0=print nothing, 1=normal, 2=info, 3=debug
 
     Run a one-time test:
-    --run [--all-enabled] [--ce-type gram|htcondor] --host <HOST> METRIC [METRIC ...]
+    --run [--all-enabled] [--gatekeeper-type|--gk-type gram|condor-ce] --host <HOST> METRIC [METRIC ...]
     --test (same options and behavior as --run but w/o generating records)
     
     Show information about enabled and installed metrics:
@@ -107,9 +107,9 @@ def process_options(arguments=None):
                      help="Run the RSV profiler")
     group.add_option("--no-ping", action="store_true", dest="no_ping", default=False,
                      help="Skip the ping test against the host being monitored")
-    group.add_option("--ce-type", dest="ce_type", default="gram",
-                     help="Which CE type to use for remote tests. "
-                     "Valid values are 'gram' for Globus GRAM, and 'htcondor' for HTCondor-CE")
+    group.add_option("--gatekeeper-type", "--gk-type", dest="gatekeeper_type", default="gram",
+                     help="Which gatekeeper type to use for remote tests. "
+                     "Valid values are 'gram' for Globus GRAM, and 'condor-ce' for HTCondor-CE")
     parser.add_option_group(group)
 
     if arguments is None:
@@ -151,9 +151,9 @@ def process_options(arguments=None):
             parser.error("You must provide a list of metrics to run or else pass the " +
                          "--all-enabled flag to run all enabled metrics")
 
-    if options.ce_type:
-        if not (options.ce_type == 'gram' or options.ce_type == 'htcondor'):
-            parser.error("Invalid value for --ce-type. Valid values are 'gram' and 'htcondor'")
+    if options.gatekeeper_type:
+        if not (options.gatekeeper_type == 'gram' or options.gatekeeper_type == 'condor-ce'):
+            parser.error("Invalid value for --gatekeeper-type. Valid values are 'gram' and 'condor-ce'")
 
     return options, args
 

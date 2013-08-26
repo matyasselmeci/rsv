@@ -6,16 +6,27 @@ use RSVMetric;
 
 print_output_header();
 
-my %options = process_command_line('condor-ce' => "Probe an HTCondor-CE gatekeeper instead of a GRAM gatekeeper");
+my $DEFAULT_GATEKEEPER_TYPE = 'gram';
+
+my %options = process_command_line('gatekeeper-type=s' => "Either 'gram' or 'condor-ce'");
+
+my $gatekeeper_type = $DEFAULT_GATEKEEPER_TYPE;
+if (defined($options{'gatekeeper-type'})) {
+    $gatekeeper_type = lc $options{'gatekeeper-type'};
+}
 
 my $cmd;
-if (exists($options{'condor-ce'}) && $options{'condor-ce'}) {
+if ($gatekeeper_type eq 'condor-ce') {
     find_binaries("condor_ce_ping");
     $cmd = "condor_ce_ping -pool '$options{u}' -table READ WRITE DAEMON";
 }
-else {
+elsif ($gatekeeper_type eq 'gram') {
     find_binaries("globusrun");
     $cmd = "globusrun -a -r '$options{u}'";
+}
+else {
+    print STDERR "Invalid gatekeeper-type specified. Must be either 'gram' or 'condor-ce'\n";
+    exit 1;
 }
 
 my $output = `$cmd`;
