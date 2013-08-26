@@ -6,10 +6,10 @@ use RSVMetric;
 
 print_output_header();
 
-my %options = process_command_line();
+my %options = process_command_line('condor-ce' => "Probe an HTCondor-CE gatekeeper instead of a GRAM gatekeeper");
 
 my $cmd;
-if (exists($options{htcondor_ce}) && $options{htcondor_ce}) {
+if (exists($options{'condor-ce'}) && $options{'condor-ce'}) {
     find_binaries("condor_ce_ping");
     $cmd = "condor_ce_ping -pool '$options{u}' -table READ WRITE DAEMON";
 }
