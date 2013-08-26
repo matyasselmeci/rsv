@@ -5,7 +5,7 @@ bindir := $(prefix)/bin
 initrddir := $(sysconfdir)/rc.d/init.d
 libexecdir := $(prefix)/libexec
 mandir := $(prefix)/share/man
-pythonsitedir := $(shell python -c 'from distutils.sysconfig import get_python_lib; print get_python_lib()')
+python_sitelib := $(shell python -c 'from distutils.sysconfig import get_python_lib; print get_python_lib()')
 
 
 
