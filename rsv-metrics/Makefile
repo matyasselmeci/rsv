@@ -28,7 +28,7 @@ install:
 	install -d $(DESTDIR)$(localstatedir)/spool/rsv
 	# Create the logging directories
 	install -d $(DESTDIR)$(localstatedir)/log/rsv/metrics
-	ln -s metrics $(DESTDIR)$(localstatedir)/log/rsv/probes
+	ln -snf metrics $(DESTDIR)$(localstatedir)/log/rsv/probes
 	# Put log rotation in place
 	install -d $(DESTDIR)$(sysconfdir)/logrotate.d
 	install -m 0644 logrotate/rsv-metrics.logrotate $(DESTDIR)$(sysconfdir)/logrotate.d/rsv-metrics
