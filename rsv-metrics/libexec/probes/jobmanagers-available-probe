@@ -60,9 +60,10 @@ elsif ($gatekeeper_type eq 'condor-ce') {
     }
     else {
         print "OK\n";
+        print "Available job router entries:\n";
+        # TODO: these could be better formatted
         print $job_router_entries."\n";
     }
-    # TODO
 }
 else {
     print STDERR "Invalid gatekeeper-type specified. Must be either 'gram' or 'condor-ce'\n";
