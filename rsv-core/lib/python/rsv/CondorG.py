@@ -64,7 +64,8 @@ class CondorG:
         # Build the submit file
         #
         submit_file = "Universe = grid\n"
-        if metric.config_get("gatekeeper-type").lower() == 'condor-ce' or metric.gatekeeper_type == 'condor-ce':
+        if ((metric.config_get("gatekeeper-type") and metric.config_get("gatekeeper-type").lower() == 'condor-ce') or
+                metric.gatekeeper_type == 'condor-ce'):
             self.rsv.log("INFO", "Submitting to HTCondor-CE gatekeeper")
             collector_host = metric.config_get("condor-ce-collector")
             if not collector_host:

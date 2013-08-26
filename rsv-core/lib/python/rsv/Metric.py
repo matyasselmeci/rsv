@@ -45,7 +45,7 @@ class Metric:
             self.rsv.log("ERROR", "Metric %s is not configured correctly." % self.name)
 
         self.gatekeeper_type = None
-        if options.gatekeeper_type:
+        if options and options.gatekeeper_type:
             self.gatekeeper_type = options.gatekeeper_type
 
         return
@@ -429,12 +429,12 @@ class Metric:
         # Command line switches
         settings = self.get_settings() or "<none>"
         self.rsv.echo("\nExtra command line options passed to rsv-control:")
-        self.rsv.echo("\t" + settings)
+        self.rsv.echo("\t" + str(settings))
 
         # Command line switches
         args = self.get_args_string() or "<none>"
         self.rsv.echo("\nCommand line options passed to metric:")
-        self.rsv.echo("\t" + args)
+        self.rsv.echo("\t" + str(args))
 
         # Environment
         self.rsv.echo("\nCustom environment set for this metric:")
