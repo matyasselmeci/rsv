@@ -33,6 +33,7 @@ class Metric:
         if host:
             self.host = host
             self.host_config_file = os.path.join(conf_dir, host, metric + ".conf")
+            self.host_defaults_config_file = os.path.join(conf_dir, host, "defaults.conf")
 
         # Load configuration
         defaults = get_metric_defaults(metric)
@@ -57,7 +58,7 @@ class Metric:
         if required:
             log_level = "ERROR"
             prefix = "Mandatory"
-        
+
         if not os.path.exists(file):
             self.rsv.log(log_level, "%s config file '%s' does not exist" % (prefix, file))
         elif not os.access(file, os.R_OK):
@@ -77,7 +78,7 @@ class Metric:
                 sys.exit(1)
 
         return
-                
+
 
     def load_config(self, defaults, options=None):
         """ Load metric configuration files """
@@ -85,7 +86,7 @@ class Metric:
             for section in defaults.keys():
                 if not self.config.has_section(section):
                     self.config.add_section(section)
-                    
+
                 for item in defaults[section].keys():
                     self.config.set(section, item, defaults[section][item])
 
@@ -97,6 +98,7 @@ class Metric:
 
         # If this is for a specified host, load the metric/host config file
         if self.host:
+            self.load_config_file(self.host_defaults_config_file, required=0)
             self.load_config_file(self.host_config_file, required=0)
 
         # If we were given a file on the command line load it now
@@ -223,7 +225,7 @@ class Metric:
 
     def get_args_string(self):
         """ Build the custom parameters to the script based on the config file """
-        
+
         self.rsv.log("INFO", "Forming arguments:")
         args_section = self.name + " args"
         args = []
@@ -270,7 +272,7 @@ class Metric:
             return ""
 
         return interval
-        
+
     def get_cron_entry(self):
         """ Return a dict containing the cron time information """
 
@@ -426,7 +428,7 @@ class Metric:
             if knob.find('=') == -1:
                 self.rsv.log("WARNING", "Invalid knob supplied (%s).  Must be Key=Value" % knob)
                 continue
-            
+
             (key, val) = knob.split('=', 1)
             self.rsv.log("INFO", "Setting config value (%s=%s)" % (key, val))
             local_config.set(section, key, val)
@@ -436,7 +438,7 @@ class Metric:
         fp.close()
 
         return
-    
+
 
 def get_metric_defaults(metric_name):
     """ Load metric default values """
