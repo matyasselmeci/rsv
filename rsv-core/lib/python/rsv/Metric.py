@@ -33,7 +33,7 @@ class Metric:
         if host:
             self.host = host
             self.host_config_file = os.path.join(conf_dir, host, metric + ".conf")
-            self.host_defaults_config_file = os.path.join(conf_dir, host, "defaults.conf")
+            self.host_allmetrics_config_file = os.path.join(conf_dir, host, "allmetrics.conf")
 
         # Load configuration
         defaults = get_metric_defaults(metric)
@@ -80,6 +80,57 @@ class Metric:
         return
 
 
+    def load_allmetrics_config_file(self, file):
+        """Load 'allmetrics.conf' for a host. If it exists, then use options
+        defined in its [allmetrics], [allmetrics env] and [allmetrics args]
+        sections (if they exist) for this metric. It is not an error if the
+        file doesn't exist. It IS an error if it contains sections other than
+        the 3 mentioned above.
+
+        """
+        if not os.path.exists(file):
+            self.rsv.log("DEBUG", "Config file '%s' does not exist" % file)
+        elif not os.access(file, os.R_OK):
+            self.rsv.log("WARNING", "Config file '%s' exists but is not readable by RSV user" % file)
+        else:
+            self.rsv.log("INFO", "Loading config file '%s'" % file)
+            try:
+                # Use a separate config parser to read this and then combine
+                # the results into self.config.  Two reasons for this: first,
+                # we want to error out if we see sections other than
+                # [allmetrics.*] in the conf file. Second, we want to put
+                # options in [allmetrics] into the appropriate section for the
+                # current metric (i.e. if self.name is 'foo' then options in
+                # [allmetrics] should go into [foo], options in [allmetrics
+                # env] should go into [foo env], etc.)
+                allmetrics = ConfigParser.RawConfigParser()
+                allmetrics.optionxform = str
+                ret = allmetrics.read(file)
+                # Python 2.3 (RHEL-4) does not return anything so we can only do this check
+                # if we get an array back.
+                if ret is not None:
+                    if file not in ret:
+                        self.rsv.log("ERROR", "An unknown error occurred while trying to load config file '%s'" % file)
+
+                # Now combine the sections
+                for section in allmetrics.sections():
+                    if section not in ['allmetrics', 'allmetrics env', 'allmetrics args']:
+                        self.rsv.log("CRITICAL", "Config file '%s' contains forbitten section '%s'" % (file, section))
+                        sys.exit(1)
+                    metric_section = re.sub(r'allmetrics', self.name, section)
+                    for opt in allmetrics.options(section):
+                        value = allmetrics.get(section, opt)
+                        self.rsv.log("DEBUG",
+                                     "Setting option '%s' for section '%s' to '%s' (from allmetrics section)" %
+                                         (opt, metric_section, value))
+                        self.config.set(metric_section, opt, value)
+            except ConfigParser.ParsingError, err:
+                self.rsv.log("CRITICAL", err)
+                sys.exit(1)
+
+        return
+
+
     def load_config(self, defaults, options=None):
         """ Load metric configuration files """
         if defaults:
@@ -90,6 +141,10 @@ class Metric:
                 for item in defaults[section].keys():
                     self.config.set(section, item, defaults[section][item])
 
+        # If this is for a specified host, load the host 'allmetrics.conf' file
+        if self.host:
+            self.load_allmetrics_config_file(self.host_allmetrics_config_file)
+
         # Load the metric's meta information file
         self.load_config_file(self.meta_file, required=1)
 
@@ -98,7 +153,6 @@ class Metric:
 
         # If this is for a specified host, load the metric/host config file
         if self.host:
-            self.load_config_file(self.host_defaults_config_file, required=0)
             self.load_config_file(self.host_config_file, required=0)
 
         # If we were given a file on the command line load it now
@@ -108,7 +162,6 @@ class Metric:
             self.load_config_file(options.extra_config_file, required=1)
 
         return
-
 
     def validate_config(self):
         """ Validate metric-specific configuration """
@@ -133,7 +186,7 @@ class Metric:
             return False
 
         return True
-    
+
 
     def get_type(self):
         """ Return the serviceType """
