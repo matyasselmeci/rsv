@@ -422,7 +422,7 @@ def main(rsv, options, metrics):
 
             if options.no_ping:
                 rsv.log("INFO", "Skipping ping check because --no-ping was supplied")
-            elif metric.config_get('no-ping') and metric.config_get('no-ping').lower() == 'true':
+            elif metric.config_getboolean('no-ping') == True:
                 rsv.log("INFO", "Skipping ping check because metric config contains no-ping=True")
             else:
                 ping_test(rsv, metric)

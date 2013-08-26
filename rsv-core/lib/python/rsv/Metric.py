@@ -152,6 +152,21 @@ class Metric:
             return None
 
 
+    def config_getboolean(self, key):
+        """Fetch a value from the metric configuration, coercing to a boolean.
+        Return None if the key does not exist or cannot be used as a boolean.
+
+        """
+        try:
+            return self.config.getboolean(self.name, key)
+        except ConfigParser.NoOptionError:
+            self.rsv.log("DEBUG", "metric.config_getboolean - no key '%s'" % key)
+            return None
+        except ValueError:
+            self.rsv.log("DEBUG", "metric.config_getboolean - invalid boolean value for key '%s' (%s)" % (key, self.config.get(self.name, key)))
+            return None
+
+
     def config_val(self, key, value, case_sensitive=0):
         """ Check if key is in config, and if it equals val. """
 
