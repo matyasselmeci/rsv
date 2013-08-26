@@ -65,6 +65,7 @@ class CondorG:
         #
         submit_file = "Universe = grid\n"
         if metric.config_get("condor-ce") or metric.ce_type == 'htcondor':
+            self.rsv.log("INFO", "Submitting to HTCondor-CE gatekeeper")
             collector_host = metric.config_get("condor-ce-collector")
             if not collector_host:
                 collector_host = "%s:9619" % metric.host
@@ -76,6 +77,7 @@ class CondorG:
             if 'X509_USER_PROXY' in os.environ:
                 submit_file += "x509userproxy = %s\n" % os.environ['X509_USER_PROXY']
         else:
+            self.rsv.log("INFO", "Submitting to GRAM gatekeeper")
             jobmanager = metric.config_get("jobmanager")
             if not jobmanager:
                 self.rsv.log("CRITICAL", "CondorG->submit: jobmanager not defined in config")
