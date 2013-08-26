@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import re
 import pwd
 import sys    # for sys.exit
 import shutil
@@ -88,8 +89,8 @@ class CondorG:
 
         submit_file += "Executable = %s\n" % metric.executable
 
-        args = "-m %s -u %s %s" % (metric.name, metric.host, metric.get_args_string())
-        submit_file += "Arguments  = %s\n" % args
+        args = ['-m', metric.name, '-u', metric.host] + metric.get_args_list()
+        submit_file += "Arguments  = %s\n" % quote_arguments(args)
 
         # Add in custom attributes
         if attrs:
@@ -170,3 +171,20 @@ class CondorG:
     def get_log_contents(self):
         """ Return the log contents of the job """
         return self.utils.slurp(self.log)
+
+
+def quote_arguments(args):
+    """ Generate an Arguments string for a condor submit file with proper quoting """
+
+    def quote_arg(arg):
+        if arg.find("\n") > -1:
+            raise ValueError("Newlines not allowed in submit file arguments")
+        # escape double quotes
+        arg = arg.replace('"','""')
+        # escape with single quotes if empty or contains whitespace or single quotes
+        if arg == "" or re.search(r"[\t ']", arg):
+            arg = "'" + arg.replace("'", "''") + "'"
+        return arg
+
+    return ' '.join(quote_arg(arg) for arg in args)
+

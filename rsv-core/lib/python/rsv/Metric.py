@@ -276,7 +276,7 @@ class Metric:
         return env
 
 
-    def get_args_string(self):
+    def get_args_list(self):
         """ Build the custom parameters to the script based on the config file """
 
         self.rsv.log("INFO", "Forming arguments:")
@@ -303,6 +303,12 @@ class Metric:
         self.rsv.log("INFO", "Arguments: '%s'" % args, 4)
 
         return args
+
+
+    def get_args_string(self):
+        """ Stringify the custom parameters to the script based on the config file """
+
+        return ' '.join(self.get_args_list())
 
 
     def get_unique_name(self):

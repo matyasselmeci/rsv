@@ -150,7 +150,7 @@ def execute_local_job(rsv, metric):
     """ Execute the old-style probes, or any probe that should run locally, e.g. srm probes """
 
     # Build the custom parameters to the script
-    args = metric.get_args_string()
+    args = metric.get_args_list()
 
     # Anthony Tiradani uses extra RSL to get his jobs to run with priority at Fermi
     # This is done for old style metrics by passing --extra-globus-rsl.
@@ -189,7 +189,7 @@ def execute_grid_job(rsv, metric):
     by default now, but some people might want to use globus-job-run instead. """
 
     # Build the custom parameters to the script
-    args = metric.get_args_string()
+    args = metric.get_args_list()
 
     jobmanager = metric.config_get("jobmanager")
 
