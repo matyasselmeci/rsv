@@ -68,7 +68,9 @@ class NagiosConsumer(RSVConsumer.RSVConsumer):
         metric = record["metricName"]
         PLUGIN_STATE = nagiosCode[record["metricStatus"]]
         PLUGIN_OUTPUT = record["detailsData"][0:255]
-        PLUGIN_HOST = record.get("serviceURI", record.get("hostName", ""))
+        # for PLUGIN_HOST, use RSV_HOST from rsv-nagios.conf instead of the
+        # serviceURI/hostName from the current record (see SOFTWARE-1170)
+        PLUGIN_HOST = self.config.get("RSV", "RSV_HOST")
 
         if self.__options.send_nsca:
             self.send_nsca(metric, PLUGIN_HOST, PLUGIN_STATE, PLUGIN_OUTPUT)
