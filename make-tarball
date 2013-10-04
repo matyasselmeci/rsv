@@ -1,0 +1,55 @@
+#!/bin/bash
+
+RSV_VERSION=3.7.10
+
+set -o errexit
+
+verify_svn_up_to_date () {
+    local dir
+    local files
+    local ret
+    dir=$(dirname $0)
+    files=$(svn status --show-updates $dir 2>&1 | egrep -v '(\?|Status against revision:)')
+    ret=$?
+    if [[ $ret != 0 ]]; then
+        echo Subversion checkout is not up-to-date
+        echo Lines:
+        echo "$files"
+        exit 1
+    fi
+}
+
+copy_rsv_files () {
+    mkdir -p rsv-$RSV_VERSION
+    cp -r rsv-consumers rsv-core rsv-metrics rsv-$RSV_VERSION/
+}
+
+set_version_in_rsv_control () {
+    sed -i "s/@@VERSION@@/$RSV_VERSION/" rsv-$RSV_VERSION/rsv-core/lib/python/rsv/rsv_control.py
+}
+
+create_tarball () {
+    local files
+    files=$(find rsv-$RSV_VERSION \( -name .git -o -name .svn \) -prune -o \( \! -name \*~ \! -name .#\* \! -name .svnignore \! -iname tags \! -type d -print \))
+    tar zcf rsv-$RSV_VERSION.tar.gz $files
+}
+
+print_instructions () {
+    local dir
+    dir="/p/vdt/public/html/upstream/rsv/$RSV_VERSION"
+    echo Likely installation instructions:
+    echo -e \\tmkdir $dir
+    echo -e \\tmv rsv-$RSV_VERSION.tar.gz $dir/
+}
+
+cleanup () {
+    rm -rf rsv-$RSV_VERSION
+}
+
+verify_svn_up_to_date
+copy_rsv_files
+set_version_in_rsv_control
+create_tarball
+print_instructions
+cleanup
+
