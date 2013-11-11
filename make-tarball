@@ -7,11 +7,10 @@ set -o errexit
 verify_svn_up_to_date () {
     local dir
     local files
-    local ret
+    local up_to_date
     dir=$(dirname $0)
-    files=$(svn status --show-updates $dir 2>&1 | egrep -v '(\?|Status against revision:)')
-    ret=$?
-    if [[ $ret != 0 ]]; then
+    files=$(svn status --show-updates $dir 2>&1 | egrep -v '(\?|Status against revision:)') || up_to_date=Y
+    if [[ $up_to_date != Y ]]; then
         echo Subversion checkout is not up-to-date
         echo Lines:
         echo "$files"
