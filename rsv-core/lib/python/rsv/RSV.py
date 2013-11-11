@@ -410,7 +410,7 @@ class RSV:
             self.log("INFO", "Service certificate proxy expired or expiring within %s hours.  Renewing it." %
                     hours_til_expiry, 4)
 
-            cmd = ["grid-proxy-init", "-cert", cert, "-key", key, "-valid", "12:00", "-debug", "-out", proxy]
+            cmd = ["grid-proxy-init", "-cert", cert, "-key", key, "-valid", "12:00", "-bits", "1024", "-debug", "-out", proxy]
             if self.use_legacy_proxy():
                 self.log("INFO", "Generating a legacy Globus proxy because it was requested.", 4)
                 # This should come right after "grid-proxy-init"
