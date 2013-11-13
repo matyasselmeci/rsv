@@ -55,6 +55,10 @@ echo "condor_cron_q:" >> $rsvlog
 condor_cron_q         >> $rsvlog 2>&1
 echo ""               >> $rsvlog
 
+echo "UID/GID of cndrcron user:" >> $rsvlog
+getent passwd cndrcron           >> $rsvlog
+echo ""                          >> $rsvlog
+
 condor_log_dir=`condor_cron_config_val log`
 echo "Trying to copy condor logs from $condor_log_dir:" >> $rsvlog
 if [ -d $condor_log_dir ]; then
