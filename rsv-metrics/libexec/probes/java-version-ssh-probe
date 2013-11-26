@@ -17,6 +17,7 @@ def tar_ssh_run(host, port=None, ssh='ssh'):
     Can specify an alternate ssh program to connect with (eg, gsissh).
     """
 
+    # find the ../probes dir relative to this file
     from os.path import dirname, abspath, join
     probes_dir = abspath(join(dirname(abspath(__file__)), '..', 'probes'))
     transfer_files = ['rsvprobe.py', 'java-version-probe',
@@ -55,14 +56,16 @@ class JavaVersionLocalProbe(rsvprobe.RSVProbe):
         #super(JavaVersionLocalProbe, self).__init__()
         rsvprobe.RSVProbe.__init__(self)
         self.metric = ""
-        metric = rsvprobe.RSVMetric("OSG-CE", "org.osg.general.java-version-ssh", rsvprobe.RSVMetric.STATUS)
+        metric = rsvprobe.RSVMetric("OSG-CE",
+                 "org.osg.general.java-version-ssh", rsvprobe.RSVMetric.STATUS)
         metric.service_version = ">= OSG CE 1.0.0"
         metric.probe_type = "OSG-CE"
         self.supported_metrics = [metric]
         self.details = "---\n"
 
-#       self.port = None
-#       self.ssh = 'ssh'
+        # down the road we may look into supporting gsissh...
+        # self.port = None
+        # self.ssh = 'ssh'
 
     def run(self):
         """Main routine for the probe"""
