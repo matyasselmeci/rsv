@@ -1,0 +1,11 @@
+[org.osg.general.java-version-local]
+default-cron-interval = 7,27,47 * * * *
+
+execute = local
+service-type = OSG-CE
+output-format = brief
+need-proxy = false
+enable-by-default = true
+description = Report the versions of Java installed on the remote ssh host
+
+[org.osg.general.java-version-local env]
