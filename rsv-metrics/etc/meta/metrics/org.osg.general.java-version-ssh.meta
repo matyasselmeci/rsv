@@ -1,4 +1,4 @@
-[org.osg.general.java-version-local]
+[org.osg.general.java-version-ssh]
 default-cron-interval = 7,27,47 * * * *
 
 execute = local
@@ -8,4 +8,4 @@ need-proxy = false
 enable-by-default = true
 description = Report the versions of Java installed on the remote ssh host
 
-[org.osg.general.java-version-local env]
+[org.osg.general.java-version-ssh env]

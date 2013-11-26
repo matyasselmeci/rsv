@@ -55,7 +55,7 @@ class JavaVersionLocalProbe(rsvprobe.RSVProbe):
         #super(JavaVersionLocalProbe, self).__init__()
         rsvprobe.RSVProbe.__init__(self)
         self.metric = ""
-        metric = rsvprobe.RSVMetric("OSG-CE", "org.osg.general.java-version-local", rsvprobe.RSVMetric.STATUS)
+        metric = rsvprobe.RSVMetric("OSG-CE", "org.osg.general.java-version-ssh", rsvprobe.RSVMetric.STATUS)
         metric.service_version = ">= OSG CE 1.0.0"
         metric.probe_type = "OSG-CE"
         self.supported_metrics = [metric]
