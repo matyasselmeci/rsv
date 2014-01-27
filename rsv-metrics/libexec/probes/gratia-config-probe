@@ -249,8 +249,9 @@ EOF
   my $cmpDateDay = DateCalc("today", "- 1 day");
   my $probe_seen_by_soaphost;
   if (!$probe_contact_check) {
+    setWarning();
     &appendDetailsData (<<EOF);
-Gratia server $soaphost not responding to obtain last contact details.
+WARNING: Gratia server $soaphost not responding to obtain last contact details.
 EOF
   } elsif (Date_Cmp($probe_contact_check, $cmpDateDay) < 1) {
     setCritical();
