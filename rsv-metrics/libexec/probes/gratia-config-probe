@@ -221,7 +221,7 @@ EOF
         sort keys %unsent_by_dir)
   ) . "\n";
 
-  if ($ndata > 10000) {
+  if ($ndata == 0 || $ndata > 10000) {
     setWarning();
     $message="WARNING: $message";
   }
