@@ -118,6 +118,8 @@ class Metric:
                         self.rsv.log("CRITICAL", "Config file '%s' contains forbidden section '%s'" % (file, section))
                         sys.exit(1)
                     metric_section = re.sub(r'allmetrics', self.name, section)
+                    if not self.config.has_section(metric_section):
+                        continue
                     for opt in allmetrics.options(section):
                         value = allmetrics.get(section, opt)
                         self.rsv.log("DEBUG",
