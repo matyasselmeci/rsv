@@ -58,13 +58,13 @@ class RSV:
     def setup_config(self):
         """ Load configuration """
         self.config = ConfigParser.RawConfigParser()
-        self.config.optionxform = str # make keys case-insensitive
+        self.config.optionxform = str # make keys case-sensitive
         defaults = get_rsv_defaults()
         if defaults:
             for section in defaults.keys():
                 if not self.config.has_section(section):
                     self.config.add_section(section)
-                    
+
                 for item in defaults[section].keys():
                     self.config.set(section, item, defaults[section][item])
 
@@ -75,7 +75,7 @@ class RSV:
     def setup_consumer_config(self):
         """ Load configuration """
         self.consumer_config = ConfigParser.RawConfigParser()
-        self.consumer_config.optionxform = str # make keys case-insensitive
+        self.consumer_config.optionxform = str # make keys case-sensitive
         self.load_config_file(self.consumer_config, CONSUMER_CONFIG_FILE, required=0)
         return
 
@@ -102,7 +102,7 @@ class RSV:
         return
 
 
-    
+
     def get_installed_metrics(self):
         """ Return a list of installed metrics """
         metrics_dir = os.path.join(LIBEXEC_DIR, "metrics")
@@ -137,8 +137,8 @@ class RSV:
             self.log("ERROR", "The consumers directory (%s) could not be accessed.  Error msg: %s" %
                      (consumers_dir, err))
             return []
-        
-        
+
+
     def get_metric_info(self):
         """ Return a dictionary with information about each installed metric """
 
@@ -227,7 +227,7 @@ class RSV:
 
     def echo(self, message, indent=0):
         """ Print a message unless verbosity level==0 (quiet) """
-        
+
         if self.quiet:
             return
         else:
@@ -235,7 +235,7 @@ class RSV:
                 message = " "*indent + message
 
             print message
-        
+
 
     def get_metric_log_dir(self):
         """ Return the directory to store condor log/out/err files for metrics """
@@ -331,10 +331,10 @@ class RSV:
         """ Write out the consumers.conf file to disk """
 
         self.log("INFO", "Writing consumer configuration file '%s'" % CONSUMER_CONFIG_FILE)
-        
+
         if not os.path.exists(CONSUMER_CONFIG_FILE):
             self.echo("Creating configuration file '%s'" % CONSUMER_CONFIG_FILE)
-            
+
         config_fp = open(CONSUMER_CONFIG_FILE, 'w')
         self.consumer_config.write(config_fp)
         config_fp.close()
@@ -415,7 +415,7 @@ class RSV:
                 self.log("INFO", "Generating a legacy Globus proxy because it was requested.", 4)
                 # This should come right after "grid-proxy-init"
                 cmd.insert(1, "-old")
-                
+
             (ret, out, err) = self.run_command(cmd)
 
             if ret:
@@ -447,7 +447,7 @@ class RSV:
         minutes_til_expiration = 10
         seconds_til_expiration = str(minutes_til_expiration * 60)
         (ret, out, err) = self.run_command([OPENSSL_EXE, "x509", "-in", proxy_file, "-noout", "-enddate", "-checkend", seconds_til_expiration])
-        
+
         if ret:
             self.results.expired_user_proxy(metric, proxy_file, out, minutes_til_expiration)
             sys.exit(1)
@@ -465,7 +465,7 @@ class RSV:
         if not timeout:
             # Use the timeout declared in the config file
             timeout = self.config.getint("rsv", "job-timeout")
-            
+
         self.log("INFO", "Running command with timeout (%s seconds):\n\t%s" % (timeout, " ".join(command)))
         return self.sysutils.system(command, timeout)
 
@@ -551,7 +551,7 @@ def validate_config(rsv):
     # If appropriate, switch UID/GID
     rsv.sysutils.switch_user(user, desired_uid, desired_gid)
 
-                
+
     #
     # "details_data_trim_length" must be an integer because we will use it later
     # in a splice
