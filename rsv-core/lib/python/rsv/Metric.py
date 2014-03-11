@@ -115,7 +115,7 @@ class Metric:
                 # Now combine the sections
                 for section in allmetrics.sections():
                     if section not in ['allmetrics', 'allmetrics env', 'allmetrics args']:
-                        self.rsv.log("CRITICAL", "Config file '%s' contains forbitten section '%s'" % (file, section))
+                        self.rsv.log("CRITICAL", "Config file '%s' contains forbidden section '%s'" % (file, section))
                         sys.exit(1)
                     metric_section = re.sub(r'allmetrics', self.name, section)
                     for opt in allmetrics.options(section):
