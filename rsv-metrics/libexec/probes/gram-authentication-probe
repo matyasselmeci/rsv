@@ -18,7 +18,9 @@ if (defined($options{'gatekeeper-type'})) {
 my $cmd;
 if ($gatekeeper_type eq 'condor-ce') {
     find_binaries("condor_ce_ping");
-    $cmd = "condor_ce_ping -pool '$options{u}' -name '$options{u}' -table READ WRITE DAEMON";
+    my $name = $options{u};
+    $name =~ s/:\d+$//;
+    $cmd = "condor_ce_ping -pool '$options{u}' -name '$name' -table READ WRITE DAEMON";
 }
 elsif ($gatekeeper_type eq 'gram') {
     find_binaries("globusrun");
