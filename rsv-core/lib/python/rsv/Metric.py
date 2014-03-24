@@ -82,10 +82,10 @@ class Metric:
 
     def load_allmetrics_config_file(self, file):
         """Load 'allmetrics.conf' for a host. If it exists, then use options
-        defined in its [allmetrics], [allmetrics env] and [allmetrics args]
-        sections (if they exist) for this metric. It is not an error if the
-        file doesn't exist. It IS an error if it contains sections other than
-        the 3 mentioned above.
+        defined in its [allmetrics], and [allmetrics env] sections (if they
+        exist) for this metric. It is not an error if the file doesn't exist.
+        It IS an error if it contains sections other than the two mentioned
+        above.
 
         """
         if not os.path.exists(file):
@@ -101,8 +101,8 @@ class Metric:
                 # [allmetrics.*] in the conf file. Second, we want to put
                 # options in [allmetrics] into the appropriate section for the
                 # current metric (i.e. if self.name is 'foo' then options in
-                # [allmetrics] should go into [foo], options in [allmetrics
-                # env] should go into [foo env], etc.)
+                # [allmetrics] should go into [foo], options in
+                # [allmetrics env] should go into [foo env], etc).
                 allmetrics = ConfigParser.RawConfigParser()
                 allmetrics.optionxform = str
                 ret = allmetrics.read(file)
@@ -114,7 +114,10 @@ class Metric:
 
                 # Now combine the sections
                 for section in allmetrics.sections():
-                    if section not in ['allmetrics', 'allmetrics env', 'allmetrics args']:
+                    if section == 'allmetrics args':
+                        self.rsv.log("WARNING", "Config file '%s' contains deprecated section '%s', which will be ignored" % (file, section))
+                        continue
+                    if section not in ['allmetrics', 'allmetrics env']:
                         self.rsv.log("CRITICAL", "Config file '%s' contains forbidden section '%s'" % (file, section))
                         sys.exit(1)
                     metric_section = re.sub(r'allmetrics', self.name, section)
@@ -143,18 +146,15 @@ class Metric:
                 for item in defaults[section].keys():
                     self.config.set(section, item, defaults[section][item])
 
-        # If this is for a specified host, load the host 'allmetrics.conf' file
-        if self.host:
-            self.load_allmetrics_config_file(self.host_allmetrics_config_file)
-
         # Load the metric's meta information file
         self.load_config_file(self.meta_file, required=1)
 
         # Load the metric's general configuration file
         self.load_config_file(self.top_config_file, required=0)
 
-        # If this is for a specified host, load the metric/host config file
+        # If this is for a specified host, load the metric/host config file and the allmetrics conf file
         if self.host:
+            self.load_allmetrics_config_file(self.host_allmetrics_config_file)
             self.load_config_file(self.host_config_file, required=0)
 
         # If we were given a file on the command line load it now
