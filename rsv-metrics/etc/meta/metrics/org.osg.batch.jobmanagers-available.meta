@@ -1,4 +1,4 @@
-[org.osg.gram.jobmanagers-available]
+[org.osg.batch.jobmanagers-available]
 default-cron-interval = 59 4 * * *
 
 execute = grid
@@ -8,5 +8,5 @@ output-format = brief
 enable-by-default = true
 
 
-[org.osg.gram.jobmanagers-available env]
+[org.osg.batch.jobmanagers-available env]
 
