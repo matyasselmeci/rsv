@@ -1,0 +1,24 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use RSVMetric;
+use Config;
+
+print_output_header();
+
+my $job_router_entries = `condor_ce_config_val JOB_ROUTER_ENTRIES 2>&1`;
+my $ret = $?;
+if ($ret != 0) {
+    print "CRITICAL\n";
+    print "Error getting JOB_ROUTER_ENTRIES\n";
+    print "Output: $job_router_entries\n";
+}
+else {
+    print "OK\n";
+    print "Available job router entries:\n";
+    # TODO: these could be better formatted
+    print $job_router_entries."\n";
+}
+
+exit 0;

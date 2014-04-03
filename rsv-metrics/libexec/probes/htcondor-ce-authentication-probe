@@ -6,8 +6,10 @@ use RSVMetric;
 
 print_output_header();
 
-find_binaries("globusrun");
-my $cmd = "globusrun -a -r '$options{u}'";
+find_binaries("condor_ce_ping");
+my $name = $options{u};
+$name =~ s/:\d+$//;
+my $cmd = "condor_ce_ping -pool '$options{u}' -name '$name' -table READ WRITE DAEMON";
 
 my $output = `$cmd`;
 

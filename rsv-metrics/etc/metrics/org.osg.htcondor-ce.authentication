@@ -1,0 +1,6 @@
+[org.osg.htcondor-ce.authentication]
+#cron-interval = 
+
+[org.osg.htcondor-ce.authentication args]
+#ping-count = 
+

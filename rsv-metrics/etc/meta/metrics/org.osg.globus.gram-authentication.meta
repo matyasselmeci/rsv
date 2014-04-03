@@ -2,7 +2,7 @@
 default-cron-interval = 31 * * * *
 
 execute = local
-service-type = OSG-CE
+service-type = OSG-GRAM-CE
 output-format = brief
 enable-by-default = true
 
