@@ -6,6 +6,8 @@ use RSVMetric;
 
 print_output_header();
 
+my %options = process_command_line();
+
 find_binaries("condor_ce_ping");
 my $name = $options{u};
 $name =~ s/:\d+$//;
