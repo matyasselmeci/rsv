@@ -1,4 +1,4 @@
-[org.osg.htcondor-ce.jobmanagers-available]
+[org.osg.htcondor-ce.job-routes]
 default-cron-interval = 59 4 * * *
 
 execute = grid
@@ -8,5 +8,5 @@ output-format = brief
 enable-by-default = true
 
 
-[org.osg.htcondor-ce.jobmanagers-available env]
+[org.osg.htcondor-ce.job-routes env]
 
