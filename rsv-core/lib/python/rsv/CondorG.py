@@ -65,9 +65,18 @@ class CondorG:
         # Build the submit file
         #
         submit_file = "Universe = grid\n"
-        if ((metric.config_get("gatekeeper-type") and metric.config_get("gatekeeper-type").lower() == 'condor-ce') or
-                metric.gatekeeper_type == 'condor-ce'):
-            self.rsv.log("INFO", "Submitting to HTCondor-CE gatekeeper")
+        ce_type = (  metric.config_get("ce-type")
+                  or metric.config_get("gatekeeper-type")
+                  or getattr(metric, "ce-type", None)
+                  or getattr(metric, "gatekeeper-type", None)
+                  or self.rsv.get_ce_type()
+                  or '' )
+        ce_type = ce_type.lower()
+        if ce_type not in ('condor-ce', 'htcondor-ce', 'gram', ''):
+            self.rsv.log("WARNING", "Invalid ce-type/gatekeeper-type in config (should be 'gram' or 'htcondor-ce'). "
+                                    "Falling back to 'gram'")
+        if ce_type in ('condor-ce', 'htcondor-ce'):
+            self.rsv.log("INFO", "Submitting to HTCondor-CE gateway")
             collector_host = metric.config_get("condor-ce-collector")
             if not collector_host:
                 collector_host = "%s:9619" % metric.host
@@ -79,7 +88,7 @@ class CondorG:
             if 'X509_USER_PROXY' in os.environ:
                 submit_file += "x509userproxy = %s\n" % os.environ['X509_USER_PROXY']
         else:
-            self.rsv.log("INFO", "Submitting to GRAM gatekeeper")
+            self.rsv.log("INFO", "Submitting to GRAM gateway")
             jobmanager = metric.config_get("jobmanager")
             if not jobmanager:
                 self.rsv.log("CRITICAL", "CondorG->submit: jobmanager not defined in config")

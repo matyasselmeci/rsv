@@ -44,9 +44,9 @@ class Metric:
         if not self.validate_config():
             self.rsv.log("ERROR", "Metric %s is not configured correctly." % self.name)
 
-        self.gatekeeper_type = None
-        if options and options.gatekeeper_type:
-            self.gatekeeper_type = options.gatekeeper_type
+        self.ce_type = None
+        if options and options.ce_type:
+            self.ce_type = options.ce_type
 
         return
 

@@ -485,6 +485,27 @@ class RSV:
             return True
 
 
+    def get_ce_type(self):
+        """ Return 'gram', 'htcondor-ce' or None depending on what CE type the
+        user has selected in rsv.conf. This setting determines if Condor-G
+        submits to a Globus Gatekeeper or an HTCondor-CE for remote jobs. """
+
+        try:
+            value = self.config.get("rsv", "ce-type") or ''
+            value = value.lower()
+            if value == 'gram':
+                return 'gram'
+            elif value in ('condor-ce', 'htcondor-ce'):
+                return 'htcondor-ce'
+            elif value == '':
+                return None
+            else:
+                self.log("ERROR", "Invalid value for ce-type: must be 'gram', 'htcondor-ce', 'condor-ce' or blank")
+                return None
+        except ConfigParser.NoOptionError:
+            return None
+
+
     def use_legacy_proxy(self):
         """ Return True or False depending on if we should use a legacy Globus proxy.
         We will default to False if the user did not specify. """
