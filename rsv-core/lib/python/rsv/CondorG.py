@@ -77,10 +77,10 @@ class CondorG:
                                     "Falling back to 'gram'")
         if ce_type in ('condor-ce', 'htcondor-ce'):
             self.rsv.log("INFO", "Submitting to HTCondor-CE gateway")
-            collector_host = metric.config_get("condor-ce-collector")
+            collector_host = metric.config_get("htcondor-ce-collector") or metric.config_get("condor-ce-collector")
             if not collector_host:
                 collector_host = "%s:9619" % metric.host
-            schedd_name = metric.config_get("condor-ce-schedd")
+            schedd_name = metric.config_get("htcondor-ce-schedd") or metric.config_get("condor-ce-schedd")
             if not schedd_name:
                 schedd_name = metric.host
             submit_file += "grid_resource = condor %s %s\n\n" % (schedd_name, collector_host)
