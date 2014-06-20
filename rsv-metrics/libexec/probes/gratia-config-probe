@@ -20,7 +20,7 @@ our %metric;
 my $run_me_root = 0;
 my ($is_root, $probeconfig_problems, $soaphost, $probename,
     $sitename, $enabled, $datafolder, $workingfolder, $real_datafolder,
-    $probe_in_cron, $current_gratia_probe_type,
+    $current_gratia_probe_type,
     $record_count, $file_count, $archive_count, $old_file_count,
     $real_gratia_probe_type
    );
@@ -95,22 +95,19 @@ EOF
   chomp $real_datafolder;
 
   my $cron_grep_pattern = "^\\s*[^#].*gratia/\\(probe/\\)\\?$real_gratia_probe_type/";
-  my $probe_in_crontab = system("crontab -l 2>/dev/null| grep -e '$cron_grep_pattern' >/dev/null 2>&1") == 0;
   my $probe_in_cron_d = system("grep -e '$cron_grep_pattern' /etc/cron.d/* >/dev/null 2>&1") == 0;
-  $probe_in_cron = ($probe_in_crontab or $probe_in_cron_d);
+  # Don't look in crontab (see SOFTWARE-862)
 
   ################################
   # Check some basic critical stuff
 
-  # Is probe in crontab (if it's supposed to be)?
+  # Is probe in cron.d (if it's supposed to be)?
   if ($current_gratia_probe_type =~
       m&^(?:sge|pbs|lsf|pbs-lsf|condor|glexec)&i and
-      $probe_in_cron != 1) {
+      $probe_in_cron_d != 1) {
     if ($is_root) {
       setCritical();
-      &appendDetailsData("ERROR: Probe $probename is not listed in crontab or cron.d.\n");
-    } else {
-      #&appendDetailsData("Not root: cannot examine crontab (not a critical error).\n");
+      &appendDetailsData("ERROR: Probe $probename is not listed in cron.d.\n");
     }
   }
   # Is probe enabled?
