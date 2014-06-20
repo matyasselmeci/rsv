@@ -124,6 +124,18 @@ EOF
     $probeconfig_problems = 1;
     normal_exit();
   }
+  if (! $datafolder) {
+    setCritical();
+    &appendDetailsData("ERROR: Probe $probename has DataFolder unset (critical error).\n");
+    $probeconfig_problems = 1;
+    normal_exit();
+  }
+  if (! $workingfolder) {
+    setCritical();
+    &appendDetailsData("ERROR: Probe $probename has WorkingFolder unset (critical error).\n");
+    $probeconfig_problems = 1;
+    normal_exit();
+  }
 
   # Do we have the correct permissions on the datafolder?
   my (@rdf_stat) = stat $real_datafolder;
