@@ -9,9 +9,10 @@ print_output_header();
 my %options = process_command_line();
 
 find_binaries("condor_ce_ping");
-my $name = $options{u};
-$name =~ s/:\d+$//;
-my $cmd = "condor_ce_ping -pool '$options{u}' -name '$name' -table READ WRITE DAEMON";
+my $host = $options{u};
+$host =~ s/:(\d+)$//;
+my $port = $1 || 9619;
+my $cmd = "condor_ce_ping -pool '$host:$port' -name '$host' -table READ WRITE DAEMON";
 
 my $output = `$cmd`;
 
