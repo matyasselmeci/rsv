@@ -1,6 +1,6 @@
 #!/bin/bash
 
-RSV_VERSION=3.7.17
+RSV_VERSION=3.7.18
 
 set -o errexit
 
