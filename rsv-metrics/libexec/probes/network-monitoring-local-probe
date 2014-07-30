@@ -1,0 +1,39 @@
+#!/usr/bin/python
+
+import os
+import re
+import subprocess
+import sys
+
+
+sys.path.insert(0, '.')
+
+import rsvprobe
+
+class NetworkMonitoringLocalProbe(rsvprobe.RSVProbe):
+    """
+    TODO - write description of the probe
+    """
+
+    def __init__(self):
+        rsvprobe.RSVProbe.__init__(self)
+        self.metric = ""
+        metric = rsvprobe.RSVMetric("OSG-CE",
+                 "org.osg.general.network-monitoring-local", rsvprobe.RSVMetric.STATUS)
+        metric.service_version = ">= OSG CE 1.0.0"
+        metric.probe_type = "OSG-CE"
+        self.supported_metrics = [metric]
+        self.details = "---\n"
+
+
+    def run(self):
+        """Main routine for the probe"""
+        self.parseopt()
+        self.return_ok("Everything ok")
+
+def main():
+    probe = NetworkMonitoringLocalProbe()
+    return probe.run()
+
+if __name__ == '__main__':
+    sys.exit(main())
