@@ -1,0 +1,12 @@
+[org.osg.batch.jobmanagers-available]
+default-cron-interval = 59 4 * * *
+
+execute = grid
+transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
+service-type = OSG-GRAM-CE
+output-format = brief
+enable-by-default = true
+
+
+[org.osg.batch.jobmanagers-available env]
+

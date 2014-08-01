@@ -1,0 +1,11 @@
+[org.osg.globus.gridftp-simple]
+default-cron-interval = 8 * * * *
+
+execute = local
+service-type = GridFTP
+output-format = brief
+enable-by-default = true
+
+
+[org.osg.globus.gridftp-simple env]
+PERL5LIB = PREPEND | /usr/libexec/rsv/probes

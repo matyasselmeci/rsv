@@ -1,0 +1,12 @@
+[org.osg.general.java-version]
+default-cron-interval = 47 */6 * * *
+
+execute = grid
+transfer-files = /usr/libexec/rsv/probes/rsvprobe.py /usr/libexec/rsv/probes/worker-scripts/java-version-probe-worker
+service-type = OSG-CE
+output-format = brief
+enable-by-default = true
+description = Report the versions of Java installed on the remote CE.
+
+[org.osg.general.java-version env]
+

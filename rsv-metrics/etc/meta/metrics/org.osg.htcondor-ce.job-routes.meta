@@ -1,0 +1,12 @@
+[org.osg.htcondor-ce.job-routes]
+default-cron-interval = 59 4 * * *
+
+execute = grid
+transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
+service-type = OSG-HTCondor-CE
+output-format = brief
+enable-by-default = true
+
+
+[org.osg.htcondor-ce.job-routes env]
+

@@ -1,0 +1,11 @@
+[org.osg.local.hostcert-expiry]
+default-cron-interval = 40 1 * * *
+
+execute = local
+service-type = OSG-Local-Monitor
+output-format = brief
+need-proxy = false
+enable-by-default = true
+
+[org.osg.local.hostcert-expiry env]
+PERL5LIB = PREPEND | /usr/libexec/rsv/probes

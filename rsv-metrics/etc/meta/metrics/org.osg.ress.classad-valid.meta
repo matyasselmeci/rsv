@@ -1,0 +1,12 @@
+[org.osg.ress.classad-valid]
+default-cron-interval = 24 */2 * * *
+
+execute = grid
+service-type = OSG-CE
+output-format = brief
+probe-spec = v3
+enable-by-default = false
+transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
+
+
+[org.osg.ress.classad-valid env]

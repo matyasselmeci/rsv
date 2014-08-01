@@ -1,0 +1,12 @@
+[org.osg.general.ping-host]
+default-cron-interval = 7,27,47 * * * *
+
+execute = local
+service-type = OSG-CE
+output-format = brief
+need-proxy = false
+enable-by-default = true
+description = Check if a remote host is responding to pings.
+
+[org.osg.general.ping-host env]
+PERL5LIB = PREPEND | /usr/libexec/rsv/probes

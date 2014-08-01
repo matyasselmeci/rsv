@@ -1,0 +1,12 @@
+[org.osg.general.osg-version]
+default-cron-interval = 47 * * * *
+
+execute = grid
+transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
+service-type = OSG-CE
+output-format = brief
+enable-by-default = true
+description = Report the version of the remote CE.
+
+[org.osg.general.osg-version env]
+

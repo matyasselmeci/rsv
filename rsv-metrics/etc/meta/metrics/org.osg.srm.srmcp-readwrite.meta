@@ -1,0 +1,12 @@
+[org.osg.srm.srmcp-readwrite]
+default-cron-interval = 28 * * * *
+
+execute = local
+service-type = OSG-SRM
+output-format = brief
+enable-by-default = true
+
+
+[org.osg.srm.srmcp-readwrite env]
+SRM_JAVA_OPTIONS = SET | -Xms128m -Xmx128m
+PERL5LIB = PREPEND | /usr/libexec/rsv/probes

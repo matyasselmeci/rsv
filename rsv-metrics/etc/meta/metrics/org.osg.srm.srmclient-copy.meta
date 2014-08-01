@@ -1,0 +1,13 @@
+[org.osg.srm.srmclient-copy]
+default-cron-interval = 1,21,41 * * * *
+
+execute = local
+service-type = OSG-SRM
+output-format = brief
+probe-spec = v3
+enable-by-default = false
+
+
+[org.osg.srm.srmclient-copy env]
+PERL5LIB = PREPEND | /usr/libexec/rsv/probes
+SRM_JAVA_OPTIONS = SET | -Xms128m -Xmx128m
