@@ -1,0 +1,57 @@
+#!/usr/bin/python
+
+import os
+import re
+import subprocess
+import sys
+import rsvprobe
+
+sys.path.insert(0, '.')
+class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
+    """
+    TODO - write description of the probe
+    """
+
+    def __init__(self):
+        rsvprobe.RSVProbe.__init__(self)
+        self.metric = ""
+        metric = rsvprobe.RSVMetric("OSG-CE",
+                                    "org.osg.general.perfsonar-simple", rsvprobe.RSVMetric.STATUS)
+        self.supported_metrics = [metric]
+        self.details = "---\n"
+    
+
+    def parseopt(self):
+        """parse options specific to network monitroing probe and return options, optlist and reminder to
+        allow further processing
+        """
+        options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
+        for opt, arg in options:
+            if self.host == self.localhost:
+                self.is_local = True
+            else:
+                self.is_local = False
+        return options, optlist, remainder
+
+    def gatherInfoNode(self, node):
+        """gathers the necesarry info from the perfsonar node"""
+        return 1
+
+    def uploadInfoMyOsg(self, myosgurl):
+        """uploads infortion to the MyOsg"""
+        return 1
+    
+    def run(self):
+       """Main routine for the probe"""
+       self.parseopt()
+       self.gatherInfoNode(self.host)
+       self.uploadInfoMyOsg("myosgurl")
+       self.return_ok("Everything ok")
+
+def main():
+    probe = PerfsonarSimpleProbe()
+    return probe.run()
+
+if __name__ == '__main__':
+    sys.exit(main())
+    
