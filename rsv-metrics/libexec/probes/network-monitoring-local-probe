@@ -4,15 +4,37 @@ import os
 import re
 import subprocess
 import sys
+import urllib2
+import rsvprobe
+try:#No json on python2.4 using simplejson for now
+    import json
+except ImportError:
+    import simplejson as json
 
 
 sys.path.insert(0, '.')
 
-import rsvprobe
+# Reads the url from the json url and returns the url nodes of the perfsonar nodes
+def parseJsonUrl(jsonurl):
+        req = urllib2.Request(jsonurl)
+        opener = urllib2.build_opener()
+        f = opener.open(req)
+        data = json.loads(f.read())
+        if 'organizations' not in data:
+            self.return_unknown("Json Url format not as expected" % jsonurl)
+        nodes = []
+        for organization in data['organizations']:
+            for site in organization['sites']:
+               for host in site['hosts']:
+                   for node in host['addresses']:
+                      nodes.append(node.encode('utf-8'))
+        return nodes
 
 class NetworkMonitoringLocalProbe(rsvprobe.RSVProbe):
     """
-    TODO - write description of the probe
+    This master probe reads a json and parses it to obtain the urls
+    of several perfsonar nodes then fires up other dummy probes that contact
+    the perfsonar nodes and upload the information to myosg
     """
 
     def __init__(self):
@@ -20,15 +42,42 @@ class NetworkMonitoringLocalProbe(rsvprobe.RSVProbe):
         self.metric = ""
         metric = rsvprobe.RSVMetric("OSG-CE",
                  "org.osg.general.network-monitoring-local", rsvprobe.RSVMetric.STATUS)
-        metric.service_version = ">= OSG CE 1.0.0"
-        metric.probe_type = "OSG-CE"
+        #metric.service_version = ">= OSG CE 1.0.0"
+        #metric.probe_type = "OSG-CE"
         self.supported_metrics = [metric]
         self.details = "---\n"
+        self.jsonurl = "http://myosg.grid.iu.edu/pfmesh/json"
+        
+    def parseopt(self):
+        """parse options specific to network monitroing probe and return options, optlist and reminder to
+        allow further processing
+        """
+        options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
+        for opt, arg in options:
+            if self.host == self.localhost:
+                self.is_local = True
+            else:
+                self.is_local = False
+        return options, optlist, remainder
 
-
+    # Submits a dummy probe for each node in nodes
+    def submitDummyProbe(self, nodes):
+        for node in nodes:
+            # Running the ping host probe for now.
+            # TODO change to the actual dummy perfsonar probe.
+            cmd = "rsv-control --run org.osg.general.ping-host --host %s" % (node)
+            ec, out = rsvprobe.run_command(cmd)
+            # make a warning if the dummy metric failed
+            result = out.split("\n")
+            if not 'metricStatus: OK' in result:
+                 self.add_warning("Dummy probe failed for node: %s" % (node)) 
+                
+     
     def run(self):
         """Main routine for the probe"""
         self.parseopt()
+        nodes = parseJsonUrl(self.jsonurl)
+        self.submitDummyProbe(nodes)
         self.return_ok("Everything ok")
 
 def main():
