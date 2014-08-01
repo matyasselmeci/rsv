@@ -1,11 +1,10 @@
-[org.osg.perfsonar-simple]
+[org.osg.general.perfsonar-simple]
 default-cron-interval = 47 18 * * *
-
 execute = local
 service-type = OSG-CE
 output-format = brief
 enable-by-default = true
 description = Uploads the information to myosg of a perfsonar ndoe
+need-proxy = false
 
-[org.osg.perfsonar-simple env]
-# No environment definitions needed for this metric
+[org.osg.general.perfsonar-simple env]
