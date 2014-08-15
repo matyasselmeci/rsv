@@ -40,10 +40,9 @@ class NetworkMonitoringLocalProbe(rsvprobe.RSVProbe):
     def __init__(self):
         rsvprobe.RSVProbe.__init__(self)
         self.metric = ""
-        metric = rsvprobe.RSVMetric("OSG-CE",
-                 "org.osg.general.network-monitoring-local", rsvprobe.RSVMetric.STATUS)
-        #metric.service_version = ">= OSG CE 1.0.0"
-        #metric.probe_type = "OSG-CE"
+        self.short_metric = ""
+        metric = rsvprobe.RSVMetric("Perfsonar-Monitor",
+                 "org.osg.local.network-monitoring-local", rsvprobe.RSVMetric.STATUS)
         self.supported_metrics = [metric]
         self.details = "---\n"
         self.jsonurl = "http://myosg.grid.iu.edu/pfmesh/json"
@@ -60,25 +59,29 @@ class NetworkMonitoringLocalProbe(rsvprobe.RSVProbe):
                 self.is_local = False
         return options, optlist, remainder
 
-    # Submits a dummy probe for each node in nodes
-    def submitDummyProbe(self, nodes):
+    # Enables a dummy probe for each node in nodes
+    def enableDummyProbe(self, nodes):
         for node in nodes:
-            # Running the ping host probe for now.
-            # TODO change to the actual dummy perfsonar probe.
-            cmd = "rsv-control --run org.osg.general.ping-host --host %s" % (node)
+            # To be changed once we want to enable the probes
+            #self.add_message("We would enable the simple probe for node %s" % (node))
+            #continue
+            cmd = "rsv-control --enable --host %s org.osg.general.perfsonar-simple" % (node)
             ec, out = rsvprobe.run_command(cmd)
+            #print out
             # make a warning if the dummy metric failed
             result = out.split("\n")
-            if not 'metricStatus: OK' in result:
-                 self.add_warning("Dummy probe failed for node: %s" % (node)) 
+            if 'ERROR' in result:
+                self.add_warning("Failed to enable probe failed for node: %s" % (node), exit_code=0)
+            #if not 'metricStatus: OK' in result:
+            #    continue
+                #self.add_warning("Dummy probe failed for node: %s" % (node), exit_code=0) 
                 
-     
     def run(self):
         """Main routine for the probe"""
         self.parseopt()
         nodes = parseJsonUrl(self.jsonurl)
-        self.submitDummyProbe(nodes)
-        self.return_ok("Everything ok")
+        self.enableDummyProbe(nodes)
+        self.return_ok("Everything OK")
 
 def main():
     probe = NetworkMonitoringLocalProbe()
