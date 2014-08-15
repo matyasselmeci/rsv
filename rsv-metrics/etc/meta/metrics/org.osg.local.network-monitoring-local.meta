@@ -1,0 +1,11 @@
+[org.osg.local.network-monitoring-local]
+
+default-cron-interval = */10 * * * *
+execute = local
+service-type = Perfsonar-Monitor
+output-format = brief
+need-proxy = false
+enable-by-default = false
+description = To be written
+
+[org.osg.local.network-monitoring-local env]
