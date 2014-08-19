@@ -15,7 +15,7 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
     def __init__(self):
         rsvprobe.RSVProbe.__init__(self)
         self.metric = ""
-        metric = rsvprobe.RSVMetric("Perfsonar-monitoring",
+        metric = rsvprobe.RSVMetric("Perfsonar-Monitor",
                                     "org.osg.general.perfsonar-simple", rsvprobe.RSVMetric.STATUS)
         self.supported_metrics = [metric]
         self.details = "---\n"

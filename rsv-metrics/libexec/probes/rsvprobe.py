@@ -590,7 +590,7 @@ Retuns True if status and summary have been updated, False otherwise.
     outstring = "RSV BRIEF RESULTS:\n"
     outstring += "%s\n" % STATUS_DICT[self.status]
     outstring += "%s\n" % self.summary
-    #outstring += "%s\n" % self.timestamp
+    outstring += "%s\n" % self.timestamp
     outstring += '\n'.join(self.detailed)
     if self.output_filename:
       try:
@@ -654,7 +654,7 @@ timestamp	 Required	 The time the metric was gathered (String ISO8601 UTC time)
     outstring += "metricStatus: %s\nserviceType: %s\n" % (STATUS_DICT[self.status], metric.stype)
     # not menitoning host/URI
     outstring += "summaryData: %s\n" % self.summary
-    outstring += "detailsData: %s\n" % out_detailed + "1213"
+    outstring += "detailsData: %s\n" % out_detailed
     outstring += "EOT\n"
     if self.output_filename:
       try:
