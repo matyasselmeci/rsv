@@ -22,6 +22,7 @@ install:
 	cp -r etc/meta/metrics $(DESTDIR)/$(sysconfdir)/rsv/meta/
 	cp -r etc/metrics $(DESTDIR)/$(sysconfdir)/rsv/
 	# Put log rotation in place
+	install -d $(DESTDIR)/$(sysconfdir)/logrotate.d
 	install -m 0644 logrotate/rsv-perfsonar-metrics.logrotate $(DESTDIR)/$(sysconfdir)/logrotate.d/rsv-perfsonar-metrics
 
 
