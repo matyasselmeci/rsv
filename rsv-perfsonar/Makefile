@@ -21,6 +21,9 @@ install:
 	install -d $(DESTDIR)/$(sysconfdir)/rsv/meta
 	cp -r etc/meta/metrics $(DESTDIR)/$(sysconfdir)/rsv/meta/
 	cp -r etc/metrics $(DESTDIR)/$(sysconfdir)/rsv/
+	# Create the log dirs
+	install -d $(DESTDIR)/$(localstatedir)/log/rsv/metrics
+	install -d $(DESTDIR)/$(localstatedir)/log/rsv/probes
 	# Put log rotation in place
 	install -d $(DESTDIR)/$(sysconfdir)/logrotate.d
 	install -m 0644 logrotate/rsv-perfsonar-metrics.logrotate $(DESTDIR)/$(sysconfdir)/logrotate.d/rsv-perfsonar-metrics
