@@ -72,6 +72,11 @@ class NetworkMonitoringLocalProbe(rsvprobe.RSVProbe):
             result = out.split("\n")
             if 'ERROR' in result:
                 self.add_warning("Failed to enable probe failed for node: %s" % (node), exit_code=0)
+            cmd = "rsv-control --on --host %s org.osg.general.perfsonar-simple" % (node)
+            ec, out = rsvprobe.run_command(cmd)
+            result = out.split("\n")
+            if 'ERROR' in result:
+                self.add_warning("Failed to turn on probe failed for node: %s" % (node), exit_code=0)
             #if not 'metricStatus: OK' in result:
             #    continue
                 #self.add_warning("Dummy probe failed for node: %s" % (node), exit_code=0) 
