@@ -17,12 +17,15 @@ parser.add_option('-p', '--post',  help='begin get/post from specified url', des
 parser.add_option('-r', '--error', help='run get/post without error handling (for debugging)', dest='err', default=False, action='store_true')
 parser.add_option('-s', '--start', help='set start time for gathering data (default is -12 hours)', dest='start', default=-43200)
 parser.add_option('-u', '--url', help='set url to gather data from (default is http://hcc-pki-ps02.unl.edu)', dest='url', default='http://hcc-pki-ps02.unl.edu')
+praser.add_option('-w', '--user', help='the username to upload the information to the GOC', dest='username', default='afitz', action='store_true')
+parser.add_option('-k', '--key', help='the key to upload the information to the goc', dest='key', default='fc077a6a133b22618172bbb50a1d3104a23b2050', action='store_true')
+parser.add_option('-g', '--goc', help='the goc address to upload the information to', dest='goc', default='http://osgnetds.grid.iu.edu', action='store_true')
 (opts, args) = parser.parse_args()
 
 
 class EsmondUploader(object):
     
-    def __init__(self,verbose,start,end,connect,username='afitz',key='fc077a6a133b22618172bbb50a1d3104a23b2050'):
+    def __init__(self,verbose,start,end,connect,username='afitz',key='fc077a6a133b22618172bbb50a1d3104a23b2050', goc='http://osgnetds.grid.iu.edu'):
 
         # Filter variables
         filters.verbose = verbose
@@ -36,7 +39,7 @@ class EsmondUploader(object):
         self.connect = connect
         self.username = username
         self.key = key
-        self.goc = 'http://osgnetds.grid.iu.edu'
+        self.goc = goc
         self.conn = ApiConnect(self.connect,filters)
         self.gconn = ApiConnect(self.goc,gfilters)
                 

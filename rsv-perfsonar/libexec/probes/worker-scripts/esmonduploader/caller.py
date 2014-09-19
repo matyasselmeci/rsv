@@ -3,7 +3,7 @@ import sys
 from esmonduploader import *
 
 ### File that would call EsmondUploader() with specified parameters to get and post the data ###
-caller = EsmondUploader(verbose=False,start=int(opts.start),end=int(opts.end),connect=opts.url)
+caller = EsmondUploader(verbose=False,start=int(opts.start),end=int(opts.end),connect=opts.url, username=opts.username, key=opts.key, goc=opts.goc)
 
 def get_post():
     print "Getting data..."
