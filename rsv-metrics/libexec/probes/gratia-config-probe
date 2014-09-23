@@ -10,6 +10,8 @@ use RSVMetric;
 
 print_output_header();
 
+our $CRON_D = '/etc/cron.d';
+
 ######## Retrieve Global variables ################################
 our %o;
 our %metric;
@@ -87,19 +89,27 @@ EOF
   $real_datafolder = `(cd "$datafolder" >/dev/null 2>&1 && /bin/pwd)`;
   chomp $real_datafolder;
 
-  my $cron_grep_pattern = "^\\s*[^#].*gratia/\\(probe/\\)\\?$real_gratia_probe_type/";
-  my $probe_in_cron_d = system("grep -e '$cron_grep_pattern' /etc/cron.d/* >/dev/null 2>&1") == 0;
-  # Don't look in crontab (see SOFTWARE-862)
-
   ################################
   # Check some basic critical stuff
 
   # Is probe in cron.d (if it's supposed to be)?
   if ($current_gratia_probe_type =~
-      m&^(?:sge|pbs|lsf|pbs-lsf|condor|glexec)&i and
-      $probe_in_cron_d != 1) {
-    setCritical();
-    &appendDetailsData("ERROR: Probe $probename is not listed in cron.d.\n");
+      m&^(?:sge|pbs|lsf|pbs-lsf|condor|glexec)&i) {
+
+    # See if cron.d is accessible (on EL5 it might not be, see SOFTWARE-1602)
+    if (! -x $CRON_D) {
+      my $username = getpwuid($<);
+      &appendDetailsData("NOTE: Cron directory $CRON_D is not accessible by the $username user.\n");
+      &appendDetailsData("Cannot determine if $probename is enabled.\n");
+    } else {
+      my $cron_grep_pattern = '^[[:space:]]*[^#].*gratia/\(probe/\)\?'.$real_gratia_probe_type.'/';
+      my $probe_in_cron_d = system("grep -e '$cron_grep_pattern' '$CRON_D'/* >/dev/null 2>&1") == 0;
+
+      if ($probe_in_cron_d != 1) {
+        setCritical();
+        &appendDetailsData("ERROR: Probe $probename is not listed in $CRON_D.\n");
+      }
+    }
   }
   # Is probe enabled?
   if ($enabled ne "1") {
@@ -717,6 +727,7 @@ sub ProbeConfiguration_getFilenameFragment {
 }
 
 __END__
+#vim: ft=perl:sw=2:sts=2
 ### Local Variables:
 ### mode: cperl
 ### End:
