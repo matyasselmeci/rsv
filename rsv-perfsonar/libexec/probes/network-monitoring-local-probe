@@ -11,24 +11,11 @@ try:#No json on python2.4 using simplejson for now
 except ImportError:
     import simplejson as json
 
+# The maximun number of meshes allowed
+max_mesh = 10
 
 sys.path.insert(0, '.')
 
-# Reads the url from the json url and returns the url nodes of the perfsonar nodes
-def parseJsonUrl(jsonurl):
-        req = urllib2.Request(jsonurl)
-        opener = urllib2.build_opener()
-        f = opener.open(req)
-        data = json.loads(f.read())
-        if 'organizations' not in data:
-            self.return_unknown("Json Url format not as expected" % jsonurl)
-        nodes = []
-        for organization in data['organizations']:
-            for site in organization['sites']:
-               for host in site['hosts']:
-                   for node in host['addresses']:
-                      nodes.append(node.encode('utf-8'))
-        return nodes
 
 class NetworkMonitoringLocalProbe(rsvprobe.RSVProbe):
     """
@@ -46,13 +33,39 @@ class NetworkMonitoringLocalProbe(rsvprobe.RSVProbe):
         self.supported_metrics = [metric]
         self.details = "---\n"
         self.jsonurl = "http://myosg.grid.iu.edu/pfmesh/json"
+        #Add the probe specific options
+        self.addopt("", "username=", "--username username the username for uploading data to the goc")
+        for mesh_num in range(0, max_mesh):
+            mesh_opt = "mesh%d=" % mesh_num
+            self.addopt("", mesh_opt, "--mesh# url of the personar mesh (ex. --mesh0 http://myosg.grid.iu.edu/pfmesh/json --mesh2 url2")
+        self.meshlist = []
+
+        # Reads the url from the json url and returns the url nodes of the perfsonar nodes                         
+    def parseJsonUrl(self, jsonurl):
+        req = urllib2.Request(jsonurl)
+        opener = urllib2.build_opener()
+        f = opener.open(req)
+        try:
+            data = json.loads(f.read())
+        except ValueError:
+            self.return_unknown("Invalid json at %s" % (jsonurl))
+        if 'organizations' not in data:
+            self.return_unknown("Json Url format not as expected" % jsonurl)
+        nodes = []
+        for organization in data['organizations']:
+            for site in organization['sites']:
+                for host in site['hosts']:
+                    for node in host['addresses']:
+                        nodes.append(node.encode('utf-8'))
+        return nodes
         
     def parseopt(self):
-        """parse options specific to network monitroing probe and return options, optlist and reminder to
-        allow further processing
+        """parse options specific to network monitroing probe and return options, optlist and reminder to allow further processing
         """
         options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
         for opt, arg in options:
+            if 'mesh' in  opt:
+                self.meshlist.append(arg)
             if self.host == self.localhost:
                 self.is_local = True
             else:
@@ -62,9 +75,6 @@ class NetworkMonitoringLocalProbe(rsvprobe.RSVProbe):
     # Enables a dummy probe for each node in nodes
     def enableDummyProbe(self, nodes):
         for node in nodes:
-            # To be changed once we want to enable the probes
-            #self.add_message("We would enable the simple probe for node %s" % (node))
-            #continue
             cmd = "rsv-control --enable --host %s org.osg.general.perfsonar-simple" % (node)
             ec, out = rsvprobe.run_command(cmd)
             #print out
@@ -77,14 +87,14 @@ class NetworkMonitoringLocalProbe(rsvprobe.RSVProbe):
             result = out.split("\n")
             if 'ERROR' in result:
                 self.add_warning("Failed to turn on probe failed for node: %s" % (node), exit_code=0)
-            #if not 'metricStatus: OK' in result:
-            #    continue
-                #self.add_warning("Dummy probe failed for node: %s" % (node), exit_code=0) 
+            
                 
     def run(self):
         """Main routine for the probe"""
         self.parseopt()
-        nodes = parseJsonUrl(self.jsonurl)
+        nodes = []
+        for mesh_url in self.meshlist:
+            nodes += self.parseJsonUrl(mesh_url)
         self.enableDummyProbe(nodes)
         self.return_ok("Everything OK")
 
