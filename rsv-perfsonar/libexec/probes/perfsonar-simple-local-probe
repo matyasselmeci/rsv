@@ -11,7 +11,6 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
     """
     TODO - write description of the probe
     """
-
     def __init__(self):
         rsvprobe.RSVProbe.__init__(self)
         self.metric = ""
@@ -19,7 +18,17 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
                                     "org.osg.general.perfsonar-simple", rsvprobe.RSVMetric.STATUS)
         self.supported_metrics = [metric]
         self.details = "---\n"
-    
+        # the default values
+        # username for uploading ifnormation to the goc
+        self.username = "afitz"
+        # key for uploading information to the goc
+        self.key = "fc077a6a133b22618172bbb50a1d3104a23b2050"
+        # The goc_url is the url for where to upload the data
+        self.goc_url = "http://osgnetds.grid.iu.edu"
+        # Add the options so the parsing knows what to expect
+        self.addopt("", "username=", "--username username the username for uploading data to the goc")
+        self.addopt("", "key=", "--key key the key for uploading data to the goc")
+        self.addopt("", "goc=", "--goc url the url for where to upload the data (i.e http://osgnetds.grid.iu.edu)")
 
     def parseopt(self):
         """parse options specific to network monitroing probe and return options, optlist and reminder to
@@ -27,15 +36,21 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
         """
         options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
         for opt, arg in options:
+            if opt == '--username':
+                self.username = arg
+            elif opt == '--key':
+                self.key = arg
+            elif opt == '--goc':
+                self.goc_url =arg
             if self.host == self.localhost:
                 self.is_local = True
             else:
                 self.is_local = False
         return options, optlist, remainder
 
-    def runCallerScript(self,node):
+    def runCallerScript(self):
         #Runs the caller script for esmond and parses the result 
-        cmd = "source ./esmondCaller.sh %s %d" % ("http://" + self.host, 86400)
+        cmd = "source ./esmondCaller.sh %s %d %s %s %s" % ("http://" + self.host, 86400, self.username, self.key, self.goc_url)
         ec, out = rsvprobe.run_command(cmd, workdir="/usr/libexec/rsv/probes/worker-scripts")
         if 'Error' in out:
             self.return_critical("Failed running the caller. Error message %s" % (out))
@@ -44,7 +59,7 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
     def run(self):
        """Main routine for the probe"""
        self.parseopt()
-       self.runCallerScript(self.host)
+       self.runCallerScript()
        self.return_ok("Everything ok")
 
 def main():
