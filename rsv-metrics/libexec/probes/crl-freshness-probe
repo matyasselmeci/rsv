@@ -355,15 +355,11 @@ errHrs:    Number hours since the failing downloads before an error is issued
             "Could not record error file (%s) indicating that CRL files are out of sync. This probe may never escalate to an error stage." % 
             self.error_file)
         self.return_warning(out_msg)
-
-
-
-    # Step ?5?: Recording the result for RSV output
-    # already done
-    # As it is now it should never end up here
-    if self.status > rsvprobe.WARNING:
-      self.return_critical("Probe ended with unexpected error condition")
-    self.return_unknown("Probe ended with unexpected status")
+    elif self.status == rsvprobe.CRITICAL:
+      self.return_critical(out_msg)
+    else: # self.status == rsvprobe.UNKNOWN or something else
+      self.add_msg("Probe has unexpected status")
+      self.return_unknown(out_msg)
 
 
 ##### Main code #####
@@ -374,4 +370,6 @@ def main():
 
 if __name__ == "__main__":
   main()
+
+# vim:sw=2:sts=2
 
