@@ -17,7 +17,7 @@ REDHAT_LOCKFILE=/var/lock/subsys/rsv
 # Sometimes Condor-Cron hasn't quite finished starting up yet
 # So if it's not up, sleep a few seconds to give it a chance to finish
 if [ $1 != "stop" ]; then
-    `$CONDOR_EXE_QUEUE > /dev/null 2>&1` || sleep 5
+    $CONDOR_EXE_QUEUE > /dev/null 2>&1 || sleep 5
 fi
 
 RETVAL=0
