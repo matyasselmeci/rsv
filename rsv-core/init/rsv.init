@@ -57,35 +57,31 @@ status() {
         *         ) rsv_jobs_in_queue=Y ;;
     esac
 
-    if [ -e $REDHAT_LOCKFILE ]; then
-        if [ $ccq_status -eq 0 ]; then
-            if [ $rsv_jobs_in_queue = Y ]; then
-                echo "RSV is running.  Current condor-cron queue:"
-                echo "$ccq_output"
-                RETVAL=0
-            else
-                echo "RSV lock file exists, but condor-cron queue is empty:"
-                echo "$ccq_output"
-                RETVAL=2
-            fi
+    if [ -e $REDHAT_LOCKFILE ] && [ $ccq_status -eq 0 ]; then
+        if [ $rsv_jobs_in_queue = Y ]; then
+            echo "RSV is running.  Current condor-cron queue:"
+            echo "$ccq_output"
+            RETVAL=0
         else
-            echo "RSV lock file exists, but condor-cron is not running."
+            echo "RSV lock file exists, but condor-cron queue is empty:"
+            echo "$ccq_output"
             RETVAL=2
         fi
-    else
-        if [ $ccq_status -eq 0 ]; then
-            if [ $rsv_jobs_in_queue = Y ]; then
-                echo "RSV lock file missing, but jobs in condor-cron queue:"
-                echo "$ccq_output"
-                RETVAL=0
-            else
-                echo "RSV is stopped."
-                RETVAL=3
-            fi
+    elif [ -e $REDHAT_LOCKFILE ] && [ $ccq_status -ne 0 ]; then
+        echo "RSV lock file exists, but condor-cron is not running."
+        RETVAL=2
+    elif [ ! -e $REDHAT_LOCKFILE ] && [ $ccq_status -eq 0 ]; then
+        if [ $rsv_jobs_in_queue = Y ]; then
+            echo "RSV lock file missing, but jobs in condor-cron queue:"
+            echo "$ccq_output"
+            RETVAL=0
         else
-            echo "RSV lock file does not exist and condor-cron is not running."
+            echo "RSV is stopped."
             RETVAL=3
         fi
+    elif [ ! -e $REDHAT_LOCKFILE ] && [ $ccq_status -ne 0 ]; then
+        echo "RSV lock file does not exist and condor-cron is not running."
+        RETVAL=3
     fi
     return $RETVAL
 }
