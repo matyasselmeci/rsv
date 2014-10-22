@@ -16,9 +16,9 @@ REDHAT_LOCKFILE=/var/lock/subsys/rsv
 
 # Sometimes Condor-Cron hasn't quite finished starting up yet
 # So if it's not up, sleep a few seconds to give it a chance to finish
-if [ $1 != "stop" ]; then
-    $CONDOR_EXE_QUEUE > /dev/null 2>&1 || sleep 5
-fi
+case $1 in
+    start ) $CONDOR_EXE_QUEUE > /dev/null 2>&1 || sleep 5 ;;
+esac
 
 RETVAL=0
 
@@ -34,6 +34,60 @@ start() {
        RETVAL=7  # "program not running"
    fi
    return $RETVAL
+}
+
+:<<__status_codes__
+0:      program is running or service is OK
+1:      program is dead and /var/run pid file exists
+2:      program is dead and /var/lock lock file exists
+3:      program is not running
+4:      program or service status is unknown
+5-99:   reserved for future LSB use
+100-149:        reserved for distribution use
+150-199:        reserved for application use
+200-254:        reserved
+__status_codes__
+
+status() {
+    ccq_output=`$CONDOR_EXE_QUEUE rsv 2>&1`
+    ccq_status=$?
+    ccq_summary=`echo "$ccq_output" | tail -1`
+    case $ccq_summary in
+        "0 jobs"* ) rsv_jobs_in_queue=N ;;
+        *         ) rsv_jobs_in_queue=Y ;;
+    esac
+
+    if [ -e $REDHAT_LOCKFILE ]; then
+        if [ $ccq_status -eq 0 ]; then
+            if [ $rsv_jobs_in_queue = Y ]; then
+                echo "RSV is running.  Current condor-cron queue:"
+                echo "$ccq_output"
+                RETVAL=0
+            else
+                echo "RSV lock file exists, but condor-cron queue is empty:"
+                echo "$ccq_output"
+                RETVAL=2
+            fi
+        else
+            echo "RSV lock file exists, but condor-cron is not running."
+            RETVAL=2
+        fi
+    else
+        if [ $ccq_status -eq 0 ]; then
+            if [ $rsv_jobs_in_queue = Y ]; then
+                echo "RSV lock file missing, but jobs in condor-cron queue:"
+                echo "$ccq_output"
+                RETVAL=0
+            else
+                echo "RSV is stopped."
+                RETVAL=3
+            fi
+        else
+            echo "RSV lock file does not exist and condor-cron is not running."
+            RETVAL=3
+        fi
+    fi
+    return $RETVAL
 }
 
 stop() {
@@ -56,6 +110,9 @@ case "$1" in
         ;;
   stop)
         stop
+        ;;
+  status)
+        status
         ;;
   restart)
         stop
