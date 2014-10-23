@@ -4,8 +4,8 @@
 # description: RSV
 ### BEGIN INIT INFO
 # Provides: rsv
-# Required-Start: $network $condor-cron
-# Required-Stop: $condor-cron
+# Required-Start: $network condor-cron
+# Required-Stop: condor-cron
 # Default-Stop: 1 2 3 4 5 6
 # Description: RSV
 ### END INIT INFO
