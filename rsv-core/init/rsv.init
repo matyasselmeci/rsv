@@ -105,11 +105,11 @@ case "$1" in
         ;;
   restart)
         stop
-        sleep 10 
+        sleep 10
         start
         ;;
   *)
-        echo "Usage: rsv {start|stop|restart}"
+        echo "Usage: rsv {start|stop|restart|status}"
         exit 1
 esac
 
