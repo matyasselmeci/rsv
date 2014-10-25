@@ -16,7 +16,8 @@ $options{'ping-count'} ||= 1;
 
 find_binaries("ping");
 
-my $ping_cmd = "ping -q -W $options{'ping-timeout'} -c $options{'ping-count'} $options{u} 2>&1";
+my $ping_cmd = shellquote("ping", "-q", "-W", $options{'ping-timeout'},
+        "-c", $options{'ping-count'}, $options{u}) . " 2>&1";
 my $out = `$ping_cmd`;
 my $ret = $? >> 8;
 
