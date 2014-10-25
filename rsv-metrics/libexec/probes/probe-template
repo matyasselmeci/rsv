@@ -32,8 +32,10 @@ find_binaries("cp", "ls");
 
 # Do some stuff - whatever the probe is supposed to be about.
 # You can use $options{u} for the host and $options{m} for the metric name
-# Here is the code from the ping probe.
-my $ping_cmd = "ping -q -W $options{'ping-timeout'} -c $options{'ping-count'} $options{u} 2>&1";
+# Here is the code from the ping probe.  The shellquote function can be used
+# to build a sanitized command line if any of the arguments are untrusted.
+my $ping_cmd = shellquote("ping", "-q", "-W", $options{'ping-timeout'},
+        "-c", $options{'ping-count'}, $options{u}) . " 2>&1";
 my $out = `$ping_cmd`;
 my $ret = $? >> 8;
 
