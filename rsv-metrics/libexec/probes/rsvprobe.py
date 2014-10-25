@@ -310,6 +310,20 @@ def inlist(elements, checklist):
       return True
   return False
 
+def shellquote_arg(arg):
+    if re.search(r'[^-/.\w]', arg) or arg == '':
+        return "'%s'" % arg.replace("'", r"'\''")
+    else:
+        return arg
+
+def shellquote(*args):
+    if len(args) == 1:
+        return shellquote_arg(args[0])
+    else:
+        return tuple(map(shellquote_arg, args))
+
+def shellquote_args(args):
+    return ' '.join(shellquote(args))
 
 # Valid probe status (according to specification)
 OK = 0
