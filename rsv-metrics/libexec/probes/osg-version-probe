@@ -27,7 +27,8 @@ sub monitor {
         dump_debug();
     }
     else {
-        my $version_out = `$osg_version 2>&1`;
+        my $cmd = shellquote($osg_version) . " 2>&1";
+        my $version_out = `$cmd`;
         if ($? == 0) {
             print "OK\n";
             print $version_out;
