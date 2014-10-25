@@ -41,7 +41,7 @@ my $remote_uri = "gsiftp://$options{u}/$options{'destination-dir'}/$remote_file"
 # 
 # Transfer to
 #
-my $cmd = "globus-url-copy $local_uri $remote_uri 2>&1";
+my $cmd = shellquote("globus-url-copy", $local_uri, $remote_uri) . " 2>&1";
 my $out = `$cmd`;
 if($? != 0) {
     print "CRITICAL\n";
@@ -65,7 +65,7 @@ sleep($options{delay});
 #
 my $new_local_path = "/tmp/$filename.local";
 my $new_local_uri = "file://$new_local_path";
-$cmd = "globus-url-copy $remote_uri $new_local_uri 2>&1";
+$cmd = shellquote("globus-url-copy", $remote_uri, $new_local_uri) . " 2>&1";
 $out = `$cmd`;
 if($? != 0) {
     print "CRITICAL\n";
@@ -95,7 +95,8 @@ else {
 #
 # Compare files
 #
-$out = `diff $test_file $new_local_path 2>&1`;
+$cmd = shellquote("diff", $test_file, $new_local_path) . " 2>&1";
+$out = `$cmd`;
 if($? != 0) {
     print "CRITICAL\n";
     print "Successful transfer to remote host.\n";
@@ -123,7 +124,8 @@ sub cleanup_files {
     }
 
     # Then cleanup the remote file using UberFTP
-    my $out = `uberftp -rm $remote_uri 2>&1`;
+    my $cmd = shellquote("uberftp", "-rm", $remote_uri) . " 2>&1";
+    my $out = `$cmd`;
     if($? != 0) {
         print STDERR "Failed to remove remote file '$remote_uri'.  Output:\n$out\n";
     }
