@@ -90,7 +90,7 @@ my $ret=0;
 
 
 # TODO - might need '-x509_user_proxy=' included in here
-my $defaults="";
+my @defaults=();
 my $cmd_line="";
 my $ping_bin="srm-ping";
 my $ls_bin="srm-ls";
@@ -112,7 +112,10 @@ if ($options{'srm-client-type'} eq "fermi")
 	$rmdir_bin="srmrmdir";
 	$release_bin="srm-release-space";
 	$reserve_bin="srm-reserve-space";
-	$defaults="-retry_num=1 -debug -$options{'srm-protocol-version'} -webservice_path=$options{'srm-webservice-path'}";
+	@defaults=(
+            "-retry_num=1", "-debug", "-$options{'srm-protocol-version'}",
+            "-webservice_path=$options{'srm-webservice-path'}"
+        );
   }
 # find_binaries($binary_file);
 
@@ -124,7 +127,7 @@ $srm_uri = $srm_uri . "?SFN=".$options{'srm-destination-dir'};
 ###  Performs a srm-ping on a host and records the result
    if ($probe_name eq "ping")
    {
-    $cmd_line = "$ping_bin srm://$options{u} $defaults 2>&1";
+    $cmd_line = shellquote($ping_bin, "srm://$options{u}", @defaults) . " 2>&1";
     $out = `$cmd_line`;
     $ret = $? >> 8;
     ## Set metric status based on srmping command's exit value
@@ -163,8 +166,9 @@ $srm_uri = $srm_uri . "?SFN=".$options{'srm-destination-dir'};
    if ($probe_name eq "put")
    {
      $srm_uri .= "/".$timestamp."-srmclient-probe-test-file-put.$$";
-     $out=`$copy_bin $defaults $local_uri $srm_uri 2>&1`; 
-     my $srmls_cmd = "$ls_bin $defaults $srm_uri 2>&1";
+     my $copy_cmd = shellquote($copy_bin, @defaults, $local_uri, $srm_uri) . " 2>&1";
+     $out=`$copy_cmd`; 
+     my $srmls_cmd = shellquote($ls_bin, @defaults, $srm_uri) . " 2>&1";
      $out.=`$srmls_cmd`;
      $ret = $? >> 8;
      if ($ret ==0)
@@ -177,7 +181,8 @@ $srm_uri = $srm_uri . "?SFN=".$options{'srm-destination-dir'};
                 $out_value=2;
                 $out_desc="SRM server could not list file copied by srm-cp on $options{'u'}.";
         }
-      $out.=`$rm_bin $srm_uri 2>&1`;
+     my $rm_cmd = shellquote($rm_bin, $srm_uri) . " 2>&1";
+     $out.=`$rm_cmd`;
    }
 
 
@@ -187,30 +192,35 @@ $srm_uri = $srm_uri . "?SFN=".$options{'srm-destination-dir'};
    {
      $srm_uri .= "/".$timestamp."-srmclient-probe-test-file-mv.$$";
      my $srm_uri_mv .= "/".$timestamp."-srmclient-probe-test-file-moved.$$";
-     $out=`$copy_bin $defaults $local_uri $srm_uri 2>&1`;
-     $out.=`$mv_bin $defaults $srm_uri $srm_uri_mv 2>&1`;
-     my $srmls_cmd = "$ls_bin $defaults $srm_uri_mv 2>&1";
+     my $copy_cmd = shellquote($copy_bin, @defaults, $local_uri, $srm_uri) . " 2>&1";
+     $out=`$copy_cmd`;
+     my $mv_cmd = shellquote($mv_bin, @defaults, $srm_uri, $srm_uri_mv) . " 2>&1";
+     $out.=`$mv_cmd`;
+     my $srmls_cmd = shellquote($ls_bin, @defaults, $srm_uri_mv) . " 2>&1";
      $out.=`$srmls_cmd`;
      $ret = $? >> 8;
      if ($ret ==0)
         {
                 $out_value=0;
                 $out_desc="SRM server $options{'u'} able to move and list a file via srm-mv";
-      		$out.=`$rm_bin $srm_uri_mv 2>&1`;
+                my $rm_cmd = shellquote($rm_bin, $srm_uri_mv) . " 2>&1";
+      		$out.=`$rm_cmd`;
         }
         else
         {
                 $out_value=2;
                 $out_desc="SRM server could not list file moved by srm-mv on $options{'u'}.";
-      		$out.=`$rm_bin $srm_uri 2>&1`;
+                my $rm_cmd = shellquote($rm_bin, $srm_uri) . " 2>&1";
+      		$out.=`$rm_cmd`;
         }
    }
 
    if (($probe_name eq "mkdir")|| ($probe_name eq "rmdir"))
    {
 	$srm_uri .= "/".$timestamp."-srmclient-probe-test-directory.$$";
-        $out=`$mkdir_bin $defaults $srm_uri 2>&1`;
-        my $srmls_cmd = "$ls_bin $defaults $srm_uri 2>&1";
+        my $mkdir_cmd = shellquote($mkdir_bin, @defaults, $srm_uri) . " 2>&1";
+        $out=`$mkdir_cmd`;
+        my $srmls_cmd = shellquote($ls_bin, @defaults, $srm_uri) . " 2>&1";
         $out.=`$srmls_cmd`;
         $ret = $? >> 8;
         if ($probe_name eq "mkdir")
@@ -226,10 +236,11 @@ $srm_uri = $srm_uri . "?SFN=".$options{'srm-destination-dir'};
                         $out_desc="SRM server $metric{'hostName'} received files and was able to copy to a different location.";
                 }
 	}
-        $out.=`$rmdir_bin $defaults $srm_uri 2>&1`;
+        my $rmdir_cmd = shellquote($rmdir_bin, @defaults, $srm_uri) . " 2>&1";
+        $out.=`$rmdir_cmd`;
 	if ($probe_name eq "rmdir")
         {
-        	my $srmls_cmd = "$ls_bin $defaults $srm_uri 2>&1";
+        	my $srmls_cmd = shellquote($ls_bin, @defaults, $srm_uri) . " 2>&1";
         	$out.=`$srmls_cmd`;
         	my $ret2 = $? >> 8;
                 if (($ret==0)&&($ret2 != 0))
@@ -255,11 +266,13 @@ $srm_uri = $srm_uri . "?SFN=".$options{'srm-destination-dir'};
    if ($probe_name eq "rm")
    {
      $srm_uri .= "/".$timestamp."-srmclient-probe-test-file-rm.$$";
-     my $srmls_cmd = "$ls_bin $defaults $srm_uri 2>&1";
-     $out=`$copy_bin $defaults $local_uri $srm_uri 2>&1`; 
+     my $srmls_cmd = shellquote($ls_bin, @defaults, $srm_uri) . " 2>&1";
+     my $copy_cmd = shellquote($copy_bin, @defaults, $local_uri, $srm_uri) . " 2>&1"; 
+     my $rm_cmd = shellquote($rm_bin, @defaults, $srm_uri) . " 2>&1"; 
+     $out=`$copy_cmd`;
      $out.=`$srmls_cmd`;
      $ret = $? >> 8;
-     $out.=`$rm_bin $defaults $srm_uri 2>&1`; 
+     $out.=`$rm_cmd`;
      $out.=`$srmls_cmd`;
      my $ret2 = $? >> 8;
      if (($ret==0)&&($ret2 !=0))
@@ -284,9 +297,11 @@ $srm_uri = $srm_uri . "?SFN=".$options{'srm-destination-dir'};
    {
      $srm_uri .= "/".$timestamp."-srmclient-probe-test-file-get.$$";
      my $local_uri2="/tmp/rsv.".$timestamp."-copyfile.$$";
-     $out=`$copy_bin $defaults $local_uri $srm_uri 2>&1`; 
-     $out.=`$copy_bin $defaults $srm_uri file://$local_uri2 2>&1`; 
-     my $diff_files_cmd = "diff $local_file $local_uri2 2>&1";
+     my $copy_cmd1 = shellquote($copy_bin, @defaults, $local_uri, $srm_uri) . " 2>&1"; 
+     my $copy_cmd2 = shellquote($copy_bin, @defaults, $srm_uri, "file://$local_uri2") . " 2>&1"; 
+     $out=`$copy_cmd1`;
+     $out.=`$copy_cmd2`;
+     my $diff_files_cmd = shellquote("diff", $local_file, $local_uri2) . " 2>&1";
      my $diff_out=`$diff_files_cmd`; 
      $ret = $? >> 8;
      if (($diff_out eq '') &&($ret == 0 ))
@@ -299,16 +314,20 @@ $srm_uri = $srm_uri . "?SFN=".$options{'srm-destination-dir'};
         $out_value=2;
         $out_desc="ERROR: File copied was different from our testfile or srm copy failed; Absolute error message was: $diff_out";
      }
-     $out.=`$rm_bin $defaults $srm_uri 2>&1`; 
+     my $rm_cmd = shellquote($rm_bin, @defaults, $srm_uri) . " 2>&1"; 
+     $out.=`$rm_cmd`;
    }
 
    if ($probe_name eq "copy")
    {
      my $srm_uri1 = $srm_uri . "/".$timestamp."-srmclient-probe-test-file-copy.$$";
      my $srm_uri2 = $srm_uri . "/".$timestamp."-srmclient-probe-test-file-copy2.$$";
-     $out=`$copy_bin $defaults $local_uri $srm_uri1 2>&1`; 
-     $out.=`$copy_bin $defaults $srm_uri1 $srm_uri2 2>&1`; 
-     $out.=`$ls_bin $defaults $srm_uri2 2>&1`;
+     my $copy_cmd1 = shellquote($copy_bin, @defaults, $local_uri, $srm_uri1) . " 2>&1"; 
+     my $copy_cmd2 = shellquote($copy_bin, @defaults, $srm_uri1, $srm_uri2) . " 2>&1"; 
+     my $ls_cmd = shellquote($ls_bin, @defaults, $srm_uri2) . " 2>&1";
+     $out=`$copy_cmd1`;
+     $out.=`$copy_cmd2`;
+     $out.=`$ls_cmd`;
      $ret = $? >> 8;
      if ($ret == 0)
      {
@@ -320,29 +339,36 @@ $srm_uri = $srm_uri . "?SFN=".$options{'srm-destination-dir'};
         $out_value=2;
         $out_desc="SRM server either failed to receive the file, to copy file, or would not list the file.\n";
      }
-     $out.=`$rm_bin $defaults $srm_uri1 2>&1`; 
-     $out.=`$rm_bin $defaults $srm_uri2 2>&1`; 
+     my $rm_cmd1 = shellquote($rm_bin, @defaults, $srm_uri1) . " 2>&1"; 
+     my $rm_cmd2 = shellquote($rm_bin, @defaults, $srm_uri2) . " 2>&1"; 
+     $out.=`$rm_cmd1`;
+     $out.=`$rm_cmd2`;
    }
 
    if (($probe_name eq "reservespace")||($probe_name eq "releasespace"))
    {
-        my $srm_reserve_cmd="$reserve_bin ";
+        my $srm_reserve_cmd;
 	if ($options{'srm-client-type'} eq 'fermi')
 	{
-		$srm_reserve_cmd.= "--retention_policy=REPLICA " .
-                "--access_latency=ONLINE " .
-                "-retry_num=0 " .
-                "-desired_size=1024 " .
-                "-guaranteed_size=1024 " .
-                "-webservice_path=$options{'srm-webservice-path'} " .
-                "-lifetime=600 " .
-                "srm://" .  $options{'u'} . " 2>&1";
+                $srm_reserve_cmd = shellquote(
+                    $reserve_bin, qw(
+                    --retention_policy=REPLICA
+                    --access_latency=ONLINE
+                    -retry_num=0
+                    -desired_size=1024
+                    -guaranteed_size=1024),
+                    "-webservice_path=$options{'srm-webservice-path'}",
+                    "-lifetime=600",
+                    "srm://$options{'u'}"
+                ) . " 2>&1";
 	}
 	else
 	{
-		$srm_reserve_cmd.= "-size 1024 -gsize 1024 -lifetime 600 " .
-		  "-serviceurl srm://".$options{'u'}."/"
-		  .$options{'srm-webservice-path'};
+                $srm_reserve_cmd = shellquote(
+                    $reserve_bin, qw(
+                    -size 1024 -gsize 1024 -lifetime 600 -serviceurl),
+                    "srm://$options{'u'}/$options{'srm-webservice-path'}"
+                );
 	}
 	$out=`$srm_reserve_cmd`;
         $ret = $? >> 8;
@@ -356,23 +382,26 @@ $srm_uri = $srm_uri . "?SFN=".$options{'srm-destination-dir'};
         # Now try release
         if ($ret == 0)
         {
-		my $srm_release_cmd="";
+		my $srm_release_cmd;
                 my $token=$out;
                 $token=~s/Space token =//;
 		if ($options{'srm-client-type'} eq 'fermi')
 		{
-                	$srm_release_cmd="$release_bin ".
-				"-space_token=$token " .
-                  		"-webservice_path=" .
-				$options{'srm-webservice-path'}  .
-                  		" srm://" .  $options{'u'} . " 2>&1";
+		    $srm_release_cmd = shellquote(
+                        $release_bin,
+                        "-space_token=$token",
+                        "-webservice_path=$options{'srm-webservice-path'}",
+                        "srm://$options{'u'}"
+		    ) . " 2>&1";
 		}
 		else
 		{
-                	$srm_release_cmd="$release_bin ".
-				"-spacetoken=$token " .
-		  		"-serviceurl srm://".$options{'u'}."/"
-		  		.$options{'srm-webservice-path'};
+		    $srm_release_cmd = shellquote(
+                        $release_bin,
+		        "-spacetoken=$token",
+		        "-serviceurl",
+		        "srm://$options{'u'}/$options{'srm-webservice-path'}"
+		    );
 		}
                 $out .= `$srm_release_cmd`;
                 if ($probe_name eq "releasespace")
