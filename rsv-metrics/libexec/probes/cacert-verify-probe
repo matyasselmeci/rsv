@@ -18,6 +18,7 @@ import sys
 sys.path.insert(0, ".")
 
 import rsvprobe
+from rsvprobe import shellquote
 
 # Unix commands used
 CMD_OPENSSL = "/usr/bin/openssl"
@@ -136,7 +137,7 @@ Additionally it makes sure that all IGTF CAs are installed.
 
     for local_certs_file in cert_files:
       #Step 2: Get the subject, Hash and dates associated with the certificate
-      cmd = "%s x509 -in %s -subject -hash -dates -noout" % (CMD_OPENSSL, local_certs_file)
+      cmd = "%s x509 -in %s -subject -hash -dates -noout" % shellquote(CMD_OPENSSL, local_certs_file)
       ec, out = rsvprobe.run_command(cmd)
       values =  out.split('\n')
       subject = values[0].split("subject=")[1].strip()
@@ -145,7 +146,7 @@ Additionally it makes sure that all IGTF CAs are installed.
       end_time = values[3].split("notAfter=")[1]
 
       # Step 3: Verify certificate using openssl verify command
-      cmd = "%s verify -CApath %s %s"  % (CMD_OPENSSL, certdir, local_certs_file)
+      cmd = "%s verify -CApath %s %s"  % shellquote(CMD_OPENSSL, certdir, local_certs_file)
       ec, out = rsvprobe.run_command(cmd)
       verify_ca = out.split(':')[1].strip()
       if not verify_ca == "OK":
