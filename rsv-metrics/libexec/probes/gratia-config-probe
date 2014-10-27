@@ -5,6 +5,7 @@ use warnings;
 use Getopt::Long qw(GetOptions);
 use File::Basename;
 use Date::Manip;
+use Cwd 'abs_path';
 
 use RSVMetric;
 
@@ -93,8 +94,7 @@ EOF
   $datafolder = getProbeConfigAttribute("DataFolder");
   $datafolder =~ s&/$&&;
   $workingfolder = getProbeConfigAttribute("WorkingFolder");
-  $real_datafolder = `(cd "$datafolder" >/dev/null 2>&1 && /bin/pwd)`;
-  chomp $real_datafolder;
+  $real_datafolder = abs_path($datafolder);
 
   ################################
   # Check some basic critical stuff
@@ -111,12 +111,13 @@ EOF
       $run_me_root = 1;
     } else {
       my $cron_grep_pattern = '^[[:space:]]*[^#].*gratia/\(probe/\)\?'.$real_gratia_probe_type.'/';
+      my $quoted_cron_grep_pattern = shellquote($cron_grep_pattern);
 
       # Use -q so we get a 0 return code if grep finds the pattern but there
       # are other files it could not read. Without -q, the return code would be
       # 2. With -q, the return code is 2 only if grep does not find the pattern
       # and could not read some files.
-      my $ret = system("grep -q -e '$cron_grep_pattern' '$CRON_D'/* >/dev/null 2>&1") >> 8;
+      my $ret = system("grep -q -e $quoted_cron_grep_pattern '$CRON_D'/* >/dev/null 2>&1") >> 8;
 
       if ($ret == 1) {
         # could read all the files but didn't find the line in any of them
@@ -258,8 +259,11 @@ EOF
 
   ################################
   # Check last contact time with Gratia server.
-  my $probe_contact_check =
-    `wget -q --tries=1 --timeout=10 -O - 'http://$soaphost/gratia-administration/monitor-status.html?probename=$probename'`;
+  my $wget_cmdline = shellquote(
+    qw(wget -q --tries=1 --timeout=10 -O -),
+    "http://$soaphost/gratia-administration/monitor-status.html?probename=$probename"
+  );
+  my $probe_contact_check = `$wget_cmdline`;
   chomp $probe_contact_check;
   $probe_contact_check =~ s&^last-contact=([^\s]+)\s+([^\s]+?)\|?$&${1} ${2}&;
 
@@ -308,14 +312,19 @@ EOF
   # Cross-check locally configured site name matches Gratia server sitename.
   # Note: don't do this for metric probes going to the GOC.
   if ($probe_seen_by_soaphost && !(($current_gratia_probe_type eq "metric") && ($soaphost =~ /grid\.iu\.edu/))) {
-    my $probe_site_check =
-      system("wget -q --tries=1 --timeout=10 -O - 'http://$soaphost/gratia-administration/monitor-status.html?sitename=$sitename' 2>/dev/null | grep -e '^\\(probename=\\)\\{0,1\\}$probename\[|:][ 	]*last-contact=' >/dev/null 2>&1") == 0;
+    my $wget_cmd = shellquote(
+      qw(wget -q --tries=1 --timeout=10 -O -),
+      "http://$soaphost/gratia-administration/monitor-status.html?sitename=$sitename"
+    );
+    my $grep_cmd = shellquote("grep", "-e", "^\\(probename=\\)\\{0,1\\}$probename\[|:][ \t]*last-contact=");
+    my $cmdline = "$wget_cmd 2>/dev/null | $grep_cmd >/dev/null 2>&1";
+    my $probe_site_check = system($cmdline) == 0;
     if (!$probe_site_check) {
       setWarning();
       &appendDetailsData (<<EOF);
 WARNING: Probe $probename not found in check of probes reporting to $soaphost from $sitename.
 Check Collector SiteName translation on $soaphost
-wget -q --tries=1 --timeout=10 -O - 'http://$soaphost/gratia-administration/monitor-status.html?sitename=$sitename' 2>/dev/null | grep -e '^\(probename=\)\{0,1\}$probename\[|:][ 	]*last-contact='
+$cmdline
 EOF
     } else {
       &appendDetailsData (<<EOF);
@@ -464,9 +473,8 @@ EOF
   if ($status == 0) {
     # Make sure we're not suffering from alias problems.
     chomp $cmd_output;
-    $cmd_output = `(cd "$cmd_output" >/dev/null 2>&1 && /bin/pwd)`
+    $cmd_output = abs_path($cmd_output)
       if $cmd_output;
-    chomp $cmd_output;
   }
   if ($status == 127 or $cmd_output =~ m&command not found&) {
     setUnknown();
@@ -758,7 +766,8 @@ sub process_find_leaf {
   if (m&\.tar(?:\.(bz2|gz))?$&) {
     ++$archive_count;
     $uncompress_arg = ($1?(($1 eq "bz2")?"j":"z"):"");
-    my $tar_count = `(tar ${uncompress_arg}tvf $File::Find::name | grep -ve '^d' | wc -l) 2>/dev/null`;
+    my $quoted_filename = shellquote($File::Find::name);
+    my $tar_count = `(tar ${uncompress_arg}tvf $quoted_filename | grep -ve '^d' | wc -l) 2>/dev/null`;
     chomp $tar_count;
     if ($tar_count and $tar_count > 0) {
       $record_count += $tar_count;

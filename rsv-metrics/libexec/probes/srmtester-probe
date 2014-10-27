@@ -170,14 +170,13 @@ $options{'srm-protocol-version'} ||= 2;
                         .int(rand(10000));
                 $remotesfn=$options{'srm-destination-dir'}."/".$srmtester_mvfile;
                 $copysource="gsiftp://".$options{'u'}."/".$options{'srm-destination-dir'}."/.$srmtester_mvfile";
-		my $srmtester_cmd1="srm-tester -serviceurl srm://" .
-			$options{'u'} . "/". $options{'srm-webservice-path'} .
-			" -op " . $op_name .
-			" -localsource " . $local_file .
-			" -localtargetdir /tmp" . 
-			" -remotesfn " . $remotesfn .
-			" -localtargetdir /tmp" . 
-			" -gsiftpcopysource " . $copysource;
+		my $srmtester_cmd1 = shellquote("srm-tester", "-serviceurl",
+			"srm://$options{'u'}/$options{'srm-webservice-path'}",
+			"-op", $op_name,
+			"-localsource", $local_file, "-localtargetdir", "/tmp",
+			"-remotesfn", $remotesfn, "-localtargetdir", "/tmp",
+			"-gsiftpcopysource", $copysource
+		);
 		$out=`$srmtester_cmd1`;
                 $op_name="mv,srmrm";
 	}
@@ -248,19 +247,20 @@ $options{'srm-protocol-version'} ||= 2;
 ## Actually call the command now:
 ######################################################
 
-    my $srmtester_cmd="srm-tester -serviceurl srm://" .
-        $options{'u'} ."/". $options{'srm-webservice-path'} .
-	" -op " . $op_name . 
-	" -localsource " . $local_file .
-	" -localtargetdir /tmp" .
-	" -remotesfn " . $remotesfn .
-	" -gsiftpcopysource " . $copysource;
+	my $srmtester_cmd = shellquote("srm-tester", "-serviceurl",
+		"srm://$options{'u'}/$options{'srm-webservice-path'}",
+		"-op", $op_name,
+		"-localsource", $local_file,
+		"-localtargetdir", "/tmp",
+		"-remotesfn", $remotesfn,
+		"-gsiftpcopysource", $copysource
+	);
 
 	if ((($probe_name eq "pull")||($probe_name eq "push"))&&
 		($options{'copysource'} ne ""))
 	{
-                $srmtester_cmd= "srm-tester -conf " .
-			$options{'drivefile'} . " -drive";
+                $srmtester_cmd = shellquote("srm-tester", "-conf",
+			$options{'drivefile'}, "-drive");
 	}
 	#Run command and save output
 	$out .= `$srmtester_cmd`;
@@ -272,7 +272,8 @@ $options{'srm-protocol-version'} ||= 2;
 
 	if (($probe_name eq "pull")||($probe_name eq "push"))
 	{
-		`rm $options{'drivefile'}`;
+		my $rm_cmd = shellquote("rm", $options{'drivefile'});
+		`$rm_cmd`;
 	}
 
 
@@ -339,15 +340,16 @@ $options{'srm-protocol-version'} ||= 2;
 	}
 	if ($probe_name eq "mv")
 	{
-		my $srmtester_rmcmd="srm-tester -serviceurl srm://" .
-                        $options{'u'} . "/". $options{'srm-webservice-path'} .
-                        " -op srmrm" .
-                        " -localsource " . $local_file .
-                        " -localtargetdir /tmp" . 
-                        " -remotesfn " . $remotesfn .
-                        " -localtargetdir /tmp" . 
-                        " -gsiftpcopysource gsiftp://" . $options{'u'}
-                        . "/" . $copysource;
+		my $srmtester_rmcmd = shellquote("srm-tester", "-serviceurl",
+                        "srm://$options{'u'}/$options{'srm-webservice-path'}",
+                        "-op", "srmrm",
+                        "-localsource", $local_file,
+                        "-localtargetdir", "/tmp",
+                        "-remotesfn", $remotesfn,
+                        "-localtargetdir", "/tmp",
+                        "-gsiftpcopysource",
+                        "gsiftp://$options{'u'}/$copysource"
+                );
         	`$srmtester_rmcmd`;
 	}
 

@@ -97,6 +97,21 @@ sub which {
     return "";
 }
 
+# quote shell argument
+sub shellquote_arg {
+  my $arg = shift;
+  if ($arg =~ m{[^-/.\w]} || $arg eq '') {
+    $arg =~ s/'/'\\''/g;
+    $arg = "'$arg'";
+  }
+  $arg
+}
+
+# quote list of shell arguments
+sub shellquote {
+  my @args = map shellquote_arg($_), @_;
+  wantarray ? @args : join(' ', @args);
+}
 
 # Print debugging information to STDERR
 sub dump_debug {

@@ -23,7 +23,7 @@ find_binaries("srm-ping");
 
 # TODO - might need '-x509_user_proxy=' included in here
 #my $srm_ping_cmd = "srm-ping srm://$options{u} -retry_num=0 -debug -$options{'srm-protocol-version'} -webservice_path=$options{'srm-webservice-path'} 2>&1";
-my $srm_ping_cmd = "srm-ping srm://$options{u}/$options{'srm-webservice-path'} -debug 2>&1";
+my $srm_ping_cmd = shellquote("srm-ping", "srm://$options{u}/$options{'srm-webservice-path'}", "-debug") . " 2>&1";
 my $out = `$srm_ping_cmd`;
 my $ret = $? >> 8;
 

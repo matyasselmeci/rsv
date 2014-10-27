@@ -15,7 +15,11 @@ my $glue_ce_info_host_name = $options{u};
 
 find_binaries("condor_status");
 
-my $test_attributes = qx{condor_status -l -pool $collector -constraint 'GlueCEInfoHostName == "$glue_ce_info_host_name"' | grep "isClassadValid =" | sort | uniq};
+my $condor_status_command = shellquote(
+    "condor_status", "-l", "-pool", $collector,
+    "-constraint", qq{GlueCEInfoHostName == "$glue_ce_info_host_name"}
+);
+my $test_attributes = qx{$condor_status_command | grep "isClassadValid =" | sort | uniq};
 chomp($test_attributes);
 
 if (! $test_attributes) {

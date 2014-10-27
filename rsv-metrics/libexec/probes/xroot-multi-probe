@@ -30,6 +30,7 @@ import sys
 sys.path.insert(0, ".")
 
 import rsvprobe
+from rsvprobe import shellquote_tuple
 
 # Unix commands used
 CMD_XRDCP = "xrdcp"
@@ -235,7 +236,7 @@ it is REQUIRED to specify a metric using the -m argument as shown below.
 
   def verify_xrdcp(self, src, dst, cmd_xrdcp=CMD_XRDCP, todelete=[]):
     "Tests a download with xrdcp"
-    cmd = "%s %s %s" % (cmd_xrdcp, src, dst) #  "%s %s %s 2>&1" 
+    cmd = "%s %s %s" % shellquote_tuple(cmd_xrdcp, src, dst) #  "%s %s %s 2>&1"
     ec, out = rsvprobe.run_command(cmd, self.timeout)
     if not ec == 0 or not os.path.isfile(dst):
       # xrdcp failed
