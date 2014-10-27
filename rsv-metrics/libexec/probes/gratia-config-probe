@@ -15,7 +15,12 @@ our $CRON_D = '/etc/cron.d';
 ######## Retrieve Global variables ################################
 our %o;
 our %metric;
-my ($probeconfig_problems, $soaphost, $probename,
+# Set $run_me_root to 1 if conditions arise such that we should give
+# local probe run instructions in the event of a problem. Set to >1 if
+# we should give local probe run instructions regardless of
+# metricStatus.
+my $run_me_root = 0;
+my ($is_root, $probeconfig_problems, $soaphost, $probename,
     $sitename, $enabled, $datafolder, $workingfolder, $real_datafolder,
     $current_gratia_probe_type,
     $record_count, $file_count, $archive_count, $old_file_count,
@@ -40,6 +45,8 @@ sub Run {
   if ($options{discover}) {
     &discoverProbesToTest();
   }
+
+  $is_root = not $<;		# Are we running as root?
 
   # Probe type
   $current_gratia_probe_type = gratiaProbeType();
@@ -115,6 +122,7 @@ EOF
   if ($enabled ne "1") {
     setCritical();
     &appendDetailsData("ERROR: Probe $probename has EnableProbe not set to 1.\n");
+    $run_me_root = 1;
     $probeconfig_problems = 1;
   }
   # Is probename generic or unset?
@@ -246,6 +254,7 @@ EOF
   # Check to see if we've ever had a contact with this collector
   if ($probe_contact_check =~ /^last-contact=never/) {
     setCritical();
+    $run_me_root = 1;
     &appendDetailsData ("ERROR: Probe $probename has never been seen by Gratia collector $soaphost\n");
     normal_exit();
   }
@@ -263,6 +272,7 @@ WARNING: Gratia server $soaphost not responding to obtain last contact details.
 EOF
   } elsif (Date_Cmp($probe_contact_check, $cmpDateDay) < 1) {
     setCritical();
+    $run_me_root = 1;
     &appendDetailsData (<<EOF);
 ERROR: Probe $probename has not been seen by Gratia collector $soaphost in >1d.
 Last contact time = $last_contact_string.
@@ -270,6 +280,7 @@ EOF
     normal_exit();
   } elsif (Date_Cmp($probe_contact_check, $cmpDateHour) < 1) {
     setWarning();
+    $run_me_root = 1;
     &appendDetailsData (<<EOF);
 WARNING: Probe $probename has not been seen by Gratia collector $soaphost in >1h.
 Last contact time = $last_contact_string
@@ -308,6 +319,22 @@ EOF
 }
 
 
+sub runMeRoot {
+  &appendDetailsData (<<EOF);
+Run tests as root for more diagnostic details, especially if you have a
+WARNING or CRITICAL status.
+Manual invocation:
+EOF
+  my $dir = dirname($0);
+  $dir=qx^cd "$dir" && /bin/pwd^;
+  chomp $dir;
+  $dir =~ s&worker-scripts/?&&;
+  &appendDetailsData (sprintf("(cd \"%s\" && ./worker-scripts/%s -X -p %s)\n",
+                              $dir,
+                              basename($0),
+                              $metric{'metricName'}));
+}
+
 sub probeConfigProblems {
   &appendDetailsData (<<EOF);
 Please check ProbeConfig for problems.
@@ -317,6 +344,10 @@ EOF
 sub normal_exit {
   return if $o{test} and not $_[0];
   probeConfigProblems() if $probeconfig_problems;
+  if ($run_me_root and not $is_root and
+      ($o{metricStatus} or $run_me_root > 2)) {
+    runMeRoot();
+  }
   ## Print metric, and we're all done!
   if ($options{'human-readable'}) {
     # Want human-readable results
@@ -497,6 +528,16 @@ ERROR: Mismatch between probeType $current_gratia_probe_type and configured lrms
 Please check urCollector.conf file for errors.
 EOF
     normal_exit();
+  }
+  unless ($is_root) {		# Can't do these unless we're root.
+    $run_me_root = 2; # Print root message even if we're otherwise OK.
+#    &appendDetailsData (<<EOF);
+#Remaining checks on $urCollector::Configuration::configValues{lrmsType} require root privilege:
+#  * Check existence of configured PBS or LSF log directory.
+#  * Check for recent PBS batch log entries.
+#  * Check pending XML files in $workingfolder/urCollector.
+#EOF
+    return;
   }
   # Check log directory
   if ($urCollector::Configuration::configValues{lrmsType} eq "pbs") {
