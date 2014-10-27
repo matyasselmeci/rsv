@@ -311,19 +311,23 @@ def inlist(elements, checklist):
   return False
 
 def shellquote_arg(arg):
+    "Shell quote a single command line argument"
     if re.search(r'[^-/.\w]', arg) or arg == '':
         return "'%s'" % arg.replace("'", r"'\''")
     else:
         return arg
 
-def shellquote(*args):
-    if len(args) == 1:
-        return shellquote_arg(args[0])
-    else:
-        return tuple(map(shellquote_arg, args))
+def shellquote_tuple(*args):
+    """Shell quote a tuple of command line args
 
-def shellquote_args(args):
-    return ' '.join(shellquote(args))
+    Suitable for doing: '%s %s %s' % shellquote_tuple(a,b,c)"""
+    return tuple(map(shellquote_arg, args))
+
+def shellquote_str(*args):
+    """Shell quote a tuple of args, returned as a command line string
+
+    Suitable for doing: cmdline = shellquote(cmd,arg1,arg2,arg3)"""
+    return ' '.join(shellquote_tuple(*args))
 
 # Valid probe status (according to specification)
 OK = 0
