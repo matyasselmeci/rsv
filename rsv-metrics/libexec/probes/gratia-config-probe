@@ -104,17 +104,29 @@ EOF
       m&^(?:sge|pbs|lsf|pbs-lsf|condor|glexec)&i) {
 
     # See if cron.d is accessible (on EL5 it might not be, see SOFTWARE-1602)
+    my $username = getpwuid($<);
     if (! -x $CRON_D) {
-      my $username = getpwuid($<);
       &appendDetailsData("NOTE: Cron directory $CRON_D is not accessible by the $username user.\n");
       &appendDetailsData("Cannot determine if $probename is enabled.\n");
+      $run_me_root = 1;
     } else {
       my $cron_grep_pattern = '^[[:space:]]*[^#].*gratia/\(probe/\)\?'.$real_gratia_probe_type.'/';
-      my $probe_in_cron_d = system("grep -e '$cron_grep_pattern' '$CRON_D'/* >/dev/null 2>&1") == 0;
 
-      if ($probe_in_cron_d != 1) {
+      # Use -q so we get a 0 return code if grep finds the pattern but there
+      # are other files it could not read. Without -q, the return code would be
+      # 2. With -q, the return code is 2 only if grep does not find the pattern
+      # and could not read some files.
+      my $ret = system("grep -q -e '$cron_grep_pattern' '$CRON_D'/* >/dev/null 2>&1") >> 8;
+
+      if ($ret == 1) {
+        # could read all the files but didn't find the line in any of them
         setCritical();
         &appendDetailsData("ERROR: Probe $probename is not listed in $CRON_D.\n");
+      } elsif ($ret == 2) {
+        # grep couldn't read some files AND didn't find the line in the files grep could read
+        &appendDetailsData("NOTE: Some files in $CRON_D are not accessible by the $username user.\n");
+        &appendDetailsData("Cannot determine if $probename is enabled.\n");
+        $run_me_root = 1;
       }
     }
   }
@@ -767,8 +779,7 @@ sub ProbeConfiguration_getFilenameFragment {
     return $fragment;
 }
 
-__END__
-#vim: ft=perl:sw=2:sts=2
+# vim: ft=perl:sw=2:sts=2
 ### Local Variables:
 ### mode: cperl
 ### End:
