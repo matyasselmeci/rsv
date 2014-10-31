@@ -25,10 +25,12 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
         self.key = "fc077a6a133b22618172bbb50a1d3104a23b2050"
         # The goc_url is the url for where to upload the data
         self.goc_url = "http://osgnetds.grid.iu.edu"
+        self.start = 43200
         # Add the options so the parsing knows what to expect
         self.addopt("", "username=", "--username username the username for uploading data to the goc")
         self.addopt("", "key=", "--key key the key for uploading data to the goc")
         self.addopt("", "goc=", "--goc url the url for where to upload the data (i.e http://osgnetds.grid.iu.edu)")
+        self.addopt("", "start=", "--start How back in history get data from perfsonar ndoe in secs (i.e 43200)")
 
     def parseopt(self):
         """parse options specific to network monitroing probe and return options, optlist and reminder to
@@ -41,7 +43,9 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
             elif opt == '--key':
                 self.key = arg
             elif opt == '--goc':
-                self.goc_url =arg
+                self.goc_url = arg
+            elif opt == '--start':
+                self.start = arg
             if self.host == self.localhost:
                 self.is_local = True
             else:
@@ -50,10 +54,11 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
 
     def runCallerScript(self):
         #Runs the caller script for esmond and parses the result 
-        cmd = "source ./esmondCaller.sh %s %d %s %s %s" % ("http://" + self.host, 86400, self.username, self.key, self.goc_url)
+        cmd = "source ./esmondCaller.sh %s %d %s %s %s" % ("http://" + self.host, -int(self.start), self.username, self.key, self.goc_url)
         ec, out = rsvprobe.run_command(cmd, workdir="/usr/libexec/rsv/probes/worker-scripts")
         if 'Error' in out:
             self.return_critical("Failed running the caller. Error message %s" % (out))
+        self.return_ok(out)
         return 0
     
     def run(self):

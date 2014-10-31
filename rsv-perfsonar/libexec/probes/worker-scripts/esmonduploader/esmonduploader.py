@@ -38,7 +38,6 @@ class EsmondUploader(object):
         self.connect = connect
         self.username = username
         self.key = key
-        print goc
         self.goc = goc
         self.conn = ApiConnect(self.connect,filters)
         self.gconn = ApiConnect(self.goc,gfilters)
