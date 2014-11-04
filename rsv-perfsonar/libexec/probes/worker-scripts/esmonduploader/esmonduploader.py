@@ -127,7 +127,7 @@ class EsmondUploader(object):
                 "time_duration": self.time_duration[i],
             }
         
-            mp = MetadataPost(self.goc,username=self.username, api_key=self.key, **args)
+            mp = MetadataPost(self.goc, username=self.username, api_key=self.key, **args)
             # Posting Event Types and Summaries
             for event_type, summary in zip(self.event_types[i], self.summaries[i]):
                 mp.add_event_type(event_type)

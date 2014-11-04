@@ -5,6 +5,8 @@ import re
 import subprocess
 import sys
 import rsvprobe
+import time
+import random
 
 sys.path.insert(0, '.')
 class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
@@ -26,11 +28,13 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
         # The goc_url is the url for where to upload the data
         self.goc_url = "http://osgnetds.grid.iu.edu"
         self.start = 43200
+        self.sleep = 400
         # Add the options so the parsing knows what to expect
         self.addopt("", "username=", "--username username the username for uploading data to the goc")
         self.addopt("", "key=", "--key key the key for uploading data to the goc")
         self.addopt("", "goc=", "--goc url the url for where to upload the data (i.e http://osgnetds.grid.iu.edu)")
         self.addopt("", "start=", "--start How back in history get data from perfsonar ndoe in secs (i.e 43200)")
+        self.addopt("", "sleep=", "--sleep Number of seconds to sleep at most before start running the probe (i.e 300). Actual number is random")
 
     def parseopt(self):
         """parse options specific to network monitroing probe and return options, optlist and reminder to
@@ -46,6 +50,8 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
                 self.goc_url = arg
             elif opt == '--start':
                 self.start = arg
+            elif opt == '--sleep':
+                self.sleep = arg
             if self.host == self.localhost:
                 self.is_local = True
             else:
@@ -64,8 +70,10 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
     def run(self):
        """Main routine for the probe"""
        self.parseopt()
+       sleepTime = random.randint(0, int(self.sleep))
+       self.add_message("Sleeping for %d secs before starting" % sleepTime)
        self.runCallerScript()
-       self.return_ok("Everything ok")
+       
 
 def main():
     probe = PerfsonarSimpleProbe()
