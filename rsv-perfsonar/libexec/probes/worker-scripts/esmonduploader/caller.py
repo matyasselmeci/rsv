@@ -8,14 +8,20 @@ caller = EsmondUploader(verbose=False,start=int(opts.start),end=int(opts.end),co
 def get_post():
     print "Getting data..."
     try:
-        caller.getData()
+        if opts.disp:
+            caller.getData(opts.disp)
+        else:
+            caller.getData()
     except Exception as err:
         print "Error! Get unsuccessful! Exception: \"%s\" of type: \"%s\" was thrown! Quitting out." % (err,type(err))
     else:
         print "Get successful!"
         print "Posting data..."
         try:
-            caller.postData()
+            if opts.disp:
+                caller.postData(opts.disp)
+            else:
+                caller.postData()
         except Exception as err:
             print "Error! Post unsuccessful! Exception: \"%s\" of type: \"%s\" was thrown! Quitting out." % (err,type(err))
             sys.exit(1)
@@ -25,11 +31,11 @@ def get_post():
 
 
 # Option: Display Metadata
-if opts.disp:
-    try:
-        caller.getData(opts.disp)
-    except Exception as err:
-        print "An error occurred! Exception:  \"%s\" of type: \"%s\" was thrown!" % (err, type(err))
+#if opts.disp:
+#    try:
+#        caller.getData(opts.disp)
+#    except Exception as err:
+#        print "An error occurred! Exception:  \"%s\" of type: \"%s\" was thrown!" % (err, type(err))
 
 # Option: Get and Post Metadata
 if opts.post:

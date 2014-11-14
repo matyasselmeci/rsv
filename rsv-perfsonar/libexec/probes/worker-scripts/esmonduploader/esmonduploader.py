@@ -1,8 +1,10 @@
 import time
 from optparse import OptionParser
+from fractions import Fraction
 
 from esmond.api.client.perfsonar.query import ApiConnect, ApiFilters
 from esmond.api.client.perfsonar.post import MetadataPost, EventTypePost, EventTypeBulkPost
+
 
 # Set filter object
 filters = ApiFilters()
@@ -31,7 +33,7 @@ class EsmondUploader(object):
         filters.time_start = time.time() + start
         filters.time_end = time.time() + end
         gfilters.verbose = False        
-        gfilters.time_start = time.time() - 86400
+        gfilters.time_start = time.time() + 5*start
         gfilters.time_end = time.time()
 
         # Username/Key/Location/Delay
@@ -59,11 +61,12 @@ class EsmondUploader(object):
    
     # Get Existing GOC Data
     def getGoc(self):
+        print "Getting old data..."
         for gmd in self.gconn.get_metadata():
             self.old_list.append(gmd.metadata_key)
    
     # Get Data
-    def getData(self,disp=False):
+    def getData(self, disp=False):
         self.getGoc()
         i = 0
         for md in self.conn.get_metadata():
@@ -90,7 +93,8 @@ class EsmondUploader(object):
                     print "Measurement Agent: " + self.measurement_agent[i]
                     print "Source: " + self.source[i]
                     print "Subject_type: " + self.subject_type[i]
-                    print "Time Duration: " + self.time_duration[i]
+                    if not self.time_duration[i] is None:
+                        print "Time Duration: " + self.time_duration[i]
                     print "Tool Name: " + self.tool_name[i]
                     print "Event Types: " + str(self.event_types[i])
                     print "Metadata Key: " + self.metadata_key[i]
@@ -109,12 +113,16 @@ class EsmondUploader(object):
                 self.summaries.append(temp_list)
                 # Print out summaries and datapoints if -d or --disp option is used
                 if disp:
-                    print "Summaries: " + str(self.summaries[i])
-                    print "Datapoints: " + str(self.datapoint[i])
+                    print "here would be the summaries"
+                    #print "Summaries: " + str(self.summaries[i])
+                    #print "Datapoints: " + str(self.datapoint[i])
             i += 1
     # Post Data
-    def postData(self):
+    def postData(self, disp=False):
         for i in range(len(self.destination)):
+            if disp:
+                print "posting NEW METADATA/DATA %d" % (i+1)
+                print self.metadata_key[i]
             # Looping through metadata
             args = {
                 "subject_type": self.subject_type[i],
@@ -123,10 +131,11 @@ class EsmondUploader(object):
                 "tool_name": self.tool_name[i],
                 "measurement_agent": self.measurement_agent[i],
                 "input_source": self.connect,
-                "input_destination": self.goc,
-                "time_duration": self.time_duration[i],
+                "input_destination": self.goc
             }
-        
+            # Time duration may not always be set
+            if not self.time_duration[i] is None:
+                    args["time_duration"] = self.time_duration[i]        
             mp = MetadataPost(self.goc, username=self.username, api_key=self.key, **args)
             # Posting Event Types and Summaries
             for event_type, summary in zip(self.event_types[i], self.summaries[i]):
@@ -144,5 +153,15 @@ class EsmondUploader(object):
                     if isinstance(datapoint[1], dict):
                         continue
                     et = EventTypePost(self.goc, username=self.username, api_key=self.key, metadata_key=new_meta.metadata_key, event_type=self.event_types[i][event_num])
-                    et.add_data_point(datapoint[0],datapoint[1])
+                    # For packet-loss rate a differnet kind of post must be done
+                    if self.event_types[i][event_num] ==  "packet-loss-rate":
+                        et = EventTypeBulkPost(self.goc, username=self.username, api_key=self.key, metadata_key=new_meta.metadata_key)
+                    # For packet-loss rate a conversion must be done before uploading since the recieving end does not recieve floats
+                    if self.event_types[i][event_num] ==  "packet-loss-rate":
+                        packetLossFraction = Fraction(datapoint[1]).limit_denominator(300)
+                        et.add_data_point("packet-loss-rate", datapoint[0], {'denominator':  packetLossFraction.denominator, \
+                                                                             'numerator': packetLossFraction.numerator})
+                        
+                    else:
+                        et.add_data_point(datapoint[0],datapoint[1])
                     et.post_data()
