@@ -12,7 +12,7 @@ except ImportError:
     import simplejson as json
 
 # The maximun number of meshes allowed
-max_mesh = 10
+max_mesh = 100
 
 sys.path.insert(0, '.')
 
