@@ -9,7 +9,7 @@ print_output_header();
 my %options = process_command_line();
 
 find_binaries("globusrun");
-my $cmd = "globusrun -a -r '$options{u}'";
+my $cmd = shellquote("globusrun", "-a", "-r", $options{u});
 
 my $output = `$cmd`;
 
