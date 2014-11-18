@@ -40,6 +40,10 @@ $options{'human-readable'} ||= 0;
 
 Run();
 
+# force glob to run in list context but return scalar result
+sub globcount {
+  scalar @{[ glob $_[0] ]}
+}
 
 sub Run {
 
@@ -226,11 +230,10 @@ EOF
   ################################
   # Check number of files in data area, per file type (SOFTWARE-563).
 
-  # (the @{[...]} construct here forces glob to run in list context)
-  my $n_certinfo_files   = @{[ glob("$datafolder/gratia_certinfo_*") ]};
-  my $n_classad_records  = @{[ glob("$datafolder/history.*"        ) ]};
-  my $n_quarantine_files = @{[ glob("$datafolder/quarantine/*"     ) ]};
-  my @unsent_records     = glob("$workingfolder/*/*");
+  my $n_certinfo_files   = globcount("\Q$datafolder\E/gratia_certinfo_*");
+  my $n_classad_records  = globcount("\Q$datafolder\E/history.*");
+  my $n_quarantine_files = globcount("\Q$datafolder\E/quarantine/*");
+  my @unsent_records     = glob("\Q$workingfolder\E/*/*");
   my $n_unsent_records   = @unsent_records;
   my %unsent_by_dir;
   for my $rec (@unsent_records) {
@@ -346,9 +349,7 @@ Run tests as root for more diagnostic details, especially if you have a
 WARNING or CRITICAL status.
 Manual invocation:
 EOF
-  my $dir = dirname($0);
-  $dir=qx^cd "$dir" && /bin/pwd^;
-  chomp $dir;
+  my $dir = abs_path(dirname($0));
   $dir =~ s&worker-scripts/?&&;
   &appendDetailsData (sprintf("(cd \"%s\" && ./worker-scripts/%s -X -p %s)\n",
                               $dir,
@@ -434,7 +435,7 @@ sub probe_check_condor() {
   my $get_condor_config_cmd = "condor_config_val PER_JOB_HISTORY_DIR";
 
   if($ENV{OSG_LOCATION}) {
-      $get_condor_config_cmd = ". $ENV{OSG_LOCATION}/setup.sh; $get_condor_config_cmd";
+      $get_condor_config_cmd = '. "$OSG_LOCATION"/setup.sh;' . " $get_condor_config_cmd";
   }
   else {
       # If Condor is not installed in the default location we will go looking for it.
@@ -452,7 +453,7 @@ sub probe_check_condor() {
           }
 
           if($condor_config_val and $condor_config) {
-              $get_condor_config_cmd = "CONDOR_CONFIG=$condor_config $condor_config_val PER_JOB_HISTORY_DIR";
+              $get_condor_config_cmd = "CONDOR_CONFIG=" . shellquote($condor_config, $condor_config_val, "PER_JOB_HISTORY_DIR");
           }
           else {
               setUnknown();
@@ -571,8 +572,8 @@ Check pbsAcctLogDir in urCollector.conf.
 EOF
       normal_exit();
     }
-    my $nfiles = `ls -1 $dir | wc -l`;
-    chomp $nfiles;
+    my $nfiles = globcount("\Q$dir\E/*");
+
     if (!$nfiles) {
       setCritical();
       &appendDetailsData (<<EOF);
@@ -604,8 +605,7 @@ Check lsfAcctLogDir in urCollector.conf and contents of $dir.
 EOF
     }
     # Check PBS files waiting to be converted to Gratia files
-    my $npending = `(cd "$workingfolder/urCollector" >/dev/null 2>&1 && ls -1 | wc -l)`;
-    chomp $npending;
+    my $npending = globcount("\Q$workingfolder\E/urCollector/*");
     &appendDetailsData ("$npending XML files waiting to be sent to $soaphost\n");
     if ($npending > 2000) {
       setWarning();
@@ -647,9 +647,10 @@ EOF
 
 sub getProbeConfigAttribute {
   my $probeConfigPath = probeConfigPath();
+  my $quoted_probeConfigPath = shellquote($probeConfigPath);
   my $probeConfig_cmd = $ENV{OSG_LOCATION} ? 
-      "( source $ENV{OSG_LOCATION}/setup.sh; cd \"$probeConfigPath\"; ../common/GetProbeConfigAttribute.py %s )" : 
-      "( cd \"$probeConfigPath\"; /usr/share/gratia/common/GetProbeConfigAttribute %s )";
+      '( source "$OSG_LOCATION"/setup.sh;' . " cd $quoted_probeConfigPath; ../common/GetProbeConfigAttribute.py %s )" : 
+      "( cd $quoted_probeConfigPath; /usr/share/gratia/common/GetProbeConfigAttribute %s )";
 
   my @results = ();
 
