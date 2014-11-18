@@ -41,7 +41,7 @@ my $remote_file = basename($local_file) . ".$time.$$";
 my $remote_uri = "srm://$options{u}/$options{'srm-webservice-path'}?SFN=$options{'srm-destination-dir'}/$remote_file";
 
 # TODO - might need '-x509_user_proxy=' included in here
-my $srm_copy_cmd = "srm-copy '$local_uri' '$remote_uri' 2>&1";
+my $srm_copy_cmd = shellquote("srm-copy", $local_uri, $remote_uri) . " 2>&1";
 my $out = `$srm_copy_cmd`;
 if($? != 0) {
     print "CRITICAL\n";
@@ -66,7 +66,7 @@ my $new_local_file = "/tmp/${remote_file}.copy";
 my $new_local_uri = "file://$new_local_file";
 
 # TODO - might need '-x509_user_proxy=' included in here
-$srm_copy_cmd = "srm-copy '$remote_uri' '$new_local_uri' 2>&1";
+$srm_copy_cmd = shellquote("srm-copy", $remote_uri, $new_local_uri) . " 2>&1";
 $out = `$srm_copy_cmd`;
 if($? != 0) {
     print "CRITICAL\n";
@@ -104,7 +104,7 @@ if($? != 0) {
 #
 
 # The original srmcp-srm-probe did this, so we'll preserve this behavior
-my $srm_ls_cmd = "srm-ls $remote_uri 2>&1";
+my $srm_ls_cmd = shellquote("srm-ls", $remote_uri) . " 2>&1";
 $out = `$srm_ls_cmd`;
 if($? != 0) {
     print "CRITICAL\n";
@@ -136,7 +136,8 @@ sub cleanup_files {
     }
 
     # And also the remote file
-    my $out = `srm-rm $remote_uri`;
+    my $srm_rm_cmd = shellquote("srm-rm", $remote_uri);
+    my $out = `$srm_rm_cmd`;
     if (($? != 0)||($out =~ /SRM_FAILURE/)) {
         print STDERR "Failed to remove remote file '$remote_uri'.  Output:\n$out\n";
         print "WARNING\n";
