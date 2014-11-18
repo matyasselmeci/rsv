@@ -34,12 +34,13 @@ if(!-e $cert) {
 # First we make sure we're not in the critical range (which is currently set to 
 # expired or expiring within 24 hours).  After that we'll check the warning range.
 
-my $openssl_cmd = "openssl x509 -in '$cert' -noout -checkend '$critical_seconds' 2>&1";
+my $quoted_cert = shellquote($cert);
+my $openssl_cmd = "openssl x509 -in $quoted_cert -noout -checkend '$critical_seconds' 2>&1";
 my $out = `$openssl_cmd`;
 my $ret = $? >> 8;
 
 if ($ret == 1) {
-    my $valid = `openssl x509 -in '$cert' -noout -enddate 2>&1`;
+    my $valid = `openssl x509 -in $quoted_cert -noout -enddate 2>&1`;
     chomp $valid;
 
     print "CRITICAL\n";
@@ -53,7 +54,7 @@ elsif($ret != 0) {
     exit 0;
 }
 
-$openssl_cmd = "openssl x509 -in '$cert' -noout -checkend '$warning_seconds' 2>&1";
+$openssl_cmd = "openssl x509 -in $quoted_cert -noout -checkend '$warning_seconds' 2>&1";
 $out = `$openssl_cmd`;
 $ret = $? >> 8;
 
@@ -63,7 +64,7 @@ if($ret == 0) {
     exit 0;
 }
 elsif ($ret == 1) {
-    my $valid = `openssl x509 -in $cert -noout -enddate 2>&1`;
+    my $valid = `openssl x509 -in $quoted_cert -noout -enddate 2>&1`;
     chomp $valid;
 
     print "WARNING\n";
