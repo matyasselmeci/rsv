@@ -35,14 +35,15 @@ class EsmondUploader(object):
         gfilters.verbose = False        
         gfilters.time_start = time.time() + 5*start
         gfilters.time_end = time.time()
+        gfilters.source = connect
 
         # Username/Key/Location/Delay
         self.connect = connect
         self.username = username
         self.key = key
         self.goc = goc
-        self.conn = ApiConnect(self.connect,filters)
-        self.gconn = ApiConnect(self.goc,gfilters)
+        self.conn = ApiConnect(self.connect, filters)
+        self.gconn = ApiConnect(self.goc, gfilters)
                 
         # Metadata variables
         self.destination = []
@@ -120,9 +121,6 @@ class EsmondUploader(object):
     # Post Data
     def postData(self, disp=False):
         for i in range(len(self.destination)):
-            if disp:
-                print "posting NEW METADATA/DATA %d" % (i+1)
-                print self.metadata_key[i]
             # Looping through metadata
             args = {
                 "subject_type": self.subject_type[i],
@@ -142,9 +140,17 @@ class EsmondUploader(object):
                 mp.add_event_type(event_type)
                 if summary:
                     mp.add_summary_type(event_type, summary[0][0], summary[0][1])
+            if disp:
+                print "posting NEW METADATA/DATA %d" % (i+1)
+                print self.metadata_key[i]
             new_meta = mp.post_metadata()
             # Posting Data Points
             for event_num in range(len(self.event_types[i])):
+                et = EventTypePost(self.goc, username=self.username, api_key=self.key, metadata_key=new_meta.metadata_key, event_type=self.event_types[i]\
+[event_num])
+                # For packet-loss-rate* a differnet kind of post must be done 
+                if 'packet-loss-rate' in self.event_types[i][event_num]:
+                    et = EventTypeBulkPost(self.goc, username=self.username, api_key=self.key, metadata_key=new_meta.metadata_key)
                 for datapoint in self.datapoint[i][event_num]:
                 ### Histograms were being rejected (wants dict, not list of dicts) disregarding them for now ###
                     if isinstance(datapoint[1], list):
@@ -152,16 +158,14 @@ class EsmondUploader(object):
                             continue
                     if isinstance(datapoint[1], dict):
                         continue
-                    et = EventTypePost(self.goc, username=self.username, api_key=self.key, metadata_key=new_meta.metadata_key, event_type=self.event_types[i][event_num])
-                    # For packet-loss rate a differnet kind of post must be done
-                    if self.event_types[i][event_num] ==  "packet-loss-rate":
-                        et = EventTypeBulkPost(self.goc, username=self.username, api_key=self.key, metadata_key=new_meta.metadata_key)
-                    # For packet-loss rate a conversion must be done before uploading since the recieving end does not recieve floats
-                    if self.event_types[i][event_num] ==  "packet-loss-rate":
+                    # For packet-loss rate* a conversion must be done before uploading since the recieving end does not recieve floats
+                    if 'packet-loss-rate' in self.event_types[i][event_num]:
                         packetLossFraction = Fraction(datapoint[1]).limit_denominator(300)
-                        et.add_data_point("packet-loss-rate", datapoint[0], {'denominator':  packetLossFraction.denominator, \
+                        et.add_data_point(self.event_types[i][event_num], datapoint[0], {'denominator':  packetLossFraction.denominator, \
                                                                              'numerator': packetLossFraction.numerator})
                         
                     else:
                         et.add_data_point(datapoint[0],datapoint[1])
-                    et.post_data()
+                if disp:
+                    print "posting data points for event: %s" % self.event_types[i][event_num]
+                et.post_data()

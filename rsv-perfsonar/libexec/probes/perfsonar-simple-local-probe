@@ -70,8 +70,10 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
     def run(self):
        """Main routine for the probe"""
        self.parseopt()
+       # Need to sleep for some random time between 0 and sleep so not all probes astart at the same time.
        sleepTime = random.randint(0, int(self.sleep))
        self.add_message("Sleeping for %d secs before starting" % sleepTime)
+       time.sleep(sleepTime)
        self.runCallerScript()
        
 
