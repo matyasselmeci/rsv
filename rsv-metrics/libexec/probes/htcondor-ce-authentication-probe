@@ -12,7 +12,8 @@ find_binaries("condor_ce_ping");
 my $host = $options{u};
 $host =~ s/:(\d+)$//;
 my $port = $1 || 9619;
-my $cmd = "condor_ce_ping -pool '$host:$port' -name '$host' -table READ WRITE DAEMON";
+my $quoted_host = shellquote($host);
+my $cmd = "condor_ce_ping -pool $quoted_host:$port -name $quoted_host -table READ WRITE DAEMON";
 
 my $output = `$cmd`;
 
