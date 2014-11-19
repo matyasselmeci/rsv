@@ -106,17 +106,63 @@ class NetworkMonitoringLocalProbe(rsvprobe.RSVProbe):
             result = out.split("\n")
             if 'ERROR' in result:
                 self.add_warning("Failed to turn on probe failed for node: %s" % (node), exit_code=0)
-            
-                
+    
+    # Disable the dummy probe for a list of nodes
+    def disableDummyProbe(self, nodes):
+        for node in nodes:
+            cmd = "rsv-control --disable --host %s org.osg.general.perfsonar-simple" % (node)
+            ec, out = rsvprobe.run_command(cmd)
+            # make a warning if the dummy metric failed                                                                                                       
+            result = out.split("\n")
+            if 'ERROR' in result:
+                self.add_warning("Failed to enable probe failed for node: %s" % (node), exit_code=0)
+            cmd = "rsv-control --off --host %s org.osg.general.perfsonar-simple" % (node)
+            ec, out = rsvprobe.run_command(cmd)
+            result = out.split("\n")
+            if 'ERROR' in result:
+                self.add_warning("Failed to turn off probe failed for node: %s" % (node), exit_code=0)
+        
+
+    #Returns a list of nodes that are currently enabled for a given metric
+    def getListEnablednodes(self, metric):
+        cmd = "rsv-control --list --wide %s | grep host | awk '{print $5}'" % (metric)
+        ec, out = rsvprobe.run_command(cmd)
+        result = out.split("\n")
+        return result
+
+    def getListNodesToDisable(self, actualNodes, enabledNodes):
+        nodesToDisable = []
+        for node in enabledNodes:
+            if node not in actualNodes and len(node)>0:
+                nodesToDisable.append(node)
+        return nodesToDisable
+    
+    def getListNodesToEnable(self, actualNodes, enabledNodes):
+        nodesToEnable = []
+        for node in actualNodes:
+                if node not in enabledNodes:
+                    nodesToEnable.append(node)
+        return nodesToEnable
+
     def run(self):
         """Main routine for the probe"""
         self.parseopt()
         if len(self.super_mesh)>0:
             self.parseSuperMesh(self.super_mesh)
-        nodes = []
+        #Actual nodes are the nodes that should be on according to the last reading of the mesh_rul
+        actualNodes = []
         for mesh_url in self.meshlist:
-            nodes += self.parseJsonUrl(mesh_url)
-        self.enableDummyProbe(nodes)
+            actualNodes += self.parseJsonUrl(mesh_url)
+        #Enabled nodes is the list of currently enabled nodes
+        self.add_message("Getting list of enabled nodes")
+        enabledNodes = self.getListEnablednodes('org.osg.general.perfsonar-simple')
+        self.add_message("Calculating list of enabled and disabled nodes")
+        nodesToEnable = self.getListNodesToEnable(actualNodes, enabledNodes)
+        nodesToDisable = self.getListNodesToDisable(actualNodes, enabledNodes)
+        self .add_message("Enabling nodes %s " % nodesToEnable)
+        self.enableDummyProbe(nodesToEnable)
+        self.add_message("Disabling nodes %s " % nodesToDisable)
+        self.disableDummyProbe(nodesToDisable)
         self.return_ok("Everything OK")
 
 def main():
