@@ -113,8 +113,8 @@ class EsmondUploader(object):
                 self.datapoint.append(temp_list3)
                 self.summaries.append(temp_list)
                 # Print out summaries and datapoints if -d or --disp option is used
-                if disp:
-                    print "here would be the summaries"
+                #if disp:
+                #   print "here would be the summaries"
                     #print "Summaries: " + str(self.summaries[i])
                     #print "Datapoints: " + str(self.datapoint[i])
             i += 1
@@ -145,12 +145,8 @@ class EsmondUploader(object):
                 print self.metadata_key[i]
             new_meta = mp.post_metadata()
             # Posting Data Points
+            et = EventTypeBulkPost(self.goc, username=self.username, api_key=self.key, metadata_key=new_meta.metadata_key)
             for event_num in range(len(self.event_types[i])):
-                et = EventTypePost(self.goc, username=self.username, api_key=self.key, metadata_key=new_meta.metadata_key, event_type=self.event_types[i]\
-[event_num])
-                # For packet-loss-rate* a differnet kind of post must be done 
-                if 'packet-loss-rate' in self.event_types[i][event_num]:
-                    et = EventTypeBulkPost(self.goc, username=self.username, api_key=self.key, metadata_key=new_meta.metadata_key)
                 for datapoint in self.datapoint[i][event_num]:
                 ### Histograms were being rejected (wants dict, not list of dicts) disregarding them for now ###
                     if isinstance(datapoint[1], list):
@@ -162,10 +158,8 @@ class EsmondUploader(object):
                     if 'packet-loss-rate' in self.event_types[i][event_num]:
                         packetLossFraction = Fraction(datapoint[1]).limit_denominator(300)
                         et.add_data_point(self.event_types[i][event_num], datapoint[0], {'denominator':  packetLossFraction.denominator, \
-                                                                             'numerator': packetLossFraction.numerator})
-                        
+                                                                             'numerator': packetLossFraction.numerator})            
                     else:
-                        et.add_data_point(datapoint[0],datapoint[1])
-                if disp:
-                    print "posting data points for event: %s" % self.event_types[i][event_num]
-                et.post_data()
+                        et.add_data_point(self.event_types[i][event_num], datapoint[0], datapoint[1])
+            # Posting the data once all data points on the same metadata have been added
+            et.post_data()
