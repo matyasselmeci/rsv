@@ -1,4 +1,7 @@
 import time
+from time import strftime
+from time import localtime
+
 from optparse import OptionParser
 from fractions import Fraction
 
@@ -12,7 +15,7 @@ gfilters = ApiFilters()
 
 # Set command line options
 parser = OptionParser()
-parser.add_option('-d', '--disp', help='display metadata from specified url', dest='disp', default=False, action='store_true')
+parser.add_option('-d', '--disp', help='display metadata from specified url', dest='disp', default=False, action='store')
 parser.add_option('-e', '--end', help='set end time for gathering data (default is now)', dest='end', default=0)
 parser.add_option('-l', '--loop', help='include this option for looping process', dest='loop', default=False, action='store_true')
 parser.add_option('-p', '--post',  help='begin get/post from specified url', dest='post', default=False, action='store_true')
@@ -22,6 +25,7 @@ parser.add_option('-u', '--url', help='set url to gather data from (default is h
 parser.add_option('-w', '--user', help='the username to upload the information to the GOC', dest='username', default='afitz', action='store')
 parser.add_option('-k', '--key', help='the key to upload the information to the goc', dest='key', default='fc077a6a133b22618172bbb50a1d3104a23b2050', action='store')
 parser.add_option('-g', '--goc', help='the goc address to upload the information to', dest='goc', default='http://osgnetds.grid.iu.edu', action='store')
+parser.add_option('-t', '--timeout', help='the maxtimeout that the probe is allowed to run in secs', dest='timeout', default=1000, action='store')
 (opts, args) = parser.parse_args()
 
 class EsmondUploader(object):
@@ -61,14 +65,15 @@ class EsmondUploader(object):
         self.old_list = []
    
     # Get Existing GOC Data
-    def getGoc(self):
-        print "Getting old data..."
+    def getGoc(self, disp=False):
+        if disp:
+            print "Getting old data..."
         for gmd in self.gconn.get_metadata():
             self.old_list.append(gmd.metadata_key)
    
     # Get Data
     def getData(self, disp=False):
-        self.getGoc()
+        self.getGoc(disp)
         i = 0
         for md in self.conn.get_metadata():
             # Check for repeat data
@@ -86,9 +91,11 @@ class EsmondUploader(object):
                 self.tool_name.append(md.tool_name)
                 self.event_types.append(md.event_types)
                 self.metadata_key.append(md.metadata_key)
+                print strftime("%a, %d %b %Y %H:%M:%S +0000", localtime()), "NEW METADATA/DATA %d" % (i+1)
+                # print extra debugging only if requested
                 if disp:
-                    print "\n\nNEW METADATA/DATA #" + str(i+1) + "\n"
                     print "Destination: " + self.destination[i]
+                    print "Event Types: " + str(self.event_types[i])
                     print "Input Destination: " + self.input_destination[i]
                     print "Input Source: " + self.input_source[i]
                     print "Measurement Agent: " + self.measurement_agent[i]
@@ -97,27 +104,28 @@ class EsmondUploader(object):
                     if not self.time_duration[i] is None:
                         print "Time Duration: " + self.time_duration[i]
                     print "Tool Name: " + self.tool_name[i]
-                    print "Event Types: " + str(self.event_types[i])
                     print "Metadata Key: " + self.metadata_key[i]
                 # Get Events and Data Payload
+                # temp_list holds the sumaries for all event types for metadata i
                 temp_list = [] 
-                temp_list2 = []
+                # temp_list3 is a list of lists. 
+                # Each of its members are lists of datapoints of a given event_type
                 temp_list3 = []
-                for et in md.get_all_event_types():
+                # et = event type
+                for eventype in self.event_types[i]: 
+                    et = md.get_event_type(eventype)
+                    # temp_list2 is for adding all data points of a same event type
+                    temp_list2 = []
                     temp_list.append(et.summaries)
                     dpay = et.get_data()
                     for dp in dpay.data:
-                        tup = (dp.ts_epoch,dp.val)
+                        tup = (dp.ts_epoch, dp.val)
                         temp_list2.append(tup)
                     temp_list3.append(temp_list2)
                 self.datapoint.append(temp_list3)
                 self.summaries.append(temp_list)
-                # Print out summaries and datapoints if -d or --disp option is used
-                #if disp:
-                #   print "here would be the summaries"
-                    #print "Summaries: " + str(self.summaries[i])
-                    #print "Datapoints: " + str(self.datapoint[i])
             i += 1
+
     # Post Data
     def postData(self, disp=False):
         for i in range(len(self.destination)):
@@ -140,25 +148,24 @@ class EsmondUploader(object):
                 mp.add_event_type(event_type)
                 if summary:
                     mp.add_summary_type(event_type, summary[0][0], summary[0][1])
+            print strftime("%a, %d %b %Y %H:%M:%S +0000", localtime()), "posting NEW METADATA/DATA %d" % (i+1)
             if disp:
-                print "posting NEW METADATA/DATA %d" % (i+1)
                 print self.metadata_key[i]
             new_meta = mp.post_metadata()
             # Posting Data Points
             et = EventTypeBulkPost(self.goc, username=self.username, api_key=self.key, metadata_key=new_meta.metadata_key)
             for event_num in range(len(self.event_types[i])):
+                # datapoints are tuples the first field is epoc the second the value
                 for datapoint in self.datapoint[i][event_num]:
-                ### Histograms were being rejected (wants dict, not list of dicts) disregarding them for now ###
-                    if isinstance(datapoint[1], list):
-                        if isinstance(datapoint[1][0], dict):
-                            continue
-                    if isinstance(datapoint[1], dict):
-                        continue
-                    # For packet-loss rate* a conversion must be done before uploading since the recieving end does not recieve floats
+                    # packet-loss-rate is read as a float but should be uploaded as a dict with denominator and numerator 
                     if 'packet-loss-rate' in self.event_types[i][event_num]:
-                        packetLossFraction = Fraction(datapoint[1]).limit_denominator(300)
-                        et.add_data_point(self.event_types[i][event_num], datapoint[0], {'denominator':  packetLossFraction.denominator, \
-                                                                             'numerator': packetLossFraction.numerator})            
+                        if isinstance(datapoint[1], float):
+                            packetLossFraction = Fraction(datapoint[1]).limit_denominator(300)
+                            et.add_data_point(self.event_types[i][event_num], datapoint[0], {'denominator':  packetLossFraction.denominator, \
+                                                                             'numerator': packetLossFraction.numerator})
+                        else:
+                            print "weird packet loss rate"
+                    # For the rests the data points are uploaded as they are read
                     else:
                         et.add_data_point(self.event_types[i][event_num], datapoint[0], datapoint[1])
             # Posting the data once all data points on the same metadata have been added

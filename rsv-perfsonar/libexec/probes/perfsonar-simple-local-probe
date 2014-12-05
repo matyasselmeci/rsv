@@ -35,7 +35,8 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
         self.addopt("", "goc=", "--goc url the url for where to upload the data (i.e http://osgnetds.grid.iu.edu)")
         self.addopt("", "start=", "--start How back in history get data from perfsonar ndoe in secs (i.e 43200)")
         self.addopt("", "sleep=", "--sleep Number of seconds to sleep at most before start running the probe (i.e 300). Actual number is random")
-
+        self.addopt("", "debug=", "--debug True or False. For if extra debugging is needed")
+        self.addopt("", "timeout=", "--timeout Seconds. A softimeout for how long the probes are allowed to run")
     def parseopt(self):
         """parse options specific to network monitroing probe and return options, optlist and reminder to
         allow further processing
@@ -52,6 +53,10 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
                 self.start = arg
             elif opt == '--sleep':
                 self.sleep = arg
+            elif opt == '--debug':
+                self.debug = arg
+            elif opt == '--timeout':
+                self.soft_timeout = arg
             if self.host == self.localhost:
                 self.is_local = True
             else:
@@ -60,8 +65,10 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
 
     def runCallerScript(self):
         #Runs the caller script for esmond and parses the result 
-        cmd = "source ./esmondCaller.sh %s %d %s %s %s" % ("http://" + self.host, -int(self.start), self.username, self.key, self.goc_url)
+        cmd = "source ./esmondCaller.sh %s %d %s %s %s %s %s" % ("http://" + self.host, -int(self.start), self.username, self.key, self.goc_url, self.debug, self.soft_timeout)
         ec, out = rsvprobe.run_command(cmd, workdir="/usr/libexec/rsv/probes/worker-scripts")
+        if 'WARNING' in out:
+            self.return_warning('WARNING: %s ' % (out), exit_code=0)
         if 'Error' in out:
             self.return_critical("Failed running the caller. Error message %s" % (out))
         self.return_ok(out)
