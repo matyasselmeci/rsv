@@ -23,7 +23,7 @@ def get_post():
         print "Error! Get unsuccessful! Exception: \"%s\" of type: \"%s\" was thrown! Quitting out." % (err,type(err))
     else:
         add2log("Finished getting data succesfully!")
-        add2log("Staring to posting data...")
+        add2log("Starting to post data...")
         try:
             caller.postData(str2bool(opts.disp))
         except Exception as err:
