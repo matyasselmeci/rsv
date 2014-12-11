@@ -12,30 +12,27 @@ caller = EsmondUploader(verbose=False,start=int(opts.start),end=int(opts.end),co
 def str2bool(word):
   return word.lower() in ("true")
 
-def add2log(log):
-   print strftime("%a, %d %b %Y %H:%M:%S +0000", localtime()), log
-
 def get_post():
-    add2log("Getting data...")
+    caller.add2log("Getting data...")
     try:
-        caller.getData(str2bool(opts.disp))
+        caller.getData(str2bool(opts.disp), str2bool(opts.summary))
     except Exception as err:
         print "Error! Get unsuccessful! Exception: \"%s\" of type: \"%s\" was thrown! Quitting out." % (err,type(err))
     else:
-        add2log("Finished getting data succesfully!")
-        add2log("Starting to post data...")
+        caller.add2log("Finished getting data succesfully!")
+        caller.add2log("Starting to post data...")
         try:
             caller.postData(str2bool(opts.disp))
         except Exception as err:
             print "Error! Post unsuccessful! Exception: \"%s\" of type: \"%s\" was thrown! Quitting out." % (err,type(err))
             sys.exit(1)
         else:
-            add2log("Finished Posting data successfully!")
+            caller.add2log("Finished Posting data successfully!")
             sys.exit(0)
 
 
 def handler(signum, frame):
-    add2log('WARNING: Running time took more than %d seconds' % int(opts.timeout))
+    caller.add2log('WARNING: Running time took more than %d seconds' % int(opts.timeout))
     sys.exit(0)
 
 # Option: Display Metadata

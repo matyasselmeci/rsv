@@ -37,6 +37,8 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
         self.addopt("", "sleep=", "--sleep Number of seconds to sleep at most before start running the probe (i.e 300). Actual number is random")
         self.addopt("", "debug=", "--debug True or False. For if extra debugging is needed")
         self.addopt("", "timeout=", "--timeout Seconds. A softimeout for how long the probes are allowed to run")
+        self.addopt("", "summary=", "--summary True or False. Read and upload data summaries or not")
+
     def parseopt(self):
         """parse options specific to network monitroing probe and return options, optlist and reminder to
         allow further processing
@@ -57,6 +59,8 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
                 self.debug = arg
             elif opt == '--timeout':
                 self.soft_timeout = arg
+            elif opt == '--summary':
+                self.summaries = arg
             if self.host == self.localhost:
                 self.is_local = True
             else:
@@ -65,7 +69,7 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
 
     def runCallerScript(self):
         #Runs the caller script for esmond and parses the result 
-        cmd = "source ./esmondCaller.sh %s %d %s %s %s %s %s" % ("http://" + self.host, -int(self.start), self.username, self.key, self.goc_url, self.debug, self.soft_timeout)
+        cmd = "source ./esmondCaller.sh %s %d %s %s %s %s %s %s" % ("http://" + self.host, -int(self.start), self.username, self.key, self.goc_url, self.debug, self.soft_timeout, self.summaries)
         ec, out = rsvprobe.run_command(cmd, workdir="/usr/libexec/rsv/probes/worker-scripts")
         if 'WARNING' in out:
             self.return_warning('WARNING: %s ' % (out), exit_code=0)
