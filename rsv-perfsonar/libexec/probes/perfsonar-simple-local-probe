@@ -8,6 +8,10 @@ import rsvprobe
 import time
 import random
 
+import time
+from time import strftime
+from time import localtime
+
 sys.path.insert(0, '.')
 class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
     """
@@ -29,6 +33,9 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
         self.goc_url = "http://osgnetds.grid.iu.edu"
         self.start = 43200
         self.sleep = 400
+        self.debug = False
+        self.maxstart = 43200
+        self.summaries = False
         # Add the options so the parsing knows what to expect
         self.addopt("", "username=", "--username username the username for uploading data to the goc")
         self.addopt("", "key=", "--key key the key for uploading data to the goc")
@@ -38,6 +45,7 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
         self.addopt("", "debug=", "--debug True or False. For if extra debugging is needed")
         self.addopt("", "timeout=", "--timeout Seconds. A softimeout for how long the probes are allowed to run")
         self.addopt("", "summary=", "--summary True or False. Read and upload data summaries or not")
+        self.addopt("", "maxstart=", "--maxstart the max number in seconds it will go in the past to retrieve information")
 
     def parseopt(self):
         """parse options specific to network monitroing probe and return options, optlist and reminder to
@@ -61,6 +69,8 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
                 self.soft_timeout = arg
             elif opt == '--summary':
                 self.summaries = arg
+            elif opt == '--maxstart':
+                self.maxstart = arg
             if self.host == self.localhost:
                 self.is_local = True
             else:
@@ -75,18 +85,54 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
             self.return_warning('WARNING: %s ' % (out), exit_code=0)
         if 'Error' in out:
             self.return_critical("Failed running the caller. Error message %s" % (out))
-        self.return_ok(out)
+        self.add_message(out)
         return 0
+
+    def ReadTimeStampFile(self, filename):
+        if not os.path.isfile(filename):
+            return -1
+        else:
+            nfile = open(filename, 'r')
+            return nfile.readline()
+
+    def createDir(self, directory):
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        return directory
     
+    def WriteNewTimestamp(self, filename, starttime):
+         nfile = open(filename, 'w')
+         time = strftime("%a, %d %b %Y %H:%M:%S", starttime)
+         nfile.write(time)
+
+    def computeStartTime(self, filename):
+        timestamp = self.ReadTimeStampFile(filename)
+        if not timestamp == -1:#The probe ran succesfully:  
+           self.add_message("Last succesfull run at %s" % timestamp)
+           oldTime = time.strptime(timestamp, "%a, %d %b %Y %H:%M:%S")
+           newStart = time.mktime(localtime())-time.mktime(oldTime)
+           self.add_message("Start Time %d " % int(newStart))
+           if newStart < int(self.maxstart):
+               self.start = int(newStart)
+        else:
+            self.add_message("No previous sucesfull run found")
+
+
     def run(self):
        """Main routine for the probe"""
+       startTime = localtime()
        self.parseopt()
+       basedir = "/var/log/rsv/metrics/"
+       directoryFile = self.createDir(basedir +self.host)
+       timeFile = directoryFile + '/timeFile.out'
+       self.computeStartTime(timeFile)
        # Need to sleep for some random time between 0 and sleep so not all probes astart at the same time.
        sleepTime = random.randint(0, int(self.sleep))
        self.add_message("Sleeping for %d secs before starting" % sleepTime)
        time.sleep(sleepTime)
        self.runCallerScript()
-       
+       self.WriteNewTimestamp(timeFile, startTime)
+       self.return_ok("Ok")
 
 def main():
     probe = PerfsonarSimpleProbe()

@@ -8,7 +8,9 @@ from fractions import Fraction
 from esmond.api.client.perfsonar.query import ApiConnect, ApiFilters
 from esmond.api.client.perfsonar.post import MetadataPost, EventTypePost, EventTypeBulkPost
 
-allowedEvents = ['packet-loss-rate', 'packet-trace', 'packet-retransmits', 'throughput', 'throughput-subintervals', 'failures', 'packet-count-sent', 'packet-count-lost']
+#allowedEvents = ['packet-loss-rate', 'packet-trace', 'packet-retransmits', 'throughput', 'throughput-subintervals', 'failures', 'packet-count-sent', 'packet-count-lost']
+
+allowedEvents = ['packet-loss-rate', 'throughput', 'packet-trace', 'packet-retransmits', 'histogram-owdelay']
 
 skipEvents = ['histogram-owdelay', 'histogram-ttl']
 
@@ -36,7 +38,7 @@ parser.add_option('-x', '--summaries', help='upload and read data summaries', de
 class EsmondUploader(object):
 
     def add2log(self, log):
-        print strftime("%a, %d %b %Y %H:%M:%S +0000", localtime()), log
+        print strftime("%a, %d %b %Y %H:%M:%S ", localtime()), log
     
     def __init__(self,verbose,start,end,connect,username='afitz',key='fc077a6a133b22618172bbb50a1d3104a23b2050', goc='http://osgnetds.grid.iu.edu'):
 
@@ -82,7 +84,12 @@ class EsmondUploader(object):
     # Get Data
     def getData(self, disp=False, summary=True):
         self.getGoc(disp)
-        self.add2log("Skipped reading data for event types: %s" % (str(skipEvents)))
+        self.add2log("Only reading data for event types: %s" % (str(allowedEvents)))
+        #self.add2log("Skipped reading data for event types: %s" % (str(skipEvents)))
+        if summary:
+            self.add2log("Reading Summaries")
+        else:
+            self.add2log("Omiting Sumaries")
         i = 0
         for md in self.conn.get_metadata():
             # Check for repeat data
@@ -113,7 +120,7 @@ class EsmondUploader(object):
                     if not self.time_duration[i] is None:
                         print "Time Duration: " + self.time_duration[i]
                     print "Tool Name: " + self.tool_name[i]
-                    print "Metadata Key: " + self.metadata_key[i]
+                    print "Metadata Key: " + self.metadata_key[i] + " /n/n"
                 # Get Events and Data Payload
                 # temp_list holds the sumaries for all event types for metadata i
                 temp_list = [] 
@@ -130,8 +137,8 @@ class EsmondUploader(object):
                     else:
                         temp_list.append([])
                     # Skip readind data points for certain event types to improv efficiency  
-                    #if eventype not in allowedEvents:                                                                                                       
-                    if eventype in skipEvents:
+                    if eventype not in allowedEvents:                                                                                                       
+                    #if eventype in skipEvents:
                         #self.add2log("Skipped reading data for event type: %s for metadatda %d" % (eventype, i+1))
                         temp_list3.append(temp_list2)
                         continue
