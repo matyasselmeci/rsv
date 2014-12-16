@@ -81,12 +81,7 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
         #Runs the caller script for esmond and parses the result 
         cmd = "source ./esmondCaller.sh %s %d %s %s %s %s %s %s" % ("http://" + self.host, -int(self.start), self.username, self.key, self.goc_url, self.debug, self.soft_timeout, self.summaries)
         ec, out = rsvprobe.run_command(cmd, workdir="/usr/libexec/rsv/probes/worker-scripts")
-        if 'WARNING' in out:
-            self.return_warning('WARNING: %s ' % (out), exit_code=0)
-        if 'Error' in out:
-            self.return_critical("Failed running the caller. Error message %s" % (out))
-        self.add_message(out)
-        return 0
+        return out
 
     def ReadTimeStampFile(self, filename):
         if not os.path.isfile(filename):
@@ -107,7 +102,7 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
 
     def computeStartTime(self, filename):
         timestamp = self.ReadTimeStampFile(filename)
-        if not timestamp == -1:#The probe ran succesfully:  
+        if not timestamp == 1:#The probe ran succesfully:  
            self.add_message("Last succesfull run at %s" % timestamp)
            oldTime = time.strptime(timestamp, "%a, %d %b %Y %H:%M:%S")
            newStart = time.mktime(localtime())-time.mktime(oldTime)
@@ -130,9 +125,16 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
        sleepTime = random.randint(0, int(self.sleep))
        self.add_message("Sleeping for %d secs before starting" % sleepTime)
        time.sleep(sleepTime)
-       self.runCallerScript()
+       # Calling the caller script and parsing it is output
+       out = self.runCallerScript()
+       self.add_message(out)
+       if 'Error' in out:
+            self.return_critical("Failed running the caller")
+       # Write the timestamp if there is a warning or ok. Even if it is a timeout warning chances are increasing starttime won't do much
        self.WriteNewTimestamp(timeFile, startTime)
-       self.return_ok("Ok")
+       if 'WARNING' in out:
+           self.return_warning('WARNING: timeout')
+       self.return_ok('OK')
 
 def main():
     probe = PerfsonarSimpleProbe()
