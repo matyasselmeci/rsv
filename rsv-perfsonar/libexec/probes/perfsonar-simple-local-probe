@@ -85,7 +85,7 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
 
     def ReadTimeStampFile(self, filename):
         if not os.path.isfile(filename):
-            return -1
+            return 1
         else:
             nfile = open(filename, 'r')
             return nfile.readline()
@@ -106,7 +106,6 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
            self.add_message("Last succesfull run at %s" % timestamp)
            oldTime = time.strptime(timestamp, "%a, %d %b %Y %H:%M:%S")
            newStart = time.mktime(localtime())-time.mktime(oldTime)
-           self.add_message("Start Time %d " % int(newStart))
            if newStart < int(self.maxstart):
                self.start = int(newStart)
         else:
@@ -121,6 +120,7 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
        directoryFile = self.createDir(basedir +self.host)
        timeFile = directoryFile + '/timeFile.out'
        self.computeStartTime(timeFile)
+       self.add_message("Start Time %d " % int(self.start))
        # Need to sleep for some random time between 0 and sleep so not all probes astart at the same time.
        sleepTime = random.randint(0, int(self.sleep))
        self.add_message("Sleeping for %d secs before starting" % sleepTime)
@@ -133,8 +133,8 @@ class PerfsonarSimpleProbe(rsvprobe.RSVProbe):
        # Write the timestamp if there is a warning or ok. Even if it is a timeout warning chances are increasing starttime won't do much
        self.WriteNewTimestamp(timeFile, startTime)
        if 'WARNING' in out:
-           self.return_warning('WARNING: timeout')
-       self.return_ok('OK')
+           self.return_warning('WARNING: timeout ')
+       self.return_ok("OK")
 
 def main():
     probe = PerfsonarSimpleProbe()

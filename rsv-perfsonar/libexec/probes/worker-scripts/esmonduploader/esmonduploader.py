@@ -177,6 +177,15 @@ class EsmondUploader(object):
             if disp:
                 print self.metadata_key[i]
             new_meta = mp.post_metadata()
+            # Catching bad posts
+            try:
+                new_meta.metadata_key
+            except:
+                print 'WARNING'
+                print args
+                print self.event_types[i]
+                print self.summaries[i]
+                continue
             self.add2log("Finished posting summaries and metadata %d" % (i+1))
             # Posting Data Points
             et = EventTypeBulkPost(self.goc, username=self.username, api_key=self.key, metadata_key=new_meta.metadata_key)
