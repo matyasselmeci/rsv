@@ -8,11 +8,12 @@ from fractions import Fraction
 from esmond.api.client.perfsonar.query import ApiConnect, ApiFilters
 from esmond.api.client.perfsonar.post import MetadataPost, EventTypePost, EventTypeBulkPost
 
-#allowedEvents = ['packet-loss-rate', 'packet-trace', 'packet-retransmits', 'throughput', 'throughput-subintervals', 'failures', 'packet-count-sent', 'packet-count-lost']
+#allowedEvents = ['packet-loss-rate', 'packet-trace', 'packet-retransmits', 'throughput', 'throughput-subintervals', 'failures', 'packet-count-sent', 'packet-count-lost', 'histogram-owdelay', 'histogram-ttl']
 
 allowedEvents = ['packet-loss-rate', 'throughput', 'packet-trace', 'packet-retransmits', 'histogram-owdelay']
 
 skipEvents = ['histogram-owdelay', 'histogram-ttl']
+
 
 # Set filter object
 filters = ApiFilters()
@@ -181,7 +182,7 @@ class EsmondUploader(object):
             try:
                 new_meta.metadata_key
             except:
-                print 'WARNING'
+                print 'ERROR'
                 print args
                 print self.event_types[i]
                 print self.summaries[i]
