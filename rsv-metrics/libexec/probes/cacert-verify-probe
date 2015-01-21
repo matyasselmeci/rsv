@@ -204,11 +204,8 @@ Additionally it makes sure that all IGTF CAs are installed.
     #working_dir = tempdir
 
     #Check if the file CA cers are installed from ITB or OSG, new or old format
-    local_urls = [["http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt",
-                   "http://software-itb.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt"],
-                  ["http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum-new.txt",
-                   "http://software-itb.grid.iu.edu/pacman/cadist/cacerts_md5sum-new.txt"]
-                 ]
+    local_urls = ["http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt",
+                  "http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum-new.txt"]
     ca_format_type = 0
     ca_index = os.path.join(certdir, "INDEX.txt")
     if os.path.isfile(ca_index):
@@ -228,10 +225,10 @@ Additionally it makes sure that all IGTF CAs are installed.
       self.return_unknown("ERROR: Unknown grid type %s. Setting metric to unknown." % grid_type) 
     #ca_format_type can be only 0,1:
     cert_ext = ".0"
-    local_url = local_urls[0][grid_type]
+    local_url = local_urls[0]
     if ca_format_type == 1:
       cert_ext = ".pem"
-      local_url = local_urls[1][grid_type]
+      local_url = local_urls[1]
     elif ca_format_type != 0:
       self.return_unknown("ERROR: CA Certs Directory %s has unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type))
     self.add_message("Grid type is %s. CA format type is %s. URL with CA distribution: %s" % (rsvprobe.get_grid_type_string(grid_type), ca_format_type, local_url))
@@ -258,12 +255,9 @@ Additionally it makes sure that all IGTF CAs are installed.
 
     # Step 2: Get the list of Certs included in OSG from GOC website.
     #chdir($working_dir);
-    local_urls = [["http://software.grid.iu.edu/pacman/cadist/INDEX.txt",
-                   "http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt"],
-                  ["http://software.grid.iu.edu/pacman/cadist/INDEX-new.txt",
-                   "http://software-itb.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
-                 ]
-    local_url = local_urls[ca_format_type][grid_type]
+    local_urls = ["http://software.grid.iu.edu/pacman/cadist/INDEX.txt",
+                  "http://software.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
+    local_url = local_urls[ca_format_type]
     lines = rsvprobe.get_http_doc(local_url)
     if not lines:
       self.return_unknown("Could not download the CA list from OSG (%s) or the list is empty. Unable to verify CAs." % local_url)

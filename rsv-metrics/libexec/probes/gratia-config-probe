@@ -29,6 +29,7 @@ my ($is_root, $probeconfig_problems, $soaphost, $probename,
     $record_count, $file_count, $archive_count, $old_file_count,
     $real_gratia_probe_type
    );
+use constant { STATUS_OK => 0, STATUS_WARNING => 1, STATUS_CRITICAL => 2, STATUS_UNKNOWN => 3 };
 
 my %extra_opts = ("discover"       => "<Show available probes on this system>",
                   "human-readable" => "<Print output in readable format>");
@@ -40,6 +41,8 @@ $options{'human-readable'} ||= 0;
 $metric{metricStatus} ||= STATUS_OK;
 
 ($o{'gratiaProbeType'} = $options{'m'}) =~ s/^org\.osg\.gratia\.//;
+
+$metric{metricStatus} = STATUS_OK;
 
 Run();
 
