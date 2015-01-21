@@ -13,14 +13,16 @@ print_output_header();
 
 our $CRON_D = '/etc/cron.d';
 
+
 ######## Retrieve Global variables ################################
 our %o;
 our %metric;
-# Set $run_me_root to 1 if conditions arise such that we should give
-# local probe run instructions in the event of a problem. Set to >1 if
-# we should give local probe run instructions regardless of
-# metricStatus.
-my $run_me_root = 0;
+# Set $run_me_root to RMR_IF_NOT_OK if conditions arise such that we should give
+# local probe run instructions in the event of a problem. Set to RMR_ALWAYS if
+# we should give local probe run instructions regardless of metricStatus.
+use constant { RMR_NEVER => 0, RMR_IF_NOT_OK => 1, RMR_ALWAYS => 2 };
+use constant { STATUS_OK => 0, STATUS_WARNING => 1, STATUS_CRITICAL => 2, STATUS_UNKNOWN => 3 };
+my $run_me_root = RMR_NEVER;
 my ($is_root, $probeconfig_problems, $soaphost, $probename,
     $sitename, $enabled, $datafolder, $workingfolder, $real_datafolder,
     $current_gratia_probe_type,
@@ -35,6 +37,7 @@ my %options = process_command_line(%extra_opts);
 
 $options{'discover'} ||= 0;
 $options{'human-readable'} ||= 0;
+$metric{metricStatus} ||= STATUS_OK;
 
 ($o{'gratiaProbeType'} = $options{'m'}) =~ s/^org\.osg\.gratia\.//;
 
@@ -112,7 +115,7 @@ EOF
     if (! -x $CRON_D) {
       &appendDetailsData("NOTE: Cron directory $CRON_D is not accessible by the $username user.\n");
       &appendDetailsData("Cannot determine if $probename is enabled.\n");
-      $run_me_root = 1;
+      $run_me_root = RMR_IF_NOT_OK;
     } else {
       my $cron_grep_pattern = '^[[:space:]]*[^#].*gratia/\(probe/\)\?'.$real_gratia_probe_type.'/';
       my $quoted_cron_grep_pattern = shellquote($cron_grep_pattern);
@@ -131,7 +134,7 @@ EOF
         # grep couldn't read some files AND didn't find the line in the files grep could read
         &appendDetailsData("NOTE: Some files in $CRON_D are not accessible by the $username user.\n");
         &appendDetailsData("Cannot determine if $probename is enabled.\n");
-        $run_me_root = 1;
+        $run_me_root = RMR_IF_NOT_OK;
       }
     }
   }
@@ -139,7 +142,7 @@ EOF
   if ($enabled ne "1") {
     setCritical();
     &appendDetailsData("ERROR: Probe $probename has EnableProbe not set to 1.\n");
-    $run_me_root = 1;
+    $run_me_root = RMR_IF_NOT_OK;
     $probeconfig_problems = 1;
   }
   # Is probename generic or unset?
@@ -273,7 +276,7 @@ EOF
   # Check to see if we've ever had a contact with this collector
   if ($probe_contact_check =~ /^last-contact=never/) {
     setCritical();
-    $run_me_root = 1;
+    $run_me_root = RMR_IF_NOT_OK;
     &appendDetailsData ("ERROR: Probe $probename has never been seen by Gratia collector $soaphost\n");
     normal_exit();
   }
@@ -291,7 +294,7 @@ WARNING: Gratia server $soaphost not responding to obtain last contact details.
 EOF
   } elsif (Date_Cmp($probe_contact_check, $cmpDateDay) < 1) {
     setCritical();
-    $run_me_root = 1;
+    $run_me_root = RMR_IF_NOT_OK;
     &appendDetailsData (<<EOF);
 ERROR: Probe $probename has not been seen by Gratia collector $soaphost in >1d.
 Last contact time = $last_contact_string.
@@ -299,7 +302,7 @@ EOF
     normal_exit();
   } elsif (Date_Cmp($probe_contact_check, $cmpDateHour) < 1) {
     setWarning();
-    $run_me_root = 1;
+    $run_me_root = RMR_IF_NOT_OK;
     &appendDetailsData (<<EOF);
 WARNING: Probe $probename has not been seen by Gratia collector $soaphost in >1h.
 Last contact time = $last_contact_string
@@ -345,16 +348,10 @@ EOF
 
 sub runMeRoot {
   &appendDetailsData (<<EOF);
-Run tests as root for more diagnostic details, especially if you have a
-WARNING or CRITICAL status.
-Manual invocation:
+Some information could not be gathered due to lack of privileges.  Install and
+run the latest version of osg-system-profiler for more diagnostic details,
+especially if you have a WARNING or CRITICAL status.
 EOF
-  my $dir = abs_path(dirname($0));
-  $dir =~ s&worker-scripts/?&&;
-  &appendDetailsData (sprintf("(cd \"%s\" && ./worker-scripts/%s -X -p %s)\n",
-                              $dir,
-                              basename($0),
-                              $metric{'metricName'}));
 }
 
 sub probeConfigProblems {
@@ -366,8 +363,9 @@ EOF
 sub normal_exit {
   return if $o{test} and not $_[0];
   probeConfigProblems() if $probeconfig_problems;
-  if ($run_me_root and not $is_root and
-      ($o{metricStatus} or $run_me_root > 2)) {
+  if (not $is_root and
+      ((RMR_IF_NOT_OK == $run_me_root and $metric{metricStatus} != STATUS_OK) or
+       (RMR_ALWAYS == $run_me_root))) {
     runMeRoot();
   }
   ## Print metric, and we're all done!
@@ -380,40 +378,36 @@ DETAILS:
 $metric{'detailsData'}
 EOF
   } else {
-    # Force the metric to always have a status; defaults to OK (0).
-    exists $metric{'metricStatus'} or $metric{'metricStatus'} = 0;
     workerScriptOutput(0,"$metric{'metricStatus'}\n$metric{'detailsData'}\n","");
   }
 }
 
 
 sub setCritical {
-  $metric{'metricStatus'} = 2; #critical
+  $metric{'metricStatus'} = STATUS_CRITICAL;
 }
 
 sub setWarning {
-  $metric{'metricStatus'} = 1 unless ## "WARNING" unless
-    (exists $metric{'metricStatus'} and $metric{'metricStatus'} == 2); ## "CRITICAL";
+  $metric{'metricStatus'} = STATUS_WARNING unless
+    $metric{'metricStatus'} == STATUS_CRITICAL;
 }
 
 sub setUnknown {
-  $metric{'metricStatus'} = 3 unless ## "UNKNOWN" unless
-    (exists $metric{'metricStatus'} and $metric{'metricStatus'} == 2); ## "CRITICAL";
+  $metric{'metricStatus'} = STATUS_UNKNOWN unless
+    $metric{'metricStatus'} == STATUS_CRITICAL;
 }
 
 sub metricStatusWord {
-    exists $metric{'metricStatus'} or $metric{'metricStatus'} = 0;
-    
-    if (0 == $metric{'metricStatus'}) {
+    if (STATUS_OK == $metric{'metricStatus'}) {
         return "OK";
     }
-    elsif (1 == $metric{'metricStatus'}) {
+    elsif (STATUS_WARNING == $metric{'metricStatus'}) {
         return "WARNING";
     }
-    elsif (2 == $metric{'metricStatus'}) {
+    elsif (STATUS_CRITICAL == $metric{'metricStatus'}) {
         return "CRITICAL";
     }
-    elsif (3 == $metric{'metricStatus'}) {
+    elsif (STATUS_UNKNOWN == $metric{'metricStatus'}) {
         return "UNKNOWN";
     }
     else {
@@ -551,7 +545,7 @@ EOF
     normal_exit();
   }
   unless ($is_root) {		# Can't do these unless we're root.
-    $run_me_root = 2; # Print root message even if we're otherwise OK.
+    $run_me_root = RMR_ALWAYS; # Print root message even if we're otherwise OK.
 #    &appendDetailsData (<<EOF);
 #Remaining checks on $urCollector::Configuration::configValues{lrmsType} require root privilege:
 #  * Check existence of configured PBS or LSF log directory.
