@@ -364,8 +364,9 @@ class Metric:
 
         try:
             return int(interval)
-        except:
+        except (TypeError, ValueError):
             self.rsv.log("ERROR", "probe-interval is invalid: '%s'" % interval)
+            return 0
 
     def get_timeout(self):
         """ Return the job's custom timeout setting, or None """

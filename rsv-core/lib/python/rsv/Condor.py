@@ -356,13 +356,13 @@ class Condor:
             deferral_time = 0
             try:
                 deferral_time = int(classad['DeferralTime'])
-            except:
+            except (KeyError, TypeError, ValueError):
                 pass
             if deferral_time:
                 if parsable:
-                    next_run_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(int(classad["DeferralTime"])))
+                    next_run_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(deferral_time))
                 else:
-                    next_run_time = strftime("%m-%d %H:%M", time.localtime(int(classad["DeferralTime"])))
+                    next_run_time = strftime("%m-%d %H:%M", time.localtime(deferral_time))
 
             metric = "UNKNOWN?"
             if "OSGRSVMetric" in classad:
