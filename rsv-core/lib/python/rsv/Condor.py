@@ -242,11 +242,13 @@ class Condor:
         arguments = "-v 3 -r -u %s %s %s" % (metric.host, metric.name, metric.get_settings())
         timestamp = strftime("%Y-%m-%d %H:%M:%S %Z")
 
-        cron = metric.get_cron_entry()
-        if not cron:
-            self.rsv.log("ERROR", "Invalid cron time for metric %s on host %s.  Will not start." %
-                         (metric.name, metric.host))
-            return ""
+        probe_interval = metric.get_probe_interval()
+        if not probe_interval:
+            cron = metric.get_cron_entry()
+            if not cron:
+                self.rsv.log("ERROR", "Invalid cron time for metric %s on host %s.  Will not start." %
+                             (metric.name, metric.host))
+                return ""
 
         submit = ""
         submit += "######################################################################\n"
@@ -254,13 +256,19 @@ class Condor:
         submit += "# Generated at %s " % timestamp
         submit += "######################################################################\n"
         submit += "Environment = %s\n"    % environment
-        submit += "CronPrepTime = 180\n"
-        submit += "CronWindow = 99999999\n"
-        submit += "CronMonth = %s\n"      % cron["Month"]
-        submit += "CronDayOfWeek = %s\n"  % cron["DayOfWeek"]
-        submit += "CronDayOfMonth = %s\n" % cron["DayOfMonth"]
-        submit += "CronHour = %s\n"       % cron["Hour"]
-        submit += "CronMinute = %s\n"     % cron["Minute"]
+
+        if probe_interval:
+            submit += "DeferralPrepTime = ifThenElse(%d - ScheddInterval + 31 > 0, %d - ScheddInterval + 31, 180) \n" % (probe_interval, probe_interval)
+            submit += "DeferralTime = (CurrentTime + %d + random(30))\n" % probe_interval
+            submit += "DeferralWindow = 99999999\n"
+        else:
+            submit += "CronPrepTime = 180\n"
+            submit += "CronWindow = 99999999\n"
+            submit += "CronMonth = %s\n"      % cron["Month"]
+            submit += "CronDayOfWeek = %s\n"  % cron["DayOfWeek"]
+            submit += "CronDayOfMonth = %s\n" % cron["DayOfMonth"]
+            submit += "CronHour = %s\n"       % cron["Hour"]
+            submit += "CronMinute = %s\n"     % cron["Minute"]
         submit += "Executable = %s\n"     % self.rsv.get_wrapper()
         submit += "Error = %s/%s.err\n"   % (log_dir, condor_id)
         submit += "Output = %s/%s.out\n"  % (log_dir, condor_id)
@@ -345,7 +353,12 @@ class Condor:
             status = job_status[int(classad["JobStatus"])]
 
             next_run_time = "UNKNOWN"
-            if "DeferralTime" in classad:
+            deferral_time = 0
+            try:
+                deferral_time = int(classad['DeferralTime'])
+            except:
+                pass
+            if deferral_time:
                 if parsable:
                     next_run_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(int(classad["DeferralTime"])))
                 else:

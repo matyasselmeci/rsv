@@ -353,6 +353,19 @@ class Metric:
 
         return cron
 
+    def get_probe_interval(self):
+        """ If set, return the deferral interval for the probe """
+        if self.config.has_option(self.name, "probe-interval"):
+            interval = self.config.get(self.name, "probe-interval")
+        elif self.config.has_option(self.name, "default-probe-interval"):
+            interval = self.config.get(self.name, "default-probe-interval")
+        else:
+            return 0
+
+        try:
+            return int(interval)
+        except:
+            self.rsv.log("ERROR", "probe-interval is invalid: '%s'" % interval)
 
     def get_timeout(self):
         """ Return the job's custom timeout setting, or None """
