@@ -261,6 +261,7 @@ class Condor:
             submit += "DeferralPrepTime = ifThenElse(%d - ScheddInterval + 31 > 0, %d - ScheddInterval + 31, 180) \n" % (probe_interval, probe_interval)
             submit += "DeferralTime = (CurrentTime + %d + random(30))\n" % probe_interval
             submit += "DeferralWindow = 99999999\n"
+            submit += "+OSGRSVProbeInterval = %d\n" % probe_interval
         else:
             submit += "CronPrepTime = 180\n"
             submit += "CronWindow = 99999999\n"
@@ -355,9 +356,14 @@ class Condor:
             next_run_time = "UNKNOWN"
             deferral_time = 0
             try:
-                deferral_time = int(classad['DeferralTime'])
+                probe_interval = int(classad['OSGRSVProbeInterval'])
+                deferral_time = int(classad['EnteredCurrentStatus']) + probe_interval
             except (KeyError, TypeError, ValueError):
-                pass
+                try:
+                    deferral_time = int(classad['DeferralTime'])
+                except (KeyError, TypeError, ValueError):
+                    pass
+
             if deferral_time:
                 if parsable:
                     next_run_time = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(deferral_time))
