@@ -1,0 +1,233 @@
+#!/usr/bin/python
+
+import os
+import re
+import sys
+import time
+import shutil
+import tempfile
+import subprocess
+
+sys.path.insert(0, '.')
+
+import rsvprobe
+
+def run_with_subprocess(cmd):
+    """Run a command using subprocess, returning a tuple of (output, error,
+    returncode) where output and error are the contents of stdout and stderr,
+    respectively. Forces 'C' locale in case we need to parse the output.
+
+    """
+    new_env = dict(os.environ, LC_ALL='C')
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, env=new_env)
+        output, error = proc.communicate()
+        returncode = proc.returncode
+    except OSError, (errno, strerror):
+        output, error = "", "Could not execute %s: %s" % (cmd[0], strerror)
+        returncode = 1
+
+    return (output, error, returncode)
+
+def run_in_tempdir(fn):
+    olddir = os.getcwd()
+    tmpd = tempfile.mkdtemp()
+    os.chdir(tmpd)
+    try:
+        ret = fn()
+    finally:
+        os.chdir(olddir)
+        shutil.rmtree(tmpd)
+    return ret
+
+class BatchSubmissionProbe(rsvprobe.RSVProbe):
+
+    def __init__(self):
+        rsvprobe.RSVProbe.__init__(self)
+        self.metric = ""
+        metric = rsvprobe.RSVMetric("OSG-CE", "org.osg.batch.test-submission",
+                                    rsvprobe.RSVMetric.STATUS)
+        metric.service_version = ">= OSG CE 1.0.0"
+        metric.probe_type = "OSG-CE"
+        self.supported_metrics = [metric]
+        self.details = []
+
+#   def parseopt(self):
+#       options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
+
+    def set_rsvmetric(self):
+        for metric in self.supported_metrics:
+            if self.metric == metric.name:
+                self.rsvmetric = metric
+                break
+        else:
+            # XXX: defaults to first supported metric if unspecified...
+            self.rsvmetric = self.supported_metrics[0]
+
+    def timeout_expired(self):
+        return time.time() > self.starttime + self.job_timeout
+
+    def details_str(self):
+        if self.details:
+            return '\n\n' + '\n\n'.join(self.details)
+        else:
+            return ''
+
+    def run(self):
+        """Main routine for the probe"""
+        self.parseopt()
+        self.set_rsvmetric()
+
+        # TODO: get these from configuration
+        self.job_timeout = 600  # self.rsvmetric.config_get("job-timeout")
+        poll_interval = 5
+
+        self.starttime = time.time()
+
+        self.do_condor_submit()
+        while not self.timeout_expired() and not self.job_has_been_routed():
+            time.sleep(poll_interval)
+
+        if self.job_has_been_routed():
+            self.return_ok("Test job was successfully routed."
+                           + self.details_str())
+        else:
+            self.return_warning("Test job not detected to be routed within "
+                                "timeout window." + self.details_str())
+
+    def submit_file_txt(self):
+        job_timeout = self.job_timeout
+
+        #job_timeout = ( self.rsvmetric.get_timeout() or
+        #                self.rsv.config.get("rsv", "job-timeout") )
+
+        host = self.host
+        metric = self.metric
+
+        txt = """
+        universe = grid
+        grid_resource = condor %s %s:9619
+
+        executable = /bin/sleep
+        arguments = %d
+        output = /dev/null
+        error = /dev/null
+        log = %s.log
+
+        ShouldTransferFiles = YES
+        WhenToTransferOutput = ON_EXIT
+
+        use_x509userproxy = true
+        +Owner=undefined
+        queue
+        """ % (host, host, job_timeout + 1, metric)
+
+        return re.sub(r'\n +', r'\n', txt)
+
+    def do_condor_submit(self):
+        submit_filename = "%s.sub" % self.metric
+        sf = open(submit_filename, "w")
+        sf.write(self.submit_file_txt())
+        sf.close()
+
+        out,err,ret = run_with_subprocess(["condor_submit", submit_filename])
+
+        if ret != 0:
+            self.details.append("Problem submitting job to condor.  "
+                                "Command output:\n%s" % out)
+            return False
+
+        # Determine the job cluster ID
+        match = re.search("submitted to cluster (\d+)\.", out)
+        if match:
+            self.local_job_id = match.group(1)
+            self.details.append("Condor job cluster ID: %s" % job_id)
+            return True
+        else:
+            self.details.append("Could not determine job cluster ID "
+                                "from output:\n%s" % out)
+            return False
+
+    def get_grid_job_id(self):
+        if hasattr(self, 'local_job_id'):
+            return self.local_job_id
+
+        out,err,ret = run_with_subprocess([
+            "condor_q", "-format", "%s", "GridJobId", self.local_job_id
+        ])
+
+        match = re.search(r'^(\d+\.\d+)$', out)
+        if match:
+            self.grid_job_id = match.group(1)
+            self.details.append("Condor GridJobId: %s" % self.grid_job_id)
+            return self.grid_job_id
+        else:
+            return False
+
+    def job_has_been_routed(self):
+        """ for now just poll to see if routed attr appears """
+
+        if hasattr(self, 'routed_job_id'):
+            return self.routed_job_id
+
+        if not self.get_grid_job_id():
+            return False
+
+        ce = self.host
+        out,err,ret = run_with_subprocess([
+            "condor_q", "-name", ce, "-pool", ce + ":9619",
+            "-format", "%s", "RoutedToJobId", self.grid_job_id
+        ])
+
+        match = re.search(r'^(\d+\.\d+)$', out)
+        if match:
+            self.routed_job_id = match.group(1)
+            self.details.append("Grid RoutedToJobId: %s" % self.grid_job_id)
+            return self.grid_job_id
+        else:
+            return False
+        
+    def job_has_started_or_terminated(self):
+        """
+        phase 2: watch logs for:
+            (1) "Job executing on host:"
+            (9) "Job was aborted by the user."
+            (5) "Job terminated."
+            (2,21,?) "error" ?
+
+        or:
+            Submit                  0
+            Execute                 1
+            Executable error        2
+            Checkpointed            3
+            Job evicted             4
+            Job terminated          5
+            Image size              6
+            Shadow exception        7
+            Generic                 8
+            Job aborted             9
+            Job suspended           10
+            Job unsuspended         11
+            Job held                12
+            Job released            13
+            Node execute            14
+            Node terminated         15
+            Post script terminated  16
+            Globus submit           17
+            Globus submit failed    18
+            Globus resource up      19
+            Globus resource down    20
+            Remote error            21
+        """
+        return False
+
+
+def main():
+    probe = BatchSubmissionProbe()
+    probe.run()
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(run_in_tmpdir(main))
+
