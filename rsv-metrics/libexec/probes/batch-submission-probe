@@ -85,7 +85,9 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
 
         self.starttime = time.time()
 
-        self.do_condor_submit()
+        if not self.do_condor_submit():
+            self.return_warning("Condor submit failed." + self.details_str())
+
         while not self.timeout_expired() and not self.job_has_been_routed():
             time.sleep(poll_interval)
 
@@ -134,30 +136,33 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         out,err,ret = run_with_subprocess(["condor_submit", submit_filename])
 
         if ret != 0:
-            self.details.append("Problem submitting job to condor.  "
-                                "Command output:\n%s" % out)
+            self.details.append(
+                "Problem submitting job to condor.  Command output:\n"
+                "---\n%s\n---\n%s\n---\n" % (out.strip(), err.strip())
+            )
             return False
 
         # Determine the job cluster ID
         match = re.search("submitted to cluster (\d+)\.", out)
         if match:
             self.local_job_id = match.group(1)
-            self.details.append("Condor job cluster ID: %s" % job_id)
+            self.details.append("Condor job cluster ID: " + self.local_job_id)
             return True
         else:
             self.details.append("Could not determine job cluster ID "
-                                "from output:\n%s" % out)
+                                "from output:\n" + out)
             return False
 
     def get_grid_job_id(self):
-        if hasattr(self, 'local_job_id'):
-            return self.local_job_id
+        if hasattr(self, 'grid_job_id'):
+            return self.grid_job_id
 
         out,err,ret = run_with_subprocess([
             "condor_q", "-format", "%s", "GridJobId", self.local_job_id
         ])
 
-        match = re.search(r'^(\d+\.\d+)$', out)
+        # can also extract condor vs globus grid type here
+        match = re.search(r' (\d+\.\d+)$', out)
         if match:
             self.grid_job_id = match.group(1)
             self.details.append("Condor GridJobId: %s" % self.grid_job_id)
@@ -183,8 +188,8 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         match = re.search(r'^(\d+\.\d+)$', out)
         if match:
             self.routed_job_id = match.group(1)
-            self.details.append("Grid RoutedToJobId: %s" % self.grid_job_id)
-            return self.grid_job_id
+            self.details.append("Grid RoutedToJobId: %s" % self.routed_job_id)
+            return self.routed_job_id
         else:
             return False
         
@@ -229,5 +234,5 @@ def main():
     return 0
 
 if __name__ == '__main__':
-    sys.exit(run_in_tmpdir(main))
+    sys.exit(run_in_tempdir(main))
 
