@@ -74,6 +74,12 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         else:
             return ''
 
+    def success(self, msg):
+        self.return_ok(msg + self.details_str())
+
+    def warning(self, msg):
+        self.return_warning(msg + self.details_str())
+
     def run(self):
         """Main routine for the probe"""
         self.parseopt()
@@ -86,17 +92,31 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         self.starttime = time.time()
 
         if not self.do_condor_submit():
-            self.return_warning("Condor submit failed." + self.details_str())
+            self.warning("Condor submit failed.")
 
-        while not self.timeout_expired() and not self.job_has_been_routed():
+        while not (self.timeout_expired() or
+                   self.job_has_been_routed() or
+                   self.job_held_or_started_or_terminated()):
             time.sleep(poll_interval)
 
-        if self.job_has_been_routed():
-            self.return_ok("Test job was successfully routed."
-                           + self.details_str())
+        self.details.append("--- Job Log ---\n\n" + self.read_joblog())
+
+        stats = self.parse_joblog()
+
+        if 'terminated' in stats:
+            self.success("Test job successfully completed.")
+        elif 'aborted' in stats:
+            self.warning("Test job was aborted.")
+        elif 'held' in stats:
+            self.warning("Test job was put on Hold status.")
+        elif 'shadow_ex' in stats:
+            self.warning("Test job had a shadow exception.")
+        elif 'executing' in stats:
+            self.success("Test job successfully started on batch system.")
+        elif self.job_has_been_routed():
+            self.success("Test job was successfully routed.")
         else:
-            self.return_warning("Test job not detected to be routed within "
-                                "timeout window." + self.details_str())
+            self.warning("Test job not routed within timeout window.")
 
     def submit_file_txt(self):
         job_timeout = self.job_timeout
@@ -193,7 +213,28 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         else:
             return False
         
-    def job_has_started_or_terminated(self):
+    def read_joblog(self):
+        return open("%s.log" % self.metric).read()
+
+    def parse_joblog(self):
+        log_txt = self.read_joblog()
+        status_map = {
+            'executing'  :  1,
+            'exe_error'  :  2,
+            'terminated' :  5,
+            'shadow_ex'  :  7,
+            'aborted'    :  9,
+            'held'       : 12,
+            'grid_sub'   : 27,
+        }
+        stats = set()
+        for name,id in status_map.items():
+            if re.search(r'^%03d ' % id, log_txt, re.M):
+                stats.add(name)
+
+        return stats
+
+    def job_held_or_started_or_terminated(self):
         """
         phase 2: watch logs for:
             (1) "Job executing on host:"
@@ -225,7 +266,9 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             Globus resource down    20
             Remote error            21
         """
-        return False
+
+        stats = self.parse_joblog()
+        return stats & set(['held', 'executing', 'terminated', 'aborted'])
 
 
 def main():
