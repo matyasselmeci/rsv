@@ -33,6 +33,12 @@ create_tarball () {
     tar zcf rsv-$RSV_VERSION.tar.gz $files
 }
 
+copy_rsv_files_from_git () {
+  local commit=${1:-HEAD}
+  git archive --prefix=rsv-$RSV_VERSION/ "$commit" \
+  | tar x rsv-$RSV_VERSION/rsv-{consumers,core,metrics}
+}
+
 print_instructions () {
     local dir
     dir="/p/vdt/public/html/upstream/rsv/$RSV_VERSION"
@@ -45,8 +51,13 @@ cleanup () {
     rm -rf rsv-$RSV_VERSION
 }
 
-verify_svn_up_to_date
-copy_rsv_files
+if [[ $1 = --git ]]; then
+  shift
+  copy_rsv_files_from_git "$@"
+else
+  verify_svn_up_to_date
+  copy_rsv_files
+fi
 set_version_in_rsv_control
 create_tarball
 print_instructions
