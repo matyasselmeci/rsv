@@ -121,10 +121,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         return time.time() > self.starttime + self.probe_timeout
 
     def details_str(self):
-        if self.details:
-            return '\n\n' + '\n\n'.join(self.details)
-        else:
-            return ''
+        return ''.join('\n\n' + x for x in self.details)
 
     def success(self, msg):
         self.return_ok(msg + self.details_str())
