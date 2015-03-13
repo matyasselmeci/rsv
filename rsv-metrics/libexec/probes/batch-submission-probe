@@ -117,8 +117,14 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             # XXX: defaults to first supported metric if unspecified...
             self.rsvmetric = self.supported_metrics[0]
 
-    def timeout_expired(self):
-        return time.time() > self.starttime + self.probe_timeout
+    def routed_timeout_expired(self):
+        return time.time() > self.starttime + self.routed_timeout
+
+    def completed_timeout_expired(self):
+        return time.time() > self.starttime + self.completed_timeout
+
+    def cancelled_timeout_expired(self):
+        return time.time() > self.starttime + self.cancelled_timeout
 
     def details_str(self):
         return ''.join('\n\n' + x for x in self.details)
@@ -139,10 +145,22 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         if not self.do_condor_submit():
             self.warning("Condor submit failed.")
 
-        while not (self.timeout_expired() or
-                   self.job_has_been_routed() or
-                   self.job_held_or_started_or_terminated()):
+        # wait for job to be routed
+        while not (self.job_has_been_routed() or
+                   self.job_held_or_started_or_terminated() or
+                   self.routed_timeout_expired()):
             time.sleep(self.poll_interval)
+
+        if (self.job_has_been_routed(1)):
+            # wait for job to run and finish
+            while not (self.job_held_or_terminated() or
+                       self.completed_timeout_expired()):
+                time.sleep(self.poll_interval)
+
+            if not self.job_held_or_terminated():
+                self.cancel_job()
+        else:
+            self.cancel_job()
 
         self.details.append("--- Job Log ---\n\n" + self.read_joblog())
 
@@ -158,7 +176,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             self.warning("Test job had a shadow exception.")
         elif 'executing' in stats:
             self.success("Test job successfully started on batch system.")
-        elif self.job_has_been_routed():
+        elif self.job_has_been_routed(1):
             self.success("Test job was successfully routed.")
         else:
             self.warning("Test job not routed within timeout window.")
@@ -188,6 +206,12 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
 
         return re.sub(r'\n +', r'\n', txt)
 
+    def cmd_details(self, msg, out, err):
+        self.details.append(
+            "%s.  Command output:\n"
+            "---\n%s\n---\n%s\n---\n" % (msg, out.strip(), err.strip())
+        )
+
     def do_condor_submit(self):
         submit_filename = "%s.sub" % self.metric
         sf = open(submit_filename, "w")
@@ -197,10 +221,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         out,err,ret = run_with_subprocess(["condor_submit", submit_filename])
 
         if ret != 0:
-            self.details.append(
-                "Problem submitting job to condor.  Command output:\n"
-                "---\n%s\n---\n%s\n---\n" % (out.strip(), err.strip())
-            )
+            self.cmd_details("Problem submitting job to condor", out, err)
             return False
 
         # Determine the job cluster ID
@@ -213,6 +234,12 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             self.details.append("Could not determine job cluster ID "
                                 "from output:\n" + out)
             return False
+
+    def cancel_job(self):
+        out,err,ret = run_with_subprocess(["condor_rm", self.local_job_id])
+
+        if ret != 0:
+            self.cmd_details("Problem removing condor job", out, err)
 
     def get_grid_job_id(self):
         if hasattr(self, 'grid_job_id'):
@@ -231,11 +258,13 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         else:
             return False
 
-    def job_has_been_routed(self):
+    def job_has_been_routed(self, no_retry=False):
         """ for now just poll to see if routed attr appears """
 
         if hasattr(self, 'routed_job_id'):
             return self.routed_job_id
+        elif no_retry:
+            return False
 
         if not self.get_grid_job_id():
             return False
@@ -311,6 +340,9 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         stats = self.parse_joblog()
         return stats & set(['held', 'executing', 'terminated', 'aborted'])
 
+    def job_held_or_terminated(self):
+        stats = self.parse_joblog()
+        return stats & set(['held', 'terminated', 'aborted'])
 
 def main():
     probe = BatchSubmissionProbe()
