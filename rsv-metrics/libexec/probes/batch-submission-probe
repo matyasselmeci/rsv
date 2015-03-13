@@ -110,8 +110,8 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         self.parseopt()
         self.set_rsvmetric()
 
-        # TODO: get these from configuration
-        self.job_timeout = 600  # self.get_job_timeout() or 600
+        default_timeout = 600
+        self.job_timeout = self.get_job_timeout() or default_timeout
 
         poll_interval = 5
 
