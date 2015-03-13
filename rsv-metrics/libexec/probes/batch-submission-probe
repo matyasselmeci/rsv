@@ -146,10 +146,6 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
 
     def submit_file_txt(self):
         job_timeout = self.job_timeout
-
-        #job_timeout = ( self.rsvmetric.get_timeout() or
-        #                self.rsv.config.get("rsv", "job-timeout") )
-
         host = self.host
         metric = self.metric
 
