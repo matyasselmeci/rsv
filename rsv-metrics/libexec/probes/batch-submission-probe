@@ -188,8 +188,6 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             self.success("Test job successfully started on batch system.")
         elif self.job_has_been_routed(1):
             self.success("Test job was successfully routed.")
-        elif 'aborted' in stats:
-            self.warning("Test job was aborted.")
         else:
             self.warning("Test job not routed within timeout window.")
 
