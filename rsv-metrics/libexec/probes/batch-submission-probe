@@ -107,6 +107,16 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         self.completed_timeout = completed_timeout
         self.routed_timeout    = routed_timeout
 
+        show_timeout_settings = False
+        if show_timeout_settings:
+            self.add_details('\n'.join((
+                "Current timeout settings:",
+                "routed timeout:    %s" % routed_timeout,
+                "completed timeout: %s" % completed_timeout,
+                "cancelled timeout: %s" % cancelled_timeout,
+                "rsv job-timeout:   %s" % probe_timeout))
+            )
+
     def routed_timeout_expired(self):
         return time.time() > self.starttime + self.routed_timeout
 
