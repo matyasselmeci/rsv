@@ -58,7 +58,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
 #   def parseopt(self):
 #       options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
 
-    def get_job_timeout(self):
+    def get_probe_timeout(self):
         # sadly there does not seem to be a better way to get this...
         # eventually, it would be nice to have RSV put this into the
         # probe's environment.
@@ -81,6 +81,33 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             if rsv_timeout is not None:
                 return int(rsv_timeout)
 
+    def setup_timeouts(self):
+        default_probe_timeout   = 600
+        poll_interval           = 5
+        cancelled_timeout_ratio = 2.0   # multiple of poll_interval
+        completed_timeout_ratio = 0.90  # multiple of cancelled_timeout
+        routed_timeout_ratio    = 0.75  # multiple of cancelled_timeout
+
+        # time when whe expect rsv to kill the probe
+        probe_timeout = self.get_probe_timeout() or default_probe_timeout
+
+        # time to give up waiting for job to cancel, before rsv kills the probe
+        cancelled_timeout = int(
+            probe_timeout - poll_interval * cancelled_timeout_ratio
+        )
+
+        # time to cancel job, before job gets routed
+        routed_timeout = int(cancelled_timeout * routed_timeout_ratio)
+
+        # time to cancel job, before executing job completes
+        completed_timeout = int(cancelled_timeout * completed_timeout_ratio)
+
+        self.probe_timeout     = probe_timeout
+        self.poll_interval     = poll_interval
+        self.cancelled_timeout = cancelled_timeout
+        self.completed_timeout = completed_timeout
+        self.routed_timeout    = routed_timeout
+
     def set_rsvmetric(self):
         for metric in self.supported_metrics:
             if self.metric == metric.name:
@@ -91,7 +118,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             self.rsvmetric = self.supported_metrics[0]
 
     def timeout_expired(self):
-        return time.time() > self.starttime + self.job_timeout
+        return time.time() > self.starttime + self.probe_timeout
 
     def details_str(self):
         if self.details:
@@ -109,12 +136,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         """Main routine for the probe"""
         self.parseopt()
         self.set_rsvmetric()
-
-        default_timeout = 600
-        self.job_timeout = self.get_job_timeout() or default_timeout
-
-        poll_interval = 5
-
+        self.setup_timeouts()
         self.starttime = time.time()
 
         if not self.do_condor_submit():
@@ -123,7 +145,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         while not (self.timeout_expired() or
                    self.job_has_been_routed() or
                    self.job_held_or_started_or_terminated()):
-            time.sleep(poll_interval)
+            time.sleep(self.poll_interval)
 
         self.details.append("--- Job Log ---\n\n" + self.read_joblog())
 
@@ -145,7 +167,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             self.warning("Test job not routed within timeout window.")
 
     def submit_file_txt(self):
-        job_timeout = self.job_timeout
+        probe_timeout = self.probe_timeout
         host = self.host
         metric = self.metric
 
@@ -165,7 +187,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         use_x509userproxy = true
         +Owner=undefined
         queue
-        """ % (host, host, job_timeout + 1, metric)
+        """ % (host, host, probe_timeout + 1, metric)
 
         return re.sub(r'\n +', r'\n', txt)
 
