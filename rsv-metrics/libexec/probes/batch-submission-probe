@@ -141,6 +141,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         self.set_rsvmetric()
         self.setup_timeouts()
         self.starttime = time.time()
+        self.cancel_attempted = False
 
         if not self.do_condor_submit():
             self.warning("Condor submit failed.")
@@ -161,6 +162,12 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
                 self.cancel_job()
         else:
             self.cancel_job()
+
+        if self.cancel_attempted:
+            while self.job_in_condor_q() and not (
+                    self.job_held_or_terminated() or
+                    self.cancelled_timeout_expired()):
+                time.sleep(self.poll_interval)
 
         self.details.append("--- Job Log ---\n\n" + self.read_joblog())
 
@@ -236,10 +243,23 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             return False
 
     def cancel_job(self):
+        self.details.append("Cancelling job " + self.local_job_id)
+        self.cancelled = True
+
         out,err,ret = run_with_subprocess(["condor_rm", self.local_job_id])
 
         if ret != 0:
             self.cmd_details("Problem removing condor job", out, err)
+
+    def job_in_condor_q(self):
+        out,err,ret = run_with_subprocess([
+            "condor_q", "-format", "%s", "ClusterId", self.local_job_id
+        ])
+
+        if out == self.local_job_id:
+            return True
+        #elif out or ret:
+        #    self.cmd_details("Unexpected condor_q results", out, err)
 
     def get_grid_job_id(self):
         if hasattr(self, 'grid_job_id'):
