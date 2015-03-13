@@ -186,7 +186,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             self.warning("Test job not routed within timeout window.")
 
     def submit_file_txt(self):
-        probe_timeout = self.probe_timeout
+        sleep_time = 1
         host = self.host
         metric = self.metric
 
@@ -206,7 +206,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         use_x509userproxy = true
         +Owner=undefined
         queue
-        """ % (host, host, probe_timeout + 1, metric)
+        """ % (host, host, sleep_time, metric)
 
         return re.sub(r'\n +', r'\n', txt)
 
