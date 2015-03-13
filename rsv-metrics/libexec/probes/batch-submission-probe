@@ -70,10 +70,12 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         if self.metric:
             metric_timeout = metrics[self.metric].get_timeout()
             if metric_timeout is not None:
-                return metric_timeout
+                return int(metric_timeout)
 
         if rsv.config.has_option('rsv', 'job-timeout'):
-            return rsv.config.get('rsv', 'job-timeout')
+            rsv_timeout = rsv.config.get('rsv', 'job-timeout')
+            if rsv_timeout is not None:
+                return int(rsv_timeout)
 
     def set_rsvmetric(self):
         for metric in self.supported_metrics:
