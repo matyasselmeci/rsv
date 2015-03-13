@@ -82,7 +82,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
                 return int(rsv_timeout)
 
     def setup_timeouts(self):
-        default_probe_timeout   = 600
+        default_probe_timeout   = 1200
         poll_interval           = 5
         cancelled_timeout_ratio = 2.0   # multiple of poll_interval
         completed_timeout_ratio = 0.90  # multiple of cancelled_timeout
