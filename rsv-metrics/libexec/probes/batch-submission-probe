@@ -172,8 +172,6 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
 
         if 'terminated' in stats:
             self.success("Test job successfully completed.")
-        elif 'aborted' in stats:
-            self.warning("Test job was aborted.")
         elif 'held' in stats:
             self.warning("Test job was put on Hold status.")
         elif 'shadow_ex' in stats:
@@ -182,6 +180,8 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             self.success("Test job successfully started on batch system.")
         elif self.job_has_been_routed(1):
             self.success("Test job was successfully routed.")
+        elif 'aborted' in stats:
+            self.warning("Test job was aborted.")
         else:
             self.warning("Test job not routed within timeout window.")
 
