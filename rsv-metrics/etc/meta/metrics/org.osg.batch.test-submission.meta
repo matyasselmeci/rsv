@@ -2,7 +2,7 @@
 default-cron-interval = 47 */6 * * *
 
 execute = local
-service-type = OSG-CE
+service-type = OSG-HTCondor-CE
 output-format = brief
 need-proxy = true
 enable-by-default = false

@@ -59,10 +59,11 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
     def __init__(self):
         rsvprobe.RSVProbe.__init__(self)
         self.metric = ""
-        metric = rsvprobe.RSVMetric("OSG-CE", "org.osg.batch.test-submission",
+        metric = rsvprobe.RSVMetric("OSG-HTCondor-CE",
+                                    "org.osg.batch.test-submission",
                                     rsvprobe.RSVMetric.STATUS)
-        metric.service_version = ">= OSG CE 1.0.0"
-        metric.probe_type = "OSG-CE"
+        metric.service_version = ">= OSG HTCondor-CE 1.0.0"
+        metric.probe_type = "OSG-HTCondor-CE"
         self.supported_metrics = [metric]
         self.details = []
 
