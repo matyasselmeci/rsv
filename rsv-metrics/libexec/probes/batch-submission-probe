@@ -8,8 +8,6 @@ import shutil
 import tempfile
 import subprocess
 
-#sys.path.insert(0, '.')
-
 import rsvprobe
 
 def run_with_subprocess(cmd):
@@ -108,15 +106,6 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         self.completed_timeout = completed_timeout
         self.routed_timeout    = routed_timeout
 
-    def set_rsvmetric(self):
-        for metric in self.supported_metrics:
-            if self.metric == metric.name:
-                self.rsvmetric = metric
-                break
-        else:
-            # XXX: defaults to first supported metric if unspecified...
-            self.rsvmetric = self.supported_metrics[0]
-
     def routed_timeout_expired(self):
         return time.time() > self.starttime + self.routed_timeout
 
@@ -138,7 +127,6 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
     def run(self):
         """Main routine for the probe"""
         self.parseopt()
-        self.set_rsvmetric()
         self.setup_timeouts()
         self.starttime = time.time()
         self.timeouts_hit = set()
