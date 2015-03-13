@@ -41,6 +41,19 @@ def run_in_tempdir(fn):
         shutil.rmtree(tmpd)
     return ret
 
+def get_rsv_job_timeout():
+    # sadly there does not seem to be a better way to get this...
+    import rsv.RSV
+
+    class FakeOptions:
+        verbose = False
+
+    rsv = rsv.RSV.RSV(FakeOptions())
+
+    if rsv.config.has_option('rsv', 'job-timeout'):
+        return rsv.config.get('rsv', 'job-timeout')
+
+
 class BatchSubmissionProbe(rsvprobe.RSVProbe):
 
     def __init__(self):
@@ -87,6 +100,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
 
         # TODO: get these from configuration
         self.job_timeout = 600  # self.rsvmetric.config_get("job-timeout")
+                                # or get_rsv_job_timeout()
         poll_interval = 5
 
         self.starttime = time.time()
