@@ -60,12 +60,16 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
 
     def get_job_timeout(self):
         # sadly there does not seem to be a better way to get this...
+        # eventually, it would be nice to have RSV put this into the
+        # probe's environment.
         import rsv.RSV
+        import optparse
 
-        class EmptyOptions:
-            verbose = False
+        # RSV constructor expects at least options.verbose to be set
+        options = optparse.OptionParser()
+        options.verbose = False
 
-        rsv = rsv.RSV.RSV(EmptyOptions())
+        rsv = rsv.RSV.RSV(options)
         metrics = rsv.get_metric_info()
         if self.metric:
             metric_timeout = metrics[self.metric].get_timeout()
