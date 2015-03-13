@@ -171,6 +171,9 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
                 time.sleep(self.poll_interval)
             if self.job_in_condor_q():
                 self.timeouts_hit.add('cancelled')
+                self.details.append("Timed out waiting for job to cancel.")
+            else:
+                self.details.append("Job successfully removed.")
 
         self.details.append("--- Job Log ---\n\n" + self.read_joblog())
 
