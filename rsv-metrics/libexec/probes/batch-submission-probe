@@ -5,6 +5,7 @@ import re
 import sys
 import time
 import shutil
+import datetime
 import tempfile
 import subprocess
 
@@ -118,6 +119,13 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
     def details_str(self):
         return ''.join('\n\n' + x for x in self.details)
 
+    def add_details(self, msg, add_timestamp=True):
+        if add_timestamp:
+            now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            self.details.append("%s: %s" % (now, msg))
+        else:
+            self.details.append(msg)
+
     def success(self, msg):
         self.return_ok(msg + self.details_str())
 
@@ -159,11 +167,11 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
                 time.sleep(self.poll_interval)
             if self.job_in_condor_q():
                 self.timeouts_hit.add('cancelled')
-                self.details.append("Timed out waiting for job to cancel.")
+                self.add_details("Timed out waiting for job to cancel.")
             else:
-                self.details.append("Job successfully removed.")
+                self.add_details("Job successfully removed.")
 
-        self.details.append("--- Job Log ---\n\n" + self.read_joblog())
+        self.add_details("--- Job Log ---\n\n" + self.read_joblog(), 0)
 
         self.do_status_report()
 
@@ -211,7 +219,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         return re.sub(r'\n +', r'\n', txt)
 
     def cmd_details(self, msg, out, err):
-        self.details.append(
+        self.add_details(
             "%s.  Command output:\n"
             "---\n%s\n---\n%s\n---\n" % (msg, out.strip(), err.strip())
         )
@@ -232,16 +240,16 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         match = re.search("submitted to cluster (\d+)\.", out)
         if match:
             self.local_job_id = match.group(1)
-            self.details.append("Condor job cluster ID: " + self.local_job_id)
+            self.add_details("Condor job cluster ID: " + self.local_job_id)
             return True
         else:
-            self.details.append("Could not determine job cluster ID "
+            self.add_details("Could not determine job cluster ID "
                                 "from output:\n" + out)
             return False
 
     def cancel_job(self, timeout_hit):
         self.timeouts_hit.add(timeout_hit)
-        self.details.append("Job %s not %s within timeout, cancelling." % (
+        self.add_details("Job %s not %s within timeout, cancelling." % (
                             self.local_job_id, timeout_hit))
         out,err,ret = run_with_subprocess(["condor_rm", self.local_job_id])
 
@@ -270,7 +278,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         match = re.search(r' (\d+\.\d+)$', out)
         if match:
             self.grid_job_id = match.group(1)
-            self.details.append("Condor GridJobId: %s" % self.grid_job_id)
+            self.add_details("Condor GridJobId: %s" % self.grid_job_id)
             return self.grid_job_id
         else:
             return False
@@ -295,7 +303,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         match = re.search(r'^(\d+\.\d+)$', out)
         if match:
             self.routed_job_id = match.group(1)
-            self.details.append("Grid RoutedToJobId: %s" % self.routed_job_id)
+            self.add_details("Grid RoutedToJobId: %s" % self.routed_job_id)
             return self.routed_job_id
         else:
             return False
