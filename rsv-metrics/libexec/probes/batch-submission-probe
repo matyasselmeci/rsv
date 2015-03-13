@@ -41,18 +41,6 @@ def run_in_tempdir(fn):
         shutil.rmtree(tmpd)
     return ret
 
-def get_rsv_job_timeout():
-    # sadly there does not seem to be a better way to get this...
-    import rsv.RSV
-
-    class FakeOptions:
-        verbose = False
-
-    rsv = rsv.RSV.RSV(FakeOptions())
-
-    if rsv.config.has_option('rsv', 'job-timeout'):
-        return rsv.config.get('rsv', 'job-timeout')
-
 
 class BatchSubmissionProbe(rsvprobe.RSVProbe):
 
@@ -69,6 +57,23 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
 
 #   def parseopt(self):
 #       options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
+
+    def get_job_timeout(self):
+        # sadly there does not seem to be a better way to get this...
+        import rsv.RSV
+
+        class EmptyOptions:
+            verbose = False
+
+        rsv = rsv.RSV.RSV(EmptyOptions())
+        metrics = rsv.get_metric_info()
+        if self.metric:
+            metric_timeout = metrics[self.metric].get_timeout()
+            if metric_timeout is not None:
+                return metric_timeout
+
+        if rsv.config.has_option('rsv', 'job-timeout'):
+            return rsv.config.get('rsv', 'job-timeout')
 
     def set_rsvmetric(self):
         for metric in self.supported_metrics:
@@ -100,8 +105,8 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         self.set_rsvmetric()
 
         # TODO: get these from configuration
-        self.job_timeout = 600  # self.rsvmetric.config_get("job-timeout")
-                                # or get_rsv_job_timeout()
+        self.job_timeout = 600  # self.get_job_timeout() or 600
+
         poll_interval = 5
 
         self.starttime = time.time()
