@@ -142,6 +142,96 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
     def warning(self, msg):
         self.return_warning(msg + self.details_str())
 
+
+    def run_state(self, state):
+        getattr(self, 'run_state_' + state)()
+
+    def run_state_begin(self):
+        # wait for job to be routed, or further
+        while True:
+            if self.job_has_been_routed():
+                state = 'routed'
+                break
+            state = self.get_log_state(['completed', 'held', 'executing'])
+            if state:
+                break
+            if self.routed_timeout_expired():
+                state = 'routed_timeout'
+                break
+            time.sleep(self.poll_interval)
+
+        self.run_state(state)
+
+    def run_state_completed(self):
+        self.run_state('end')
+
+    def run_state_routed(self):
+        # wait for job to run and finish
+        while True:
+            state = self.get_log_state(['completed', 'held', 'executing'])
+            if state:
+                break
+            if self.completed_timeout_expired():
+                state = 'completed_timeout'
+                break
+            time.sleep(self.poll_interval)
+
+        self.run_state(state)
+            
+    def run_state_executing(self):
+        # wait for job to finish running
+        while True:
+            state = self.get_log_state(['completed', 'held'])
+            if state:
+                break
+            if self.completed_timeout_expired():
+                state = 'completed_timeout'
+                break
+            time.sleep(self.poll_interval)
+
+        self.run_state(state)
+            
+    def run_state_held(self):
+        self.cancel_job(held=True)
+        self.run_state('cancel')
+
+    def run_state_completed_timeout(self):
+        self.cancel_job(timeout_hit='completed')
+        self.run_state('cancel')
+
+    def run_state_routed_timeout(self):
+        self.cancel_job(timeout_hit='routed')
+        self.run_state('cancel')
+
+    def run_state_cancel(self):
+        # cancel was attempted, wait for clean removal
+        while True:
+            state = self.get_log_state(['completed'])
+            if state:
+                break
+            if not self.job_in_condor_q():
+                state = 'cancelled'
+                break
+            if self.cancelled_timeout_expired()
+                state = 'cancelled_timeout'
+                break
+            time.sleep(self.poll_interval)
+
+        self.run_state(state)
+
+    def run_state_cancelled(self):
+        self.add_details("Job successfully removed.")
+        self.run_state('end')
+
+    def run_state_cancelled_timeout(self):
+        self.timeouts_hit.add('cancelled')
+        self.add_details("Timed out waiting for job to cancel.")
+        self.run_state('end')
+
+    def run_state_end(self):
+        # exit point
+        pass
+
     def run(self):
         """Main routine for the probe"""
         self.parseopt()
@@ -152,34 +242,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         if not self.do_condor_submit():
             self.warning("Condor submit failed.")
 
-        # wait for job to be routed
-        while not (self.job_has_been_routed() or
-                   self.job_held_or_started_or_terminated() or
-                   self.routed_timeout_expired()):
-            time.sleep(self.poll_interval)
-
-        if (self.job_has_been_routed(1)):
-            # wait for job to run and finish
-            while not (self.job_held_or_terminated() or
-                       self.completed_timeout_expired()):
-                time.sleep(self.poll_interval)
-
-            if not self.job_held_or_terminated():
-                self.cancel_job('completed')
-        else:
-            self.cancel_job('routed')
-
-        if self.timeouts_hit:
-            # cancel was attempted, wait for clean removal
-            while self.job_in_condor_q() and not (
-                    self.job_held_or_terminated() or
-                    self.cancelled_timeout_expired()):
-                time.sleep(self.poll_interval)
-            if self.job_in_condor_q():
-                self.timeouts_hit.add('cancelled')
-                self.add_details("Timed out waiting for job to cancel.")
-            else:
-                self.add_details("Job successfully removed.")
+        self.run_state('begin')
 
         self.add_details("--- Job Log ---\n\n" + self.read_joblog(), 0)
 
@@ -188,7 +251,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
     def do_status_report(self):
         stats = self.parse_joblog()
 
-        if 'terminated' in stats:
+        if 'completed' in stats:
             self.success("Test job successfully completed.")
         elif 'held' in stats:
             self.warning("Test job was put on Hold status.")
@@ -257,10 +320,15 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
                                 "from output:\n" + out)
             return False
 
-    def cancel_job(self, timeout_hit):
-        self.timeouts_hit.add(timeout_hit)
-        self.add_details("Job %s not %s within timeout, cancelling." % (
-                            self.local_job_id, timeout_hit))
+    def cancel_job(self, timeout_hit=None, held=False):
+        if timeout_hit:
+            self.timeouts_hit.add(timeout_hit)
+            self.add_details("Job %s not %s within timeout, cancelling." % (
+                                self.local_job_id, timeout_hit))
+        elif held:
+            self.add_details("Job %s was held, cancelling." %
+                                self.local_job_id)
+
         out,err,ret = run_with_subprocess(["condor_rm", self.local_job_id])
 
         if ret != 0:
@@ -326,7 +394,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         status_map = {
             'executing'  :  1,
             'exe_error'  :  2,
-            'terminated' :  5,
+            'completed'  :  5,
             'shadow_ex'  :  7,
             'aborted'    :  9,
             'held'       : 12,
@@ -337,47 +405,15 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             if re.search(r'^%03d ' % id, log_txt, re.M):
                 stats.add(name)
 
+        self.stats = stats
         return stats
 
-    def job_held_or_started_or_terminated(self):
-        """
-        phase 2: watch logs for:
-            (1) "Job executing on host:"
-            (9) "Job was aborted by the user."
-            (5) "Job terminated."
-            (2,21,?) "error" ?
-
-        or:
-            Submit                  0
-            Execute                 1
-            Executable error        2
-            Checkpointed            3
-            Job evicted             4
-            Job terminated          5
-            Image size              6
-            Shadow exception        7
-            Generic                 8
-            Job aborted             9
-            Job suspended           10
-            Job unsuspended         11
-            Job held                12
-            Job released            13
-            Node execute            14
-            Node terminated         15
-            Post script terminated  16
-            Globus submit           17
-            Globus submit failed    18
-            Globus resource up      19
-            Globus resource down    20
-            Remote error            21
-        """
-
-        stats = self.parse_joblog()
-        return stats & set(['held', 'executing', 'terminated', 'aborted'])
-
-    def job_held_or_terminated(self):
-        stats = self.parse_joblog()
-        return stats & set(['held', 'terminated', 'aborted'])
+    def get_log_state(self, states):
+        """ return first state that appears in joblog """
+        self.parse_joblog()
+        for st in states:
+            if st in self.stats:
+                return st
 
 def main():
     probe = BatchSubmissionProbe()
