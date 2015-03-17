@@ -85,7 +85,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         poll_interval           = 5
         cancelled_timeout_ratio = 2.0   # multiple of poll_interval
         completed_timeout_ratio = 0.90  # multiple of cancelled_timeout
-        routed_timeout_ratio    = 0.75  # multiple of cancelled_timeout
+        batch_timeout_ratio     = 0.75  # multiple of cancelled_timeout
 
         # time when whe expect rsv to kill the probe
         probe_timeout = self.get_probe_timeout() or default_probe_timeout
@@ -95,8 +95,8 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             probe_timeout - poll_interval * cancelled_timeout_ratio
         )
 
-        # time to cancel job, before job gets routed
-        routed_timeout = int(cancelled_timeout * routed_timeout_ratio)
+        # time to cancel job, before job hits batch system
+        batch_timeout = int(cancelled_timeout * batch_timeout_ratio)
 
         # time to cancel job, before executing job completes
         completed_timeout = int(cancelled_timeout * completed_timeout_ratio)
@@ -105,20 +105,20 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         self.poll_interval     = poll_interval
         self.cancelled_timeout = cancelled_timeout
         self.completed_timeout = completed_timeout
-        self.routed_timeout    = routed_timeout
+        self.batch_timeout     = batch_timeout
 
         show_timeout_settings = False
         if show_timeout_settings:
             self.add_details('\n'.join((
                 "Current timeout settings:",
-                "routed timeout:    %s" % routed_timeout,
+                "batch timeout:     %s" % batch_timeout,
                 "completed timeout: %s" % completed_timeout,
                 "cancelled timeout: %s" % cancelled_timeout,
                 "rsv job-timeout:   %s" % probe_timeout))
             )
 
-    def routed_timeout_expired(self):
-        return time.time() > self.starttime + self.routed_timeout
+    def batch_timeout_expired(self):
+        return time.time() > self.starttime + self.batch_timeout
 
     def completed_timeout_expired(self):
         return time.time() > self.starttime + self.completed_timeout
@@ -149,14 +149,17 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
     def run_state_begin(self):
         # wait for job to be routed, or further
         while True:
+            if self.job_hit_batch_system():
+                state = 'batch'
+                break
             if self.job_has_been_routed():
                 state = 'routed'
                 break
             state = self.get_log_state(['completed', 'held', 'executing'])
             if state:
                 break
-            if self.routed_timeout_expired():
-                state = 'routed_timeout'
+            if self.batch_timeout_expired():
+                state = 'batch_timeout'
                 break
             time.sleep(self.poll_interval)
 
@@ -166,6 +169,22 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         self.run_state('end')
 
     def run_state_routed(self):
+        # wait for job to hit batch system or run and finish
+        while True:
+            if self.job_hit_batch_system():
+                state = 'batch'
+                break
+            state = self.get_log_state(['completed', 'held', 'executing'])
+            if state:
+                break
+            if self.completed_timeout_expired():
+                state = 'completed_timeout'
+                break
+            time.sleep(self.poll_interval)
+
+        self.run_state(state)
+
+    def run_state_batch(self):
         # wait for job to run and finish
         while True:
             state = self.get_log_state(['completed', 'held', 'executing'])
@@ -177,7 +196,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             time.sleep(self.poll_interval)
 
         self.run_state(state)
-            
+
     def run_state_executing(self):
         # wait for job to finish running
         while True:
@@ -190,7 +209,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             time.sleep(self.poll_interval)
 
         self.run_state(state)
-            
+
     def run_state_held(self):
         self.cancel_job(held=True)
         self.run_state('cancel')
@@ -199,8 +218,8 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
         self.cancel_job(timeout_hit='completed')
         self.run_state('cancel')
 
-    def run_state_routed_timeout(self):
-        self.cancel_job(timeout_hit='routed')
+    def run_state_batch_timeout(self):
+        self.cancel_job(timeout_hit='routed to batch system')
         self.run_state('cancel')
 
     def run_state_cancel(self):
@@ -212,7 +231,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             if not self.job_in_condor_q():
                 state = 'cancelled'
                 break
-            if self.cancelled_timeout_expired()
+            if self.cancelled_timeout_expired():
                 state = 'cancelled_timeout'
                 break
             time.sleep(self.poll_interval)
@@ -259,8 +278,10 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             self.warning("Test job had a shadow exception.")
         elif 'executing' in stats:
             self.success("Test job successfully started on batch system.")
+        elif self.job_hit_batch_system(1):
+            self.success("Test job was successfully routed to batch system.")
         elif self.job_has_been_routed(1):
-            self.success("Test job was successfully routed.")
+            self.warning("Test job was routed but did not hit batch system.")
         elif 'aborted' in stats and not self.timeouts_hit:
             self.warning("Test job was aborted, but not by us.")
         else:
@@ -362,7 +383,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             return False
 
     def job_has_been_routed(self, no_retry=False):
-        """ for now just poll to see if routed attr appears """
+        """ poll to see if RoutedToJobId attr appears """
 
         if hasattr(self, 'routed_job_id'):
             return self.routed_job_id
@@ -385,7 +406,75 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             return self.routed_job_id
         else:
             return False
-        
+
+    def job_hit_batch_system(self, no_retry=False):
+        """ in the case of non-htcondor batch, RoutedToJobId is not the batch
+        system's job id ... need to use RoutedFromJobId's GridJobId ...
+        will be something like:
+
+        batch pbs cehostname_9619_cehostname#3904.0#1426545965 pbs/20150316/278
+
+        where the last token appears once the job actually lands on the batch
+        system.
+        """
+
+        if hasattr(self, 'batch_system_id'):
+            return self.batch_system_id
+        elif no_retry:
+            return False
+
+        if not self.job_has_been_routed():
+            return False
+
+        if self.batch_system_is_local_condor():
+            # the RoutedToJobId is the real job
+            self.batch_system_id = self.routed_job_id
+            return self.batch_system_id
+        else:
+            if self.get_routed_grid_job_id():
+                self.batch_system_id = self.routed_grid_job_id
+                return self.batch_system_id
+            # else hasn't hit batch system yet
+
+    def batch_system_is_local_condor(self):
+        """ if batch system is "Local Condor", RoutedToJobId will refer to
+        the job id on the local htcondor batch system; otherwise it will refer
+        to a job on the HTCondor CE, which has a RoutedFromJobId attribute
+        referring back to our local job's GridJobId """
+
+        if hasattr(self, 'local_condor_batch'):
+            return self.local_condor_batch
+
+        ce = self.host
+        out,err,ret = run_with_subprocess([
+            "condor_q", "-name", ce, "-pool", ce + ":9619",
+            "-format", "%s", "RoutedFromJobId", self.routed_job_id
+        ])
+
+        match = re.search(r'^(\d+\.\d+)$', out)
+        non_htcondor = match and match.group(1) == self.grid_job_id
+        self.local_condor_batch = not non_htcondor
+        return self.local_condor_batch
+
+    def get_routed_grid_job_id(self):
+        if hasattr(self, 'routed_grid_job_id'):
+            return self.routed_grid_job_id
+
+        if not self.get_grid_job_id():
+            return False
+
+        ce = self.host
+        out,err,ret = run_with_subprocess([
+            "condor_q", "-name", ce, "-pool", ce + ":9619",
+            "-format", "%s", "GridJobId", self.routed_job_id
+        ])
+
+        batch_ids = out.split()
+        if len(batch_ids) == 4:
+            self.routed_grid_job_id = batch_ids[3]
+            self.add_details("Routed GridJobId: %s" % self.routed_grid_job_id)
+            return self.routed_grid_job_id
+
     def read_joblog(self):
         return open("%s.log" % self.metric).read()
 
