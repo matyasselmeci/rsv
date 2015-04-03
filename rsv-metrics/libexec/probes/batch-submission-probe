@@ -155,7 +155,8 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             if self.job_has_been_routed():
                 state = 'routed'
                 break
-            state = self.get_log_state(['completed', 'held', 'executing'])
+            state = self.get_log_state(['completed', 'aborted', 'held',
+                                        'executing'])
             if state:
                 break
             if self.batch_timeout_expired():
@@ -174,11 +175,12 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
             if self.job_hit_batch_system():
                 state = 'batch'
                 break
-            state = self.get_log_state(['completed', 'held', 'executing'])
+            state = self.get_log_state(['completed', 'aborted', 'held',
+                                        'executing'])
             if state:
                 break
-            if self.completed_timeout_expired():
-                state = 'completed_timeout'
+            if self.batch_timeout_expired():
+                state = 'batch_timeout'
                 break
             time.sleep(self.poll_interval)
 
@@ -187,7 +189,8 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
     def run_state_batch(self):
         # wait for job to run and finish
         while True:
-            state = self.get_log_state(['completed', 'held', 'executing'])
+            state = self.get_log_state(['completed', 'aborted', 'held',
+                                        'executing'])
             if state:
                 break
             if self.completed_timeout_expired():
@@ -200,7 +203,7 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
     def run_state_executing(self):
         # wait for job to finish running
         while True:
-            state = self.get_log_state(['completed', 'held'])
+            state = self.get_log_state(['completed', 'aborted', 'held'])
             if state:
                 break
             if self.completed_timeout_expired():
@@ -213,6 +216,11 @@ class BatchSubmissionProbe(rsvprobe.RSVProbe):
     def run_state_held(self):
         self.cancel_job(held=True)
         self.run_state('cancel')
+
+    def run_state_aborted(self):
+        # job was removed, but not by the probe
+        self.add_details("Job was unexpectedly aborted.")
+        self.run_state('end')
 
     def run_state_completed_timeout(self):
         self.cancel_job(timeout_hit='completed')
