@@ -20,7 +20,7 @@ if(!defined($options{'srm-destination-dir'}) or !defined($options{'srm-webservic
     usage(%extra_opts);
 }
 
-find_binaries("srm-copy", "srm-ls", "srm-rm");
+find_binaries("gfal-copy", "gfal-ls", "gfal-rm");
 
 # 
 # Transfer to the remote server
@@ -41,19 +41,19 @@ my $remote_file = basename($local_file) . ".$time.$$";
 my $remote_uri = "srm://$options{u}/$options{'srm-webservice-path'}?SFN=$options{'srm-destination-dir'}/$remote_file";
 
 # TODO - might need '-x509_user_proxy=' included in here
-my $srm_copy_cmd = shellquote("srm-copy", $local_uri, $remote_uri) . " 2>&1";
+my $srm_copy_cmd = shellquote("gfal-copy", $local_uri, $remote_uri) . " 2>&1";
 my $out = `$srm_copy_cmd`;
 if($? != 0) {
     print "CRITICAL\n";
     print "Failed to transfer file to remote server.\n";
     print "Command: $srm_copy_cmd\n";
-    print "Output from srm-copy:\n$out\n";
+    print "Output from gfal-copy:\n$out\n";
     exit 0;
 }
 else {
     print STDERR "Successful transfer to remote server.\n";
     print STDERR "Command: $srm_copy_cmd\n";
-    print STDERR "Output from srm-copy:\n$out\n\n";
+    print STDERR "Output from gfal-copy:\n$out\n\n";
 }
 
 #
@@ -66,14 +66,14 @@ my $new_local_file = "/tmp/${remote_file}.copy";
 my $new_local_uri = "file://$new_local_file";
 
 # TODO - might need '-x509_user_proxy=' included in here
-$srm_copy_cmd = shellquote("srm-copy", $remote_uri, $new_local_uri) . " 2>&1";
+$srm_copy_cmd = shellquote("gfal-copy", $remote_uri, $new_local_uri) . " 2>&1";
 $out = `$srm_copy_cmd`;
 if($? != 0) {
     print "CRITICAL\n";
     print "Successful transfer to remote server.\n";
     print "Failed to transfer file from remote server.\n";
     print "Command: $srm_copy_cmd\n";
-    print "Output from srm-copy:\n$out\n";
+    print "Output from gfal-copy:\n$out\n";
     cleanup_files();
     exit 0;
 }
@@ -104,14 +104,14 @@ if($? != 0) {
 #
 
 # The original srmcp-srm-probe did this, so we'll preserve this behavior
-my $srm_ls_cmd = shellquote("srm-ls", $remote_uri) . " 2>&1";
+my $srm_ls_cmd = shellquote("gfal-ls", $remote_uri) . " 2>&1";
 $out = `$srm_ls_cmd`;
 if($? != 0) {
     print "CRITICAL\n";
     print "Successful transfer to remote server.\n";
     print "Successful transfer from remote server.\n";
     print "Original file and received file are identical.\n";
-    print "The remote file could not be listed using srm-ls.\n";
+    print "The remote file could not be listed using gfal-ls.\n";
     print "Command: $srm_ls_cmd\n";
     print "Output:\n$out\n";
     cleanup_files();
@@ -123,7 +123,7 @@ print "OK\n";
 print "Successful transfer to remote host.\n";
 print "Successful transfer from remote host.\n";
 print "Original file and received file are identical.\n";
-print "Remote file was properly listed using srm-ls.\n";
+print "Remote file was properly listed using gfal-ls.\n";
 exit 0;
 
 
@@ -136,16 +136,16 @@ sub cleanup_files {
     }
 
     # And also the remote file
-    my $srm_rm_cmd = shellquote("srm-rm", $remote_uri);
+    my $srm_rm_cmd = shellquote("gfal-rm", $remote_uri);
     my $out = `$srm_rm_cmd`;
-    if (($? != 0)||($out =~ /SRM_FAILURE/)) {
+    if (($? != 0)||($out !~ /\tDELETED$/)) {
         print STDERR "Failed to remove remote file '$remote_uri'.  Output:\n$out\n";
         print "WARNING\n";
         print "Successful transfer to remote server.\n";
         print "Successful transfer from remote server.\n";
         print "Original file and received file are identical.\n";
         print "However, remote file could not be deleted correctly.\n";
-        print "Command: srm-rm $remote_uri\n";
+        print "Command: gfal-rm $remote_uri\n";
         print "Output:\n$out\n";
         exit 0;
     }
