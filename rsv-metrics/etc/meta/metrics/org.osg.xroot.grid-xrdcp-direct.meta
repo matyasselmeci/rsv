@@ -1,0 +1,11 @@
+[org.osg.xroot.grid-xrdcp-direct]
+default-cron-interval = 1,31 * * * *
+
+execute = local
+service-type = xroot
+output-format = brief
+enable-by-default = false
+description = Copy a file from the Xroot server
+
+[org.osg.xroot.grid-xrdcp-direct env]
+

@@ -1,0 +1,11 @@
+[org.atlas.xroot.xrdcp-fxr]
+default-cron-interval = 1,31 * * * *
+
+execute = local
+service-type = xroot
+output-format = brief
+enable-by-default = false
+description = Copy an ATLAS test file via the Federated Xroot Redirector
+
+[org.atlas.xroot.xrdcp-fxr env]
+

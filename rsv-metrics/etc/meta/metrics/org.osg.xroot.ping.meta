@@ -1,0 +1,11 @@
+[org.osg.xroot.ping]
+default-cron-interval = 1,31 * * * *
+
+execute = local
+service-type = xroot
+output-format = brief
+enable-by-default = false
+description = Test a connection to the Xroot server on the Xroot port (1094 by default)
+
+[org.osg.xroot.ping env]
+
