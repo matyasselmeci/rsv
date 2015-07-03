@@ -9,7 +9,8 @@ print_output_header();
 
 my %extra_opts = ("srm-destination-dir=s"  => "Required: Remote destination to put temp file",
                   "srm-webservice-path=s"  => "Required: Remote webservice path, e.g. srm/v2/server",
-                  "srm-protocol-version=i" => "1 or 2");
+                  "srm-protocol-version=i" => "1 or 2",
+                  "verbose"                => "turn on debugging output for gfal-* commands");
 
 my %options = process_command_line(%extra_opts);
 
@@ -43,9 +44,10 @@ $options{'srm-destination-dir'} =~ s{/$}{};
 my $port = $1 || 8443;
 my $remote_file = basename($local_file) . ".$time.$$";
 my $remote_uri = "srm://$host:$port/$options{'srm-webservice-path'}?SFN=$options{'srm-destination-dir'}/$remote_file";
+my @verbose = ('-vvv') if $options{verbose};
 
 # TODO - might need '-x509_user_proxy=' included in here
-my $srm_copy_cmd = shellquote("gfal-copy", $local_uri, $remote_uri) . " 2>&1";
+my $srm_copy_cmd = shellquote("gfal-copy", @verbose, $local_uri, $remote_uri) . " 2>&1";
 my $out = `$srm_copy_cmd`;
 if($? != 0) {
     print "CRITICAL\n";
@@ -70,7 +72,7 @@ my $new_local_file = "/tmp/${remote_file}.copy";
 my $new_local_uri = "file://$new_local_file";
 
 # TODO - might need '-x509_user_proxy=' included in here
-$srm_copy_cmd = shellquote("gfal-copy", $remote_uri, $new_local_uri) . " 2>&1";
+$srm_copy_cmd = shellquote("gfal-copy", @verbose, $remote_uri, $new_local_uri) . " 2>&1";
 $out = `$srm_copy_cmd`;
 if($? != 0) {
     print "CRITICAL\n";
@@ -108,7 +110,7 @@ if($? != 0) {
 #
 
 # The original srmcp-srm-probe did this, so we'll preserve this behavior
-my $srm_ls_cmd = shellquote("gfal-ls", $remote_uri) . " 2>&1";
+my $srm_ls_cmd = shellquote("gfal-ls", @verbose, $remote_uri) . " 2>&1";
 $out = `$srm_ls_cmd`;
 if($? != 0) {
     print "CRITICAL\n";
@@ -140,7 +142,7 @@ sub cleanup_files {
     }
 
     # And also the remote file
-    my $srm_rm_cmd = shellquote("gfal-rm", $remote_uri);
+    my $srm_rm_cmd = shellquote("gfal-rm", @verbose, $remote_uri);
     my $out = `$srm_rm_cmd`;
     if (($? != 0)||($out !~ /\tDELETED$/)) {
         print STDERR "Failed to remove remote file '$remote_uri'.  Output:\n$out\n";
