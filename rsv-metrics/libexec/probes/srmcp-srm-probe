@@ -45,6 +45,7 @@ my $port = $1 || 8443;
 my $remote_file = basename($local_file) . ".$time.$$";
 my $remote_uri = "srm://$host:$port/$options{'srm-webservice-path'}?SFN=$options{'srm-destination-dir'}/$remote_file";
 my @verbose = ('-vvv') if $options{verbose};
+*STDERR = *STDOUT      if $options{verbose};
 
 # TODO - might need '-x509_user_proxy=' included in here
 my $srm_copy_cmd = shellquote("gfal-copy", @verbose, $local_uri, $remote_uri) . " 2>&1";
