@@ -23,7 +23,7 @@ class Condor:
 
         (ret, out) = self.commands_getstatusoutput("condor_cron_q")
 
-        if not ret and out.index("-- Submitter") != -1:
+        if not ret and out.find("-- Submitter") != -1:
             self.rsv.log("DEBUG", "Condor is running.  Output of condor_cron_q:\n%s" % out)
             return True
 
