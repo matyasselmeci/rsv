@@ -13,7 +13,7 @@ my $host = $options{u};
 $host =~ s/:(\d+)$//;
 my $port = $1 || 9619;
 my $quoted_host = shellquote($host);
-my $cmd = "condor_ce_ping -pool $quoted_host:$port -name $quoted_host -table READ WRITE DAEMON";
+my $cmd = "condor_ce_ping -pool $quoted_host:$port -name $quoted_host -table READ WRITE";
 
 my $output = `$cmd`;
 
