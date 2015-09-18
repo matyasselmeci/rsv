@@ -78,7 +78,17 @@ my $new_local_uri = "file://$new_local_file";
 
 # TODO - might need '-x509_user_proxy=' included in here
 my $srm_copy_cmd2 = shellquote("gfal-copy", @verbose_op, $remote_uri, $new_local_uri) . " 2>&1";
+my $retries;
 my $out2 = `$srm_copy_cmd2`;
+
+# a stale nfs cache can delay seeing the file for up to 60s
+while ($? != 0 && $out2 =~ /No such file or directory/ && ++$retries < 4) {
+    print STDERR "Remote file appears to be missing from remote server:\n",
+                 "Will sleep for 20s and retry... ($retries)\n";
+    sleep 20;
+    $out2 = `$srm_copy_cmd2`;
+}
+
 if($? != 0) {
     print "CRITICAL\n";
     print "Successful transfer to remote server.\n";
