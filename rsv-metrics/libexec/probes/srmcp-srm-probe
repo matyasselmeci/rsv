@@ -10,7 +10,7 @@ print_output_header();
 my %extra_opts = ("srm-destination-dir=s"  => "Required: Remote destination to put temp file",
                   "srm-webservice-path=s"  => "Required: Remote webservice path, e.g. srm/v2/server",
                   "srm-protocol-version=i" => "1 or 2",
-                  "verbose"                => "turn on debugging output for gfal-* commands");
+                  "verbose=s"              => "enable debugging output for gfal-* commands");
 
 my %options = process_command_line(%extra_opts);
 
@@ -19,6 +19,11 @@ $options{'srm-protocol-version'} ||= 2;
 if(!defined($options{'srm-destination-dir'}) or !defined($options{'srm-webservice-path'})) {
     print "ERROR: You must pass both --srm-destination-dir and --srm-webservice-path\n\n";
     usage(%extra_opts);
+}
+
+# --verbose or --verbose=1 => enabled, --verbose=0 => disabled
+for ($options{verbose}) {
+    $_ = 1 if defined && /^\s*$/;
 }
 
 find_binaries("gfal-copy", "gfal-ls", "gfal-rm");
@@ -44,23 +49,22 @@ $options{'srm-destination-dir'} =~ s{/$}{};
 my $port = $1 || 8443;
 my $remote_file = basename($local_file) . ".$time.$$";
 my $remote_uri = "srm://$host:$port/$options{'srm-webservice-path'}?SFN=$options{'srm-destination-dir'}/$remote_file";
-my @verbose = ('-vvv') if $options{verbose};
-*STDERR = *STDOUT      if $options{verbose};
+my @verbose_op = ('-vvv') if $options{verbose};
 
 # TODO - might need '-x509_user_proxy=' included in here
-my $srm_copy_cmd = shellquote("gfal-copy", @verbose, $local_uri, $remote_uri) . " 2>&1";
-my $out = `$srm_copy_cmd`;
+my $srm_copy_cmd1 = shellquote("gfal-copy", @verbose_op, $local_uri, $remote_uri) . " 2>&1";
+my $out1 = `$srm_copy_cmd1`;
 if($? != 0) {
     print "CRITICAL\n";
     print "Failed to transfer file to remote server.\n";
-    print "Command: $srm_copy_cmd\n";
-    print "Output from gfal-copy:\n$out\n";
+    print "Command: $srm_copy_cmd1\n";
+    print "Output from gfal-copy:\n$out1\n";
     exit 0;
 }
 else {
     print STDERR "Successful transfer to remote server.\n";
-    print STDERR "Command: $srm_copy_cmd\n";
-    print STDERR "Output from gfal-copy:\n$out\n\n";
+    print STDERR "Command: $srm_copy_cmd1\n";
+    print STDERR "Output from gfal-copy:\n$out1\n\n";
 }
 
 #
@@ -73,34 +77,40 @@ my $new_local_file = "/tmp/${remote_file}.copy";
 my $new_local_uri = "file://$new_local_file";
 
 # TODO - might need '-x509_user_proxy=' included in here
-$srm_copy_cmd = shellquote("gfal-copy", @verbose, $remote_uri, $new_local_uri) . " 2>&1";
-$out = `$srm_copy_cmd`;
+my $srm_copy_cmd2 = shellquote("gfal-copy", @verbose_op, $remote_uri, $new_local_uri) . " 2>&1";
+my $out2 = `$srm_copy_cmd2`;
 if($? != 0) {
     print "CRITICAL\n";
     print "Successful transfer to remote server.\n";
+    print "Command: $srm_copy_cmd1\n"         if $options{verbose};
+    print "Output from gfal-copy:\n$out1\n\n" if $options{verbose};
     print "Failed to transfer file from remote server.\n";
-    print "Command: $srm_copy_cmd\n";
-    print "Output from gfal-copy:\n$out\n";
+    print "Command: $srm_copy_cmd2\n";
+    print "Output from gfal-copy:\n$out2\n";
     cleanup_files();
     exit 0;
 }
 else {
     print STDERR "Successful transfer from remote server.\n";
-    print STDERR "Command: $srm_copy_cmd\n";
-    print STDERR "Output:\n$out\n\n";
+    print STDERR "Command: $srm_copy_cmd2\n";
+    print STDERR "Output:\n$out2\n\n";
 }
 
 
 # 
 # Compare files
 #
-$out = `diff $local_file $new_local_file`;
+my $out3 = `diff $local_file $new_local_file`;
 if($? != 0) {
     print "CRITICAL\n";
     print "Successful transfer to remote server.\n";
+    print "Command: $srm_copy_cmd1\n"         if $options{verbose};
+    print "Output from gfal-copy:\n$out1\n\n" if $options{verbose};
     print "Successful transfer from remote server.\n";
+    print "Command: $srm_copy_cmd2\n"         if $options{verbose};
+    print "Output:\n$out2\n\n"                if $options{verbose};
     print "The file that was returned from the remote server does not match the original file.\n";
-    print "Diff:\n$out\n";
+    print "Diff:\n$out3\n";
     cleanup_files();
     exit 0;
 }
@@ -111,49 +121,74 @@ if($? != 0) {
 #
 
 # The original srmcp-srm-probe did this, so we'll preserve this behavior
-my $srm_ls_cmd = shellquote("gfal-ls", @verbose, $remote_uri) . " 2>&1";
-$out = `$srm_ls_cmd`;
+my $srm_ls_cmd = shellquote("gfal-ls", @verbose_op, $remote_uri) . " 2>&1";
+my $out4 = `$srm_ls_cmd`;
 if($? != 0) {
     print "CRITICAL\n";
     print "Successful transfer to remote server.\n";
+    print "Command: $srm_copy_cmd1\n"         if $options{verbose};
+    print "Output from gfal-copy:\n$out1\n\n" if $options{verbose};
     print "Successful transfer from remote server.\n";
+    print "Command: $srm_copy_cmd2\n"         if $options{verbose};
+    print "Output:\n$out2\n\n"                if $options{verbose};
     print "Original file and received file are identical.\n";
     print "The remote file could not be listed using gfal-ls.\n";
     print "Command: $srm_ls_cmd\n";
-    print "Output:\n$out\n";
+    print "Output:\n$out4\n";
     cleanup_files();
     exit 0;
 }
 
-cleanup_files();
+cleanup_files(1);
 print "OK\n";
 print "Successful transfer to remote host.\n";
+print "Command: $srm_copy_cmd1\n"         if $options{verbose};
+print "Output from gfal-copy:\n$out1\n\n" if $options{verbose};
 print "Successful transfer from remote host.\n";
+print "Command: $srm_copy_cmd2\n"         if $options{verbose};
+print "Output:\n$out2\n\n"                if $options{verbose};
 print "Original file and received file are identical.\n";
 print "Remote file was properly listed using gfal-ls.\n";
+print "Command: $srm_ls_cmd\n"            if $options{verbose};
+print "Output:\n$out4\n"                  if $options{verbose};
 exit 0;
 
 
 sub cleanup_files {
+    my $recap = $_[0];
+
+    my $unlink_fail;
     # First the local file
     if($new_local_file and -e $new_local_file) {
         if(not unlink($new_local_file)) {
-            print STDERR "Failed to unlink existing local file '$new_local_file': $!";
+            print STDERR "Failed to unlink existing local file '$new_local_file': $!\n";
+            $unlink_fail = 1;
         }
     }
 
     # And also the remote file
-    my $srm_rm_cmd = shellquote("gfal-rm", @verbose, $remote_uri);
-    my $out = `$srm_rm_cmd`;
-    if (($? != 0)||($out !~ /\tDELETED$/)) {
-        print STDERR "Failed to remove remote file '$remote_uri'.  Output:\n$out\n";
-        print "WARNING\n";
-        print "Successful transfer to remote server.\n";
-        print "Successful transfer from remote server.\n";
-        print "Original file and received file are identical.\n";
-        print "However, remote file could not be deleted correctly.\n";
-        print "Command: gfal-rm $remote_uri\n";
-        print "Output:\n$out\n";
+    my $srm_rm_cmd = shellquote("gfal-rm", @verbose_op, $remote_uri) . " 2>&1";
+    my $out5 = `$srm_rm_cmd`;
+    if (($? != 0)||($out5 !~ /\tDELETED$/)) {
+        print STDERR "Failed to remove remote file '$remote_uri'.  Output:\n$out5\n";
+        if ($recap) {
+            print "WARNING\n";
+            print "Successful transfer to remote server.\n";
+            print "Command: $srm_copy_cmd1\n"         if $options{verbose};
+            print "Output from gfal-copy:\n$out1\n\n" if $options{verbose};
+            print "Successful transfer from remote server.\n";
+            print "Command: $srm_copy_cmd2\n"         if $options{verbose};
+            print "Output:\n$out2\n\n"                if $options{verbose};
+            print "Original file and received file are identical.\n";
+            print "Remote file was properly listed using gfal-ls.\n";
+            print "Command: $srm_ls_cmd\n"            if $options{verbose};
+            print "Output:\n$out4\n\n"                if $options{verbose};
+            print "Failed to unlink existing local file '$new_local_file': $!\n\n"
+               if $unlink_fail && $options{verbose};
+        }
+        print "Remote file could not be deleted correctly.\n";
+        print "Command: $srm_rm_cmd\n";
+        print "Output:\n$out5\n";
         exit 0;
     }
 }
