@@ -1,0 +1,11 @@
+[org.osg.general.osg-directories-CE-permissions]
+default-cron-interval = 37 * * * *
+
+execute = grid
+transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
+service-type = OSG-CE
+output-format = brief
+enable-by-default = true
+description = Check directory permissions for remote directories including OSG_APP, OSG_DATA
+
+[org.osg.general.osg-directories-CE-permissions env]

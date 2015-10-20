@@ -1,0 +1,9 @@
+# RSV web site configuration file
+# # comment line
+# of the non-comment lines
+# 1st URL (relative to the host)
+# 2nd Text for the link
+# #rd and following: description
+/rsv
+RSV - Monitoring information
+Provides a local interface to monitoring results

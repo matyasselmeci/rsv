@@ -1,0 +1,388 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original RSV Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+## Probe created by: Doug Strain, 2010 (dstrain@fnal.gov)
+##
+## This Perl script tests if the srm works via srm-tester interface
+## Requires the bestman srm-tester application to be installed
+##
+## REQUIRES
+##  'RSV::Probe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVMetric;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %options;
+
+## All the operations (metrics) this probe supports
+our @job_managers = ("ping","put","get",
+		"bringonline", "push", "pull",
+                "gsiftp","ls","mv","srmrm",
+		"mkdir","rmdir","reserve",
+		"getspacemeta","getspacetokens",
+		"release","gettransferprotocols");
+
+## srm-tester reports the final results at the end of its run.
+## This array tells you what to look for in that summary:
+our %testname= (
+	'ping', 'srmPing',
+	'put', 'srmPutDone',
+	'get', 'gsiftp-get',
+	'bringonline', 'srmBringOnline',
+	'pull', 'srmCopy-pull-TEST',
+	'push', 'srmCopy-push-TEST',
+	'gsiftp', 'srmCopy-pull-gsiftp',
+	'ls', 'srmLs',
+	'mv', 'srmMv',
+        'srmrm', 'srmRm',
+	'mkdir', 'srmMkdir',
+	'rmdir', 'srmRmdir',
+	'reserve','srmReserveSpace',
+	'getspacemeta','srmGetSpaceMetadata',
+	'getspacetokens', 'srmGetSpaceTokens',
+	'release', 'srmReleaseSpace',
+	'gettransferprotocols','srmGetTransferProtocols',
+	 );
+	
+print_output_header();
+our $local_file = "/usr/share/rsv/probe-helper-files/storage-probe-test-file";
+my $local_uri = "file://$local_file";
+
+my %extra_opts = ("srm-webservice-path=s"  => "Required: Remote webservice path, e.g. srm/v2/server",
+                  "x=s" => "proxy value",
+                  "verbose" => "Verbosity level",
+                  "srm-destination-dir=s" => "Destination directory on server",
+                  "srm-protocol-version=i" => "1 or 2");
+my %options = process_command_line(%extra_opts);
+
+if(not defined($options{'srm-webservice-path'})) 
+    {
+        $options{'srm-webservice-path'}="srm/v2/server";
+    }
+if(not defined($options{'srm-destination-dir'})) 
+    {
+        $options{'srm-destination-dir'}="/tmp";
+    }
+if (!defined($options{'gsiftpcopysource'}))
+    {
+	$options{'gsiftpcopysource'}="gsiftp://" . $options{'u'} 
+		. "/" . $options{'srm-destination-dir'};
+    }
+
+
+if (!($options{'u'} =~ /\:/))
+    {
+        $options{'u'}.=":8443";
+    }
+
+$options{'srm-protocol-version'} ||= 2;
+
+
+
+ ## Extract probe name from metric name
+ my $probe_name = $options{'m'};
+ $probe_name    =~ /.*\.srmtester-(.*)$/;
+ $probe_name    = $1;
+    # First, sanity check: make sure the probe requested is a supported op
+    my $probe_match=0;
+    foreach my $srm_probe_name (@job_managers) {
+        if ($srm_probe_name eq $probe_name)
+        { $probe_match=1; }
+    }
+    if ($probe_match != 1)
+    { print "CRITICAL\n$probe_name is not supported.\n"; exit 1; }
+
+
+
+
+
+
+    my $out="";
+    my $op_name=$probe_name;
+    #my $remotesfn="srm://".$options{'u'}."/".$options{'srm-webserver-path'};
+    my $remotesfn=$options{'srm-destination-dir'};
+    my $copysource="gsiftp://".$options{'u'}."/".$options{'srm-destination-dir'};
+
+
+#	Add command specific parameters
+##
+## Some commands require additional operations in order to function
+## correctly (ie, srmrm for cleanup, or calling reserve before release, etc)
+
+	## put: call with a testfile and srmrm to cleanup
+	if ($probe_name eq "put")
+	{
+		$op_name="put,srmrm";
+		my $srmtester_putfile="srmtester-put-testfile."
+			.int(rand(10000));
+		$remotesfn=$options{'srm-destination-dir'}. "/".$srmtester_putfile;
+		$copysource="gsiftp://".$options{'u'}."/".$options{'srm-destination-dir'}."/".$srmtester_putfile;
+	}
+
+	## get: call with a testfile.  Also, call put first to put the file
+	my $srmtester_getfile="srmtester-get-testfile."
+			.int(rand(10000));
+	if ($probe_name eq "get")
+	{
+		$op_name="put,get,srmrm";
+		$remotesfn=$options{'srm-destination-dir'}. "/".$srmtester_getfile;
+		$copysource="gsiftp://".$options{'u'}."/".$options{'srm-destination-dir'}."/".$srmtester_getfile;
+	}	
+
+	## srmrm: Call put to put a file to delete first.
+	if ($probe_name eq "srmrm")
+	{
+		$op_name="put,srmrm";
+		my $srmtester_rmfile="srmtester-rm-testfile."
+			.int(rand(10000));
+		$remotesfn=$options{'srm-destination-dir'}. "/".$srmtester_rmfile;
+		$copysource="gsiftp://".$options{'u'}."/".$options{'srm-destination-dir'}."/".$srmtester_rmfile;
+	}
+
+	## bringonline:  call put to create a file first, then srmrm to cleanup
+	if ($probe_name eq "bringonline")
+        {
+                $op_name="put,bringonline,srmrm";
+                my $srmtester_rmfile="srmtester-bringonline-testfile."
+                        .int(rand(10000));
+                $remotesfn=$options{'srm-destination-dir'}. "/".$srmtester_rmfile;
+                $copysource="gsiftp://".$options{'u'}."/".$options{'srm-destination-dir'}."/".$srmtester_rmfile;
+        }
+
+	## mv: I could only get mv working by doing two separate calls:
+	## First, put the file, then mv it to a seperate location.
+	if ($probe_name eq "mv")
+	{
+                $op_name="put";
+                my $srmtester_mvfile="srmtester-mv-testfile."
+                        .int(rand(10000));
+                my $srmtester_mvtargetfile="srmtester-mv-target-testfile."
+                        .int(rand(10000));
+                $remotesfn=$options{'srm-destination-dir'}."/".$srmtester_mvfile;
+                $copysource="gsiftp://".$options{'u'}."/".$options{'srm-destination-dir'}."/.$srmtester_mvfile";
+		my $srmtester_cmd1 = shellquote("srm-tester", "-serviceurl",
+			"srm://$options{'u'}/$options{'srm-webservice-path'}",
+			"-op", $op_name,
+			"-localsource", $local_file, "-localtargetdir", "/tmp",
+			"-remotesfn", $remotesfn, "-localtargetdir", "/tmp",
+			"-gsiftpcopysource", $copysource
+		);
+		$out=`$srmtester_cmd1`;
+                $op_name="mv,srmrm";
+	}
+	my $test_dir="/srmtester_directory.".int(rand(10000));
+	## mkdir, rmdir: call mkdir then rmdir to cleanup.
+	if ($probe_name eq "mkdir")
+	{
+		$op_name="mkdir,rmdir";
+		$remotesfn.= $test_dir;
+		$copysource .= "/"; 
+	}
+	if ($probe_name eq "rmdir")
+	{
+		$op_name="mkdir,rmdir";
+		$remotesfn.= $test_dir;
+		$copysource .= "/"; 
+	}
+	if ($probe_name eq "gsiftp")
+	{
+		$op_name="put,gsiftp,srmrm";
+                my $srmtester_putfile="srmtester-gsiftp-testfile."
+                        .int(rand(10000));
+                $remotesfn=$options{'srm-desstination-dir'}. "/".$srmtester_putfile;
+                $copysource=$options{'gsiftpcopysource'};
+	}
+	## Space reservation ops: call reserve first to get a token
+	## and call release to cleanup
+	if ($probe_name eq "getspacemeta")
+	{
+		$op_name="reserve,getspacemeta,release";
+	}
+	if ($probe_name eq "getspacetokens")
+	{
+		$op_name="reserve,getspacetokens,release";
+	}
+	if ($probe_name eq "release")
+	{
+		$op_name="reserve,release";
+	}
+	if ($probe_name eq "reserve")
+	{
+		$copysource .= " -retrytimeallowed 300 -statuswaittime 200";
+	}
+	if ($probe_name eq "push")
+	{
+		$op_name="push";
+		&Setup_Drive_Metric();
+		my $srmtester_pushfile="srmtester-push-target-testfile."
+                        .int(rand(10000));
+                $remotesfn=$options{'srm-destination-dir'}."/".$srmtester_pushfile;
+                $copysource=$options{'srm-destination-dir'}."/".$srmtester_pushfile;
+		$copysource .= " -pushmode"; 
+	}
+	if ($probe_name eq "pull")
+	{
+		&Setup_Drive_Metric();
+		my $srmtester_pullfile="srmtester-pull-target-testfile."
+                        .int(rand(10000));
+                $remotesfn=$options{'srm-destination-dir'}."/".$srmtester_pullfile;
+                $copysource=$options{'srm-destination-dir'}."/".$srmtester_pullfile;
+	}
+	if ($probe_name eq "gsiftp")
+	{
+		$options{'timeout'}=600;
+	}
+
+######################################################
+## Actually call the command now:
+######################################################
+
+	my $srmtester_cmd = shellquote("srm-tester", "-serviceurl",
+		"srm://$options{'u'}/$options{'srm-webservice-path'}",
+		"-op", $op_name,
+		"-localsource", $local_file,
+		"-localtargetdir", "/tmp",
+		"-remotesfn", $remotesfn,
+		"-gsiftpcopysource", $copysource
+	);
+
+	if ((($probe_name eq "pull")||($probe_name eq "push"))&&
+		($options{'copysource'} ne ""))
+	{
+                $srmtester_cmd = shellquote("srm-tester", "-conf",
+			$options{'drivefile'}, "-drive");
+	}
+	#Run command and save output
+	$out .= `$srmtester_cmd`;
+
+
+######################################################
+# Post run clean up
+######################################################
+
+	if (($probe_name eq "pull")||($probe_name eq "push"))
+	{
+		my $rm_cmd = shellquote("rm", $options{'drivefile'});
+		`$rm_cmd`;
+	}
+
+
+	# Check the output for the summary section and then record the result.
+	my $line="";
+	my $output_value=3;
+	my $summary_yet=0;
+	foreach $line (split /\n/ ,$out)
+	{
+		if ($line=~/^\s*Summary\s*$/)
+		{
+			$summary_yet=1;
+		}
+		if (($line=~/:\s*Failed/)&&($summary_yet==1))
+		{
+			$summary_yet=2;
+		}
+
+		
+		# Check to see if the applicable test succeeded
+		# Note that getspacemeta is inconsistent
+		if (($line =~ /$testname{$probe_name}/)||
+		   (($probe_name eq "getspacemeta")&&($line=~"srmGetMetadata")) )
+		{
+			$out .= "Relevant command-line:" . $line;
+			if ($line =~ /Ok/)
+			{
+				$output_value=0;
+			}
+			if ($line =~ /N\.S\./)
+			{
+				$output_value=1;
+			}
+			if ($line =~ /Failed/)
+			{
+				$output_value=2;
+			}
+		}
+		
+	}
+
+	# Mark the output as failed if another operation failed
+	# Leave untouched if marked as unsupported/unknown.
+	if (($summary_yet==2)&&($output_value==0))
+	{
+		$output_value=2;
+	}
+
+	
+	## If the result is unknown and previous dependencies
+	## are not supported, mark this as unsupported (warning)
+	if (($out =~ /SRM_NOT_SUPPORTED/)&&($output_value==3))
+	{
+		$output_value=1;
+	}
+
+	# Cleanup
+	if ($probe_name eq "get")
+	{
+		my $rm_cmd =  "rm /tmp/"
+			.$srmtester_getfile ." 2>&1";
+		`$rm_cmd`;
+
+	}
+	if ($probe_name eq "mv")
+	{
+		my $srmtester_rmcmd = shellquote("srm-tester", "-serviceurl",
+                        "srm://$options{'u'}/$options{'srm-webservice-path'}",
+                        "-op", "srmrm",
+                        "-localsource", $local_file,
+                        "-localtargetdir", "/tmp",
+                        "-remotesfn", $remotesfn,
+                        "-localtargetdir", "/tmp",
+                        "-gsiftpcopysource",
+                        "gsiftp://$options{'u'}/$copysource"
+                );
+        	`$srmtester_rmcmd`;
+	}
+
+if ($output_value==0) { print "OK\n;srm-tester succeeded.\n"; }
+if ($output_value==1) { print "WARNING\n;SRM_NOT_SUPPORTED.\n"; }
+if ($output_value==2) { print "CRITICAL\n;srm-tester failed.\n"; }
+if ($output_value==3) { print "UNKNOWN\n;"; }
+print "\nCommand output:\n";
+print $out;
+
+
+
+
+sub Setup_Drive_Metric {
+$options{'drivefile'}="/tmp/srm.". int(rand(100000)). ".properties";
+open(DRIVE,'>'.$options{'drivefile'});
+print DRIVE "testsites=TEST,SOURCE";
+print DRIVE "\nlocaltargetdir=/tmp";
+print DRIVE "\nlocalsource=".$local_file;
+print DRIVE "\nproxyfile=".$options{'x'};
+print DRIVE "\nop=ping,put,pull,push";
+print DRIVE "\nretrytimeallowed=1";
+print DRIVE "\npullcopysrm=TEST\@" . 
+	"srm://" . $options{'u'} . "/".
+	$options{'srm-webservice-path'}."?SFN=".
+	$options{'srm-destination-dir'}."/".
+	"srmtester-drive-file-".int(rand(10000)).
+	",SOURCE\@".$options{'copysource'};
+print DRIVE "\npushcopysource=TEST\@disable=false,SOURCE\@disable=false";
+print DRIVE "\npullcopysource=TEST\@disable=false,SOURCE\@disable=false";
+print DRIVE "\nbrowseafterput=true";
+print DRIVE "\nadvisorydelete=false";
+print DRIVE "\nputoverwrite=TEST\@true,SOURCE\@true";
+print DRIVE "\ncopyoverwrite=TEST\@true,SOURCE\@true";
+close(DRIVE);
+}

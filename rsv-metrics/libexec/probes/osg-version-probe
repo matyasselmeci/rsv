@@ -1,0 +1,42 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use RSVMetric;
+
+print_output_header();
+
+my %options = process_command_line();
+
+if(defined $ENV{OSG_LOCATION}) {
+    monitor("$ENV{OSG_LOCATION}/osg/bin/osg-version");
+}
+else {
+    monitor("/usr/bin/osg-version");
+}
+
+exit 0;
+
+
+sub monitor {
+    my ($osg_version) = @_;
+
+    if (! -x $osg_version) {
+        print "CRITICAL\n";
+        print "Can't find osg-version!\n";
+        dump_debug();
+    }
+    else {
+        my $cmd = shellquote($osg_version) . " 2>&1";
+        my $version_out = `$cmd`;
+        if ($? == 0) {
+            print "OK\n";
+            print $version_out;
+        } 
+        else {
+            print "CRITICAL\n";
+            print $version_out;
+            dump_debug();
+        }
+    }
+}

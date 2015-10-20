@@ -1,0 +1,42 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use RSVMetric;
+
+print_output_header();
+
+my %extra_opts = ("ping-timeout=i" => "<Timeout in seconds>",
+                  "ping-count=i"   => "<Number of ping attempts>");
+
+my %options = process_command_line(%extra_opts);
+
+$options{'ping-timeout'} ||= 3;
+$options{'ping-count'} ||= 1;
+
+find_binaries("ping");
+
+my $ping_cmd = shellquote("ping", "-q", "-W", $options{'ping-timeout'},
+        "-c", $options{'ping-count'}, $options{u}) . " 2>&1";
+my $out = `$ping_cmd`;
+my $ret = $? >> 8;
+
+if($ret == 0) {
+    print "OK\n";
+    print "Host $options{u} is alive and responding to pings.\n";
+}
+elsif ($ret == 1) {
+    print "CRITICAL\n";
+    print "Host $options{u} is alive but not responding to pings.\n";
+}
+elsif ($ret == 2) {
+    print "CRITICAL\n";
+    print "Unable to ping host $options{u}\n";
+    dump_debug();
+}
+else {  ## Unknown status here
+    print "CRITICAL\n";
+    print "ERROR: Cannot execute ping command $ping_cmd\n";
+}
+
+exit 0;

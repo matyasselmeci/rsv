@@ -1,0 +1,66 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import glob
+import commands
+import re
+
+# Verbose should be turned into a command line option
+verbose = 0
+
+errors = 0
+for metric_file in glob.glob("osg-rsv/bin/metrics/*"):
+    bin_dir = os.path.dirname(metric_file)
+    metric = os.path.basename(metric_file)
+
+    #
+    # Check that if the metric is a symlink if points to an existing file
+    #
+    if not os.path.exists(metric_file):
+        print "Metric '%s' is non-existent or a broken symlink" % metric
+        errors += 1
+
+    #
+    # Make sure that a meta file and conf file exist
+    #
+    meta_file = os.path.join("osg-rsv", "meta", "metrics", metric + ".meta")
+    if not os.path.exists(meta_file):
+        print "Meta file does not exist for metric '%s' at '%s'" % (metric, meta_file)
+        errors += 1
+
+    conf_file = os.path.join("osg-rsv", "etc", "metrics", metric + ".conf")
+    if not os.path.exists(conf_file):
+        print "Conf file does not exist for metric '%s' at '%s'" % (metric, conf_file)
+        errors += 1
+
+
+for consumer_file in glob.glob("osg-rsv/bin/consumers/*"):
+    bin_dir = os.path.dirname(consumer_file)
+    consumer = os.path.basename(consumer_file)
+
+    #
+    # Check that if the consumer is a symlink it points to an existing file
+    #
+
+    # consumers aren't currently symlinks, but they could be in a future release
+    if not os.path.exists(consumer_file):
+        print "Consumer '%s' is non-existent or a broken symlink" % consumer
+        errors += 1
+
+    #
+    # Make sure that a meta file and conf file exist
+    #
+    meta_file = os.path.join("osg-rsv", "meta", "consumers", consumer + ".meta")
+    if not os.path.exists(meta_file):
+        print "Meta file does not exist for consumer '%s' at '%s'" % (consumer, meta_file)
+        errors += 1
+
+
+if errors:
+    print
+    print "There were %s error." % errors
+    sys.exit(1)
+else:
+    print "Success"
+    sys.exit(0)

@@ -1,0 +1,43 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use RSVMetric;
+use Config;
+
+print_output_header();
+
+my $directory;
+if(defined $ENV{OSG_LOCATION}) {
+    $directory = "$ENV{OSG_LOCATION}/globus/lib/perl/Globus/GRAM/JobManager";
+}
+else {
+    $directory = $Config{vendorlib} . "/Globus/GRAM/JobManager";
+}
+
+if(!-d $directory) {
+    print "CRITICAL\n";
+    print "The job manager directory ($directory) does not exist on the remote host.\n";
+    exit 0;
+}
+
+opendir(DIR, $directory);
+my @files = readdir(DIR);
+closedir(DIR);
+
+my @jms;
+foreach my $file (@files) {
+    push @jms, $file if($file =~ /\.pm$/);
+}
+
+if(@jms == 0) {
+    print "WARNING\n";
+    print "No potential job managers (.pm files) were found in $directory.\n";
+}
+else {
+    my $jms = join(" ", @jms);
+    print "OK\n";
+    print "Available job managers are: $jms\n";
+}
+
+exit 0;

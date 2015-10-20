@@ -1,0 +1,109 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+##
+## This Perl script tests if an Apache HTTP server responds properly
+## Try ./apache-responsive-probe -h for information
+##
+## REQUIRES
+##  'RSV::Probe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.apache.httpd.responsive");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("HTTP");
+    &RSVProbeBase::Set_ServiceVersion ("N/A");
+    &RSVProbeBase::Set_ProbeType ("OSG-HTTP");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("false");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("1,21,41 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro ("Probe to report if an Apache server is up and functioning properly.");
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    ## &RSVProbeBase::Set_ProbeHelpOptions ("");
+
+    ## Uncomment if you want additional command line options
+    ## Optional second argument defines non-default %o hash key
+    &RSVProbeBase::Extra_CLI_Option ("url-extension=s","urlExtension");
+    &RSVProbeBase::Extra_CLI_Option ("secure","secureFlag");
+    &RSVProbeBase::Extra_CLI_Option ("no-check-certificate","noCheckCertificateFlag");
+}
+
+
+
+sub Run { 
+    $o{'protocol'} = "http://";
+    $o{'protocol'} = "https://" if ($o{'secureFlag'});
+    $o{'noCheckCertificate'} = " ";
+    $o{'noCheckCertificate'} = " --insecure " if ($o{'noCheckCertificateFlag'});
+
+    $o{'cmd'} = "/usr/bin/curl -f --silent --retry 3 --retry-delay 5 ". $o{'noCheckCertificate'} ." \"".$o{'protocol'} . $o{'hostName'}. $o{'urlExtension'} ."\" 2>&1";
+    &RSVProbeBase::Run_Command ($o{'cmd'}, "backtick");
+
+    if ($o{'cmdExitValue'} != 0){
+	my $error = "Apache server responded with curl exit code $o{'cmdExitValue'}";
+	&RSVProbeBase::Ping_Host();
+	&RSVProbeBase::Exit_Error (2, "$error. Host responding to pings.")    if (($o{'cmdExitValue'} == 0) || ($o{'cmdExitValue'} == 1));
+	&RSVProbeBase::Exit_Error (2, "$error. Host not responding to pings") if (($o{'cmdExitValue'} == 2) || ($o{'cmdExitValue'} == 3));
+    }
+
+    &RSVProbeBase::Exit_Error (0, "Webserver ok.");## if (my @nodelist = $nodeset->get_nodelist);
+#    &RSVProbeBase::Exit_Error (2, "ResourceSummary element not found in XML.");
+}
+
+
+### agopu: If we want to check for RGs for selected criteria
+
+#    my $nodeset = $xp->find ('/ResourceSummary'); # ('//ResourceGroup');
+#
+#    my @rgs;                   # Where we'll put our results
+#    if (my @nodelist = $nodeset->get_nodelist) {
+#	# We found some RG elements! Each node is an object of the class
+#	# XML::XPath::Node::Element, so I'll use that class's 'string_value'
+#	# method to extract its pertinent text, and throw the result for all
+#	# the nodes into our array.
+#	@rgs = map($_->string_value, @nodelist);
+#	
+#	&RSVProbeBase::Exit_Error (0, ($#rgs+1)." RGs for selection criteria found in XML.") if ($#rgs >= 0);
+#    }

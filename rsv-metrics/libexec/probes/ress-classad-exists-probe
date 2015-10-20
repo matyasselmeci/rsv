@@ -1,0 +1,36 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use RSVMetric;
+
+print_output_header();
+
+my %extra_opts = ("ress-collector=s" => "ReSS collector to use for validation of classads. Production: osg-ress-1.fnal.gov (default). ITB: osg-ress-4.fnal.gov");
+
+my %options = process_command_line(%extra_opts);
+
+my $collector = $options{'ress-collector'} || "osg-ress-1.fnal.gov";
+my $glue_ce_info_host_name = $options{u};
+
+find_binaries("condor_status");
+
+my $condor_status_command = shellquote(
+    "condor_status", "-l", "-pool", $collector,
+    "-constraint", qq{GlueCEInfoHostName == "$glue_ce_info_host_name"}
+);
+my $test_attributes = qx{$condor_status_command | grep "isClassadValid =" | sort | uniq};
+chomp($test_attributes);
+
+if (! $test_attributes) {
+    print "CRITICAL\n";
+    print "Cannot find CE host $glue_ce_info_host_name in ReSS collector $collector. Check if the cemon on the host is configured to advertise to the $collector. For troubleshooting options visit https://twiki.grid.iu.edu/bin/view/ResourceSelection/CEMonTroubleshootingGuide.\n";
+}
+else {
+    print "OK\n";
+    print "ReSS Collector=$collector\n";
+    print "ressClassadExists=true\n";
+}
+
+exit 0;
+

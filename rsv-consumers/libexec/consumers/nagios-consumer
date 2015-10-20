@@ -1,0 +1,199 @@
+#!/usr/bin/env python
+
+""" This script processes RSV records and interfaces with Nagios """
+
+import os
+import sys
+import ConfigParser
+
+# Used by send_nagios and send_nsca
+import urllib2
+import urllib
+import re
+import base64
+from urlparse import urlparse
+import string
+
+from optparse import OptionParser
+
+import RSVConsumer
+
+nagiosCode = {}
+nagiosCode["OK"]       = "0"
+nagiosCode["WARNING"]  = "1"
+nagiosCode["CRITICAL"] = "2"
+nagiosCode["UNKNOWN"]  = "3"
+
+
+class NagiosConsumer(RSVConsumer.RSVConsumer):
+
+    name = "nagios"
+
+    def parse_arguments(self):
+
+        usage = """usage: nagios-consumer
+          --conf-file <path to configuration file>
+          --send-nsca
+          --help | -h 
+          --version
+        """
+
+        version = "nagios-consumer 5.0"
+        description = "This script processes RSV records and sends them to Nagios."
+
+        parser = OptionParser(usage=usage, description=description, version=version)
+        parser.add_option("--conf-file", dest="conf_file", default=None,
+                          help="Nagios configuration file.")
+        parser.add_option("--send-nsca", dest="send_nsca", action="store_true", default=False,
+                          help="Use NSCA.  Default=%default")
+
+        (self.__options, self.__args) = parser.parse_args()
+        return
+
+
+    def load_config_file(self):
+        """ """
+        if not os.path.exists(self.__options.conf_file):
+            self.die("ERROR: The supplied configuration file '%s' does not exist." % self.__options.conf_file)
+
+        self.config = ConfigParser.ConfigParser()
+        self.config.read(self.__options.conf_file)
+        return
+        
+
+    def process_record(self, raw_record):
+        """ Process a record in WLCG format """
+        record = self.parse_record(raw_record)
+
+        metric = record["metricName"]
+        PLUGIN_STATE = nagiosCode[record["metricStatus"]]
+        PLUGIN_OUTPUT = record["detailsData"][0:255]
+        # for PLUGIN_HOST, use RSV_HOST from rsv-nagios.conf instead of the
+        # serviceURI/hostName from the current record (see SOFTWARE-1170)
+        PLUGIN_HOST = self.config.get("RSV", "RSV_HOST")
+
+        if self.__options.send_nsca:
+            self.send_nsca(metric, PLUGIN_HOST, PLUGIN_STATE, PLUGIN_OUTPUT)
+        else:
+            self.send_nagios(metric, PLUGIN_HOST, PLUGIN_STATE, PLUGIN_OUTPUT)
+
+        return
+
+
+    def send_nsca(self, SERVICE, HOST, PLUGIN_STATE, PLUGIN_OUTPUT): 
+        """ This code is from rsv2nsca.py """
+        URL = self.config.get("RSV", "NAGIOS_URL")
+
+        # send_nsca -H $nagios_host
+        # $HOST, $SERVICE, $PLUGIN_STATE, $PLUGIN_OUTPUT
+
+        nsca_cmd="/usr/sbin/send_nsca -d , -H " + URL
+        nsca_id=os.popen(nsca_cmd, "w")
+        nsca_id.write(HOST + "," + SERVICE + "," + PLUGIN_STATE + "," + PLUGIN_OUTPUT + "\n")
+        nsca_id.close()
+        return
+        
+
+    def send_nagios(self, SERVICE, HOST, PLUGIN_STATE, PLUGIN_OUTPUT):
+        """ This code is from rsv2nagios.py """
+        URL = self.config.get("RSV", "NAGIOS_URL")
+        USERNAME = self.config.get("RSV", "NAGIOS_USERNAME")
+        PASSWORD = self.config.get("RSV", "NAGIOS_PASSWORD")
+
+	theurl="URL?"
+	theurl=theurl+"cmd_typ=30"
+	theurl=theurl+"&cmd_mod=2"
+	theurl=theurl+"&service=SERVICE"
+	theurl=theurl+"&host=HOST"
+	theurl=theurl+"&plugin_state=PLUGIN_STATE"
+	theurl=theurl+"&plugin_output=PLUGIN_OUTPUT"
+	theurl=theurl+"&btnSubmit=Commited"
+
+	PLUGIN_OUTPUT=string.strip(PLUGIN_OUTPUT)
+	PLUGIN_OUTPUT=string.replace(PLUGIN_OUTPUT," ","+")
+	PLUGIN_OUTPUT=urllib.quote(PLUGIN_OUTPUT)
+
+	theurl=string.replace(theurl,"URL",URL)
+	theurl=string.replace(theurl,"SERVICE",SERVICE)
+	theurl=string.replace(theurl,"HOST",HOST)
+	theurl=string.replace(theurl,"PLUGIN_OUTPUT",PLUGIN_OUTPUT)
+	theurl=string.replace(theurl,"PLUGIN_STATE",PLUGIN_STATE)
+        theurl=string.replace(theurl,"%0A", "%2B")
+
+	req = urllib2.Request(theurl)
+	try:
+	    handle = urllib2.urlopen(req)
+	except IOError, e:
+	    pass
+	else:
+	    # Here I will have to put code to deal with unauthenticated pages
+	    print "No authentication, I will exit"
+	    sys.exit(1)
+
+
+	if not hasattr(e, 'code') or e.code != 401:
+	    # we got an error - but not a 401 error
+	    print "This page isn't protected by authentication."
+	    print 'But we failed for another reason.'
+	    print e
+	    sys.exit(1)
+
+	authline = e.headers['www-authenticate']
+
+	authobj = re.compile(
+	    r'''(?:\s*www-authenticate\s*:)?\s*(\w*)\s+realm=['"]([^'"]+)['"]''',
+	    re.IGNORECASE)
+	# this regular expression is used to extract scheme and realm
+	matchobj = authobj.match(authline)
+
+	if not matchobj:
+	    # if the authline isn't matched by the regular expression
+	    # then something is wrong
+	    print 'The authentication header is badly formed.'
+	    print authline
+	    sys.exit(1)
+
+	scheme = matchobj.group(1)
+	realm = matchobj.group(2)
+	# here we've extracted the scheme
+	# and the realm from the header
+	if scheme.lower() != 'basic':
+	    print 'This code only works with BASIC authentication.'
+	    sys.exit(1)
+
+	base64string = base64.encodestring(
+			'%s:%s' % (USERNAME, PASSWORD))[:-1]
+	authheader =  "Basic %s" % base64string
+	req.add_header("Authorization", authheader)
+	try:
+
+	    handle = urllib2.urlopen(req)
+
+	except IOError, e:
+            if hasattr(e, 'code') and e.code==404:
+            #The NAGIOS_URL parameter is wrong
+                print "NAGIOS_URL "+URL+" returned 404 not found."
+		sys.exit(1)
+	    # Username/password is wrong
+	    print "It looks like the username or password is wrong."
+            print e;
+	    sys.exit(1)
+
+	thepage = handle.read()
+
+	for line in string.split(thepage,"\n"):
+	  if string.find(line,"<P><DIV CLASS='infoMessage'>")!=-1:
+	    message=string.replace(line,"<P><DIV CLASS='infoMessage'>","")
+	    message=string.replace(message,"<BR><BR>","")
+	    print message
+	  if string.find(line,"<P><DIV CLASS='errorMessage'>")!=-1:
+	    message=string.replace(line,"<P><DIV CLASS='errorMessage'>","")
+	    message=string.replace(message,"</DIV></P>","")
+	    print message
+
+
+
+consumer = NagiosConsumer()
+consumer.load_config_file()
+consumer.process_files()
+sys.exit(0)

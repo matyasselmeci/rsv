@@ -1,0 +1,11 @@
+[org.osg.globus.gram-authentication]
+default-cron-interval = 31 * * * *
+
+execute = local
+service-type = OSG-GRAM-CE
+output-format = brief
+enable-by-default = true
+
+
+[org.osg.globus.gram-authentication env]
+PERL5LIB = PREPEND | /usr/libexec/rsv/probes

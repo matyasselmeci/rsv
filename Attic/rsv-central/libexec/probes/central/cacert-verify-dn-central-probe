@@ -1,0 +1,109 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+##
+## Original Author: Anand Padmanabhan
+##
+## This Perl script tests if CA certificates needed by all user DNs (in grimap file)
+## are available in the certificates directory
+## Type ./cacert-verify-dn-centralized-probe -h for more information
+##
+##
+## REQUIRES
+##  'RSVProbeBase
+##  'RSVProbeCACert
+##
+################################################################################
+
+## Perl modules to use
+use strict;
+use RSVProbeBase;
+use RSVProbeCACert;
+
+######## Global variables go here ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+
+################## Local Variables for this probe #####################
+
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+###### Local Sub routines begin ###########
+################################################################################
+
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.central.cacert.verify.dn");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-Central-Monitor");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CA 1.1 / VDT CA v40");
+    &RSVProbeBase::Set_ProbeType ("OSG-Central-CA-Install");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("55 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("IMPORTANT NOTE: This is a central probe that checks if all the DNs from various OSG VOs are from known CAs\n\n");
+	
+    ## Flag this as a local probe
+    &RSVProbeBase::Set_LocalProbe();
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+    (    " [--osg-tar <URL> ]      Location of CA certificate tarball distributed by OSG\n".
+    "                                   (Default: http://software.grid.iu.edu/pacman/cadist/ca-certs-version)\n".
+    "                                   (Please use the default values unless you are certain)\n".
+    " [--cacerts-dir <directory> ]            Location of CA certificate files\n".
+    "                                      (Default: \$VDT_LOCATION/globus/TRUSTED_CA)\n"
+   );
+    
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("cacerts-dir=s","certDir");
+    &RSVProbeBase::Extra_CLI_Option ("osg-tar=s","osgTar");
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ## Initialize local variables
+    &Initialize_Local();
+
+    ## Real tests begin now - check for expired certs now 
+    &RSVProbeCACert::Edg_Check_CA_DN();
+
+    ## Print metric, and we're all done!
+    &RSVProbeBase::Print_Metric ();
+}
+
+
+## Initialize local variables
+sub Initialize_Local{
+   $o{'osgTar'} = "http://software.grid.iu.edu/pacman/cadist/ca-certs-version" if (! $o{'osgTar'});
+   $o{'certDir'} =  $o{'VDT_LOCATION_LOCAL'}."/globus/TRUSTED_CA" if (! $o{'certDir'});
+}
+
+## None for now

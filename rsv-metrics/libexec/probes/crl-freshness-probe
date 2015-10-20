@@ -1,0 +1,375 @@
+#!/usr/bin/python
+# First version Sep 2011, Marco Mambelli marco@hep.uchicago.edu
+"""Probe testing the Certificates Revocation Lists (CRLs)
+"""
+
+import os
+import time
+# hashlib new in 2.5, md5 not in 2.6
+try:
+  import hashlib as mymd5
+except ImportError:
+  import md5 as mymd5
+
+# Add the current directory to the path:
+# auxiliary files are staged in the same directory during remote execution
+import sys
+sys.path.insert(0, ".")
+
+import rsvprobe
+
+
+# Unix commands used
+CMD_OPENSSL = "/usr/bin/openssl"
+#CMD_WGET = "wget"
+
+# Auxiliary functions
+def md5sum(fname):
+  """Return the md5 checksum of the file."""
+  BLOCKSIZE = 4096 * 1024
+  f = open(fname,'r')
+  checksum = mymd5.md5()
+  while True:
+    data = f.read(BLOCKSIZE)
+    if not data:
+      break
+    checksum.update(data)
+  f.close()
+  return checksum.hexdigest().lower()
+
+
+class CRLProbe(rsvprobe.RSVProbe):
+  """Probe testing the Certificates Revocation Lists (CRLs)
+"""
+  def __init__(self):
+    rsvprobe.RSVProbe.__init__(self)
+    self.metric = ""
+    metric = rsvprobe.RSVMetric("OSG-CE", "org.osg.certificates.crl-expiry", rsvprobe.RSVMetric.STATUS)
+    metric.service_version = ">= OSG CE 1.0.0"
+    metric.probe_type = "OSG-CE"
+    ## What version of the WLCG specification does this probe conform to?
+    metric.probe_revision = "3.0"
+    #metric.probe_spec_version = "0.91"
+    #metric.enable_by_default = True
+    ## Unix cron type metric interval
+    metric.cron_interval = "30 */6 * * *"
+    self.supported_metrics = [metric]
+    ## Specific options and defaults
+    self.ca_certs_dir = None
+    # default Warning after 9 Hrs
+    self.warningHrs = 9
+    # default Error after 72 Hrs
+    self.errorHrs = 3*24 
+    self.tempdir = rsvprobe.get_temp_dir()
+    self.error_file = os.path.join(self.tempdir, "localhost.crl_verify.err")
+    self.test_type = 'osg'
+    self.help_message = """IMPORTANT NOTE: This is a site-level probe that checks if the CRLs have been updated recently.
+This probe downloads a file containing a list of md5sum from a central location.
+This list is compared against the md5sum of the files in the site CA install.
+Additionally it makes sure that all IGTF CAs are installed.
+"""
+    self.addopt("", "error-file=", "--error-file FILE_LOCATION \tLocation where errors should be recorded")
+    self.addopt("", "warning-hours=", "--warning-hours HOURS \t Number of hours elapsed before a warning is to be issued")
+    self.addopt("", "error-hours=", "--error-hours HOURS \t Number of hours elapsed before an error is to be issued")
+    self.addopt("", "type=", "--type TYPE \tThis parameter determines whether the test should confrom to EGEE or OSG requirement.\n                                   (Accepted values: osg, egee) (Default: osg)")
+    self.addopt("", "cacerts-dir=", "--cacerts-dir DIR \tLocation of CA certificate and CRL files")
+    ## unused_options from old perl probe
+    # " [--worker-script-file <file>     Worker script file to use.".
+    # " [--local-ce]          The verify test is run on localhost and not through globus gatekeeper."
+
+  def parseopt(self):
+    """parse options specific to CAcertProbe and return options, optlist and reminder to allow further processing"""
+    options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
+    for opt, arg in options:
+      if opt == '--error-file':
+        self.error_file = arg
+      elif opt == '--warning-hours':
+        try:
+          self.warningHrs = int(arg)
+        except ValueError:
+          self.return_unknown("Invalid warning hours '%s', must be int. Aborting probe." % arg)      
+      elif opt == '--error-hours':
+        try:
+          self.errorHrs = int(arg)
+        except ValueError:
+          self.return_unknown("Invalid error hours '%s', must be int. Aborting probe." % arg)      
+      elif opt == '--type':
+        if not arg in ['osg', 'egee']:
+          self.return_unknown("Invalid test type %s, must be 'osg' or 'egee'. Aborting probe." % arg)      
+        self.test_type = arg
+      elif opt == '--cacerts-dir':
+        self.ca_certs_dir = arg
+      #
+      if not '--error-file' in optlist:
+        self.error_file = os.path.join(self.tempdir, "%s.crl_verify.err" % self.host)
+      if self.host == self.localhost:
+        self.is_local = True
+      else:
+        self.is_local = False 
+    return options, optlist, remainder
+
+  def run(self):
+    """Probe actions"""
+    self.parseopt()
+    if self.ca_certs_dir:
+      certdir = self.ca_certs_dir
+    else:
+      certdir = rsvprobe.get_ca_dir()
+    self.verify_CRL(certdir, self.warningHrs, self.errorHrs)
+
+  def get_osg_CAs(self, ca_format_type, grid_type):
+    "Download and parce the CA list from OSG GOC"
+    if not grid_type in [0, 1]:
+      self.return_unknown("ERROR: Unknown grid type %s. Setting metric to unknown." % grid_type)
+    if not ca_format_type in [0, 1]:
+      self.return_unknown("ERROR: CA Certs Directory has unknown certificate type %s. Setting metric to unknown." % 
+                          ca_format_type)
+    source_name = {} # list of crl files name -> data (hash0, hash1, accreditation)
+    source_hash0 = {} # Old hash -> accreditation
+    source_hash1 = {} # New hash -> accreditation
+    local_urls = [["http://software.grid.iu.edu/pacman/cadist/INDEX.txt",
+                   "http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt"],
+                  ["http://software.grid.iu.edu/pacman/cadist/INDEX-new.txt",
+                   "http://software-itb.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
+                 ]
+    local_url = local_urls[ca_format_type][grid_type]
+    # Download the CA list file from OSG/ITB cache
+    lines = rsvprobe.get_http_doc(local_url)
+    if not lines:
+      self.return_unknown("Could not download the CA list from OSG (%s) or the file is empty. Unable to verify CRLs." % local_url)
+    ## Parsing of the CA list
+    ## type 1 format:
+    ## OldHash      NewHash      CAfile                   CAURL                                       Version   Accreditation   
+    ##--------------------------------------------------------------------------------------------------------
+    #75680d2e     ee64a828     AAACertificateServices.pem https://www.terena.org/activities/tcs/         1.41   I
+    #3c58f906     157753a5     AddTrust-External-CA-Root.pem http://www.comodo.com/                         1.41   I
+    ## type 0 format:
+    ## Hash         Source                   URL                                      Accreditation
+    ##--------------------------------------------------------------------------------------------------------
+    #09ff08b7     CNRS2-Projets            http://igc.services.cnrs.fr/GRID-FR/       I
+    #0a12b607     UGRID                    https://ca.ugrid.org/                      I
+    for line in lines:
+      if not line or line.startswith('#'):
+        continue
+      line_content = line.split()  
+      if ca_format_type == 1:
+        # New CA format type, both old hash (hash0) and new hash (hash1), source name has extension (filename)
+        source_hash0[line_content[0]] = line_content[-1]
+        source_hash1[line_content[1]] = line_content[-1]
+        source_name[line_content[2].split('.')[0]] = { 'hash': line_content[0],
+                                                       'newhash': line_content[1],
+                                                       'accreditation': line_content[-1]
+                                                     }
+      else: # assuming type 0
+        # Assuming CA format type (type 0), only old hash (hash0), source name has no extension
+        source_hash0[line_content[0]] = line_content[-1]
+        source_name[line_content[1]] = { 'hash': line_content[0],
+                                         'newhash': None,
+                                         'accreditation': line_content[-1]
+                                       }
+    return source_name, source_hash0, source_hash1 
+
+  def parse_ca_index(self, certdir):
+    "Parse INDEX.txt in CA certs directory and retrieve IndexTypeVersion, default to 0"
+    ca_format_type = 0
+    ca_index = os.path.join(certdir, "INDEX.txt")
+    if os.path.isfile(ca_index):
+      try: 
+        lines = open(ca_index).readlines()
+        for i in lines:
+          if i.find("IndexTypeVersion") >= 0:
+            try:
+              ca_format_type = int(i.split()[2])
+            except IndexError:
+              # When missing it is 0 (default value)
+              pass
+      except (OSError, ValueError):
+        # If I don't find the index file or don't find the keyword IndexTypeVersion assume type 0
+        pass
+    return ca_format_type
+ 
+  def verify_CRL(self, certdir, warnHrs, errHrs):
+    """Check_Freshness_Local_CRL: Checks the last time when the CRLs were successfully downloaded
+parameters :
+certdir:   Directory where CA certs (*.0) and CRLs (*.r0) can be found 
+tempdir:   Temporary directory to save working files
+warnHrs:   Number hours since the failing downloads before a warning is issued
+errHrs:    Number hours since the failing downloads before an error is issued
+"""    
+    #status_code = 0 # Return status code as expected by RSV for summaryData
+    found_crls = []
+    ca_format_type = 0
+
+    # Step 1: Get the list of Certs included in OSG from GOC website.
+    ca_format_type = self.parse_ca_index(certdir)
+
+    #Check if the file CA certs are installed from ITB
+    # grid_type: 0 - osg; 1 - itb
+    grid_type = rsvprobe.get_grid_type()
+    source_name, source_hash0, source_hash1 = self.get_osg_CAs(ca_format_type, grid_type)
+
+    # Step 2: Get and Check time stamps on the CRL files to ensure that it has been recently downloaded
+    error_count = 0
+    warn_count = 0
+    ok_count = 0
+    crl_files = rsvprobe.list_directory(certdir, [".r0"])
+    if not crl_files:
+      self.return_unknown("ERROR: CA Certs Directory %s contains no CRL files (*.r0). Aborting the probe (UNKOWN status)." % 
+                          certdir)     
+    source_hash_list = source_hash0.keys()
+    if ca_format_type == 1:
+      source_hash_list += source_hash1.keys()
+    local_hash = ""
+    for i in crl_files:
+      local_hash = os.path.basename(i).split('.')[0] #remove the extension
+      # List of CRLs found.
+      found_crls.append(local_hash)
+      # Ignore CRLs not from OSG.
+      if not local_hash in source_hash_list:
+        if self.verbose:
+          self.add_ok("CRL file for CA with hash %s that is not from OSG, ignored." % local_hash)
+        continue
+      #For EGEE test we want to check only IGTF CAs
+      if self.test_type.lower() == 'egee':
+        is_igtf_cert = False
+        try:
+          if source_hash0[local_hash].find('I') >= 0:
+            is_igtf_cert = True
+        except KeyError:
+          pass # not in hash0
+        # keep the following outside form the except to cover the case when the hash h1 is the old hash of CA cert c1
+        # and new hash of CA cert c2. Is this possible?
+        if not is_igtf_cert and ca_format_type == 1:
+          try:
+            if source_hash1[local_hash].find('I') >= 0:
+              is_igtf_cert = True
+          except KeyError:
+            pass # not in hash1
+        if not is_igtf_cert:
+          if self.verbose:
+            self.add_ok("EGEE test and CRL file for CA with hash %s that is not in IGTF, ignored." % local_hash)
+          continue       
+      last_update = os.stat(i)[os.path.stat.ST_MTIME] 
+      now = time.time()
+      if now >= last_update + errHrs*60*60:
+        self.add_critical("CRL file for CA with hash %s has not been updated since %s" % 
+                          (local_hash, time.strftime("%Y/%m/%d %H:%M:%S", time.localtime(last_update))))
+        error_count += 1
+      elif now >= last_update + warnHrs*60*60:
+        self.add_warning("CRL file for CA with hash %s has not been updated since %s" % 
+                         (local_hash, time.strftime("%Y/%m/%d %H:%M:%S", time.localtime(last_update))))
+        warn_count += 1
+      else:
+        if self.verbose:
+          self.add_ok("CRL file for CA with hash %s was last downloaded on %s UTC" % 
+                      (local_hash, time.asctime(time.gmtime(last_update))))
+        ok_count += 1
+
+    # Step 3: Check if any CRLs are missing.
+    missing_count = 0
+    for name, ca_info in source_name.items():
+      if self.test_type.lower() == 'egee' and ca_info['accreditation'].find('I') < 0:
+        # Ignore non IGTF CAs for wlcg probe
+        continue
+      # continue if found CRL
+      if ca_format_type == 1 and ca_info['newhash'] in found_crls:
+        continue
+      if ca_info['hash'] in found_crls:
+        continue
+      # continue if the CA file has been removed
+      # if ca_format_type == 1 then both CA files must have been removed to continue
+      if not os.path.isfile(os.path.join(certdir, "%s.0" % ca_info['hash'])):
+        if ca_format_type != 1 or not os.path.isfile(os.path.join(certdir, "%s.0" % ca_info['newhash'])):
+          continue
+      #if ca_format_type == 1:
+      #  local_hash = ca_info['newhash']
+      #else:
+      #  local_hash = ca_info['hash']
+      #if not os.path.isfile(os.path.join(certdir, "%s.0" % local_hash)):
+      warning = ("MISSING: CRL file for %s (%s/%s, type %s) is missing. OSG policy requires CRL for every CA distributed by OSG." %
+        (name, ca_info['newhash'], ca_info['hash'], ca_format_type))
+      if missing_count == 0:
+        warning += (
+          "\n- Has fetch-crl run recently?  (See /etc/cron.d/fetch-crl*)\n"
+          "- See fetch-crl output (mailed to root by cron or sent to syslog), "
+          "or try running fetch-crl by hand to inspect its output.\n"
+          "- More info on troubleshooting this probe can be found at: "
+          "https://www.opensciencegrid.org/bin/view/Documentation/Release3/RsvProbeCrlFreshnessProbe\n"
+          "- For more help, submit a ticket to the GOC at: https://ticket.grid.iu.edu/")
+      self.add_warning(warning)
+      missing_count += 1
+
+    # Step 4: See if the warning should be escalated to an error
+    now = time.time()
+    last_update = 0
+
+    out_msg = "%s CRLs tested.\n" % (error_count+warn_count+ok_count) 
+    out_msg += "\t%s had not been updated for at least %s hours;\n" % (error_count, errHrs)
+    out_msg += "\t%s CRLs have not been updated for at least %s hours;\n" % (warn_count,  warnHrs)
+    out_msg += "\t%s CRLs have been updated with the last %s hours.\n" % (ok_count,  warnHrs)
+    #only if missing_count>0? 
+    if missing_count > 0:
+      out_msg += "\t%s CRL/s is/are missing.\n" % missing_count
+
+    #if status_code == 0:
+    if self.status == rsvprobe.OK:
+      # Remove error file if exists 
+      if os.path.isfile(self.error_file):
+        try:
+          os.remove(self.error_file)
+        except OSError:
+          self.add_message("Could not delete the error file (%s). Please delete it by hand to avoid potential future problems." % 
+                           self.error_file)
+      self.return_ok("All %s CRLs have been recently updated and none is missing." % (error_count+warn_count+ok_count))
+    elif self.status == rsvprobe.WARNING:
+      if os.path.isfile(self.error_file):
+        lines = None
+        try:
+          lines = open(self.error_file).readlines()
+        except IOError:
+          self.add_warning(
+            "Could not open error file (%s) indicating CRL files out of sync. This probe may never escalate to an error stage." % 
+            self.error_file)
+        if not lines:
+          self.add_warning("The error file (%s) is empty. This probe may never escalate to an error stage." % self.error_file)
+        else:
+          last_update = lines[0].strip()
+          try:
+            if last_update and now > float(last_update) + errHrs*60*60:
+              # Escalate warning to error
+              self.add_critical("Warning messages persisted too long. Escalating WARNING to ERROR.")
+              self.return_critical(out_msg)
+            else:
+              self.return_warning(out_msg)
+          except ValueError:
+            self.add_warning(
+              "The error file (%s) is malformed. Please delete the file. This probe may never escalate to an error stage." % 
+              self.error_file)
+            self.return_warning(out_msg)
+      else:
+        # Out of sync for the first time. Create error record. Return Warning.
+        try:
+          lines = open(self.error_file, 'w').write("%s" % now)
+        except IOError:
+          self.add_warning(
+            "Could not record error file (%s) indicating that CRL files are out of sync. This probe may never escalate to an error stage." % 
+            self.error_file)
+        self.return_warning(out_msg)
+    elif self.status == rsvprobe.CRITICAL:
+      self.return_critical(out_msg)
+    else: # self.status == rsvprobe.UNKNOWN or something else
+      self.add_msg("Probe has unexpected status")
+      self.return_unknown(out_msg)
+
+
+##### Main code #####
+def main():
+  "main: invoking probe.run()"
+  p = CRLProbe()
+  p.run()
+
+if __name__ == "__main__":
+  main()
+
+# vim:sw=2:sts=2
+

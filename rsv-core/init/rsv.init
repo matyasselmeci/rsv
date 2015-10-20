@@ -1,0 +1,116 @@
+#!/bin/sh
+#
+# chkconfig: 345 99 9
+# description: RSV
+### BEGIN INIT INFO
+# Provides: rsv
+# Required-Start: $network condor-cron
+# Required-Stop: condor-cron
+# Default-Stop: 1 2 3 4 5 6
+# Description: RSV
+### END INIT INFO
+
+CONDOR_EXE_QUEUE=/usr/bin/condor_cron_q
+RSV_CONTROL=/usr/bin/rsv-control
+REDHAT_LOCKFILE=/var/lock/subsys/rsv
+
+# Sometimes Condor-Cron hasn't quite finished starting up yet
+# So if it's not up, sleep a few seconds to give it a chance to finish
+case $1 in
+    start ) $CONDOR_EXE_QUEUE > /dev/null 2>&1 || sleep 5 ;;
+esac
+
+RETVAL=0
+
+# See how we were called.
+start() {
+   echo -n "Starting RSV: "
+   $RSV_CONTROL --on
+   RETVAL=$?
+   if [ -f /etc/redhat-release ]; then
+       [ $RETVAL -eq 0 ] && touch $REDHAT_LOCKFILE
+   fi
+   if [ $RETVAL -ne 0 ]; then
+       RETVAL=7  # "program not running"
+   fi
+   return $RETVAL
+}
+
+status() {
+    test -e $REDHAT_LOCKFILE
+    lock_status=$?
+    ccq_output=`$CONDOR_EXE_QUEUE rsv 2>&1`
+    ccq_status=$?
+    ccq_summary_line=`echo "$ccq_output" | tail -1`
+    case $ccq_summary_line in
+        "0 jobs"* ) rsv_jobs_in_queue=N ;;
+        *         ) rsv_jobs_in_queue=Y ;;
+    esac
+
+    case $lock_status:$ccq_status:$rsv_jobs_in_queue in
+      0:0:Y)
+          echo "RSV is running.  Current condor-cron queue:"
+          echo "$ccq_output"
+          RETVAL=0 ;;
+      0:0:N)
+          echo "RSV lock file exists, but condor-cron queue is empty:"
+          echo "$ccq_output"
+          RETVAL=2 ;;
+      0:*:*)
+          echo "RSV lock file exists, but condor-cron is not running."
+          RETVAL=2 ;;
+      *:0:Y)
+          echo "RSV lock file missing, but jobs are in condor-cron queue:"
+          echo "$ccq_output"
+          RETVAL=0 ;;
+      *:0:N)
+          echo "RSV is stopped."
+          RETVAL=3 ;;
+      *:*:*)
+          echo "RSV lock file is not present and condor-cron is not running."
+          RETVAL=3 ;;
+    esac
+
+    return $RETVAL
+}
+
+stop() {
+   if [ -e $REDHAT_LOCKFILE ] || $CONDOR_EXE_QUEUE >/dev/null 2>&1; then
+       echo -n "Stopping RSV: "
+       $RSV_CONTROL --off
+       RETVAL=$?
+       if [ -f /etc/redhat-release ]; then
+           [ $RETVAL -eq 0 ] && rm -f $REDHAT_LOCKFILE
+       fi
+       if [ $RETVAL -ne 0 ]; then
+           RETVAL=7  # "program not running"
+       fi
+   else
+       echo "RSV lock file is not present and condor-cron is not running."
+       RETVAL=0
+   fi
+   return $RETVAL
+}
+
+# See how we were called.
+case "$1" in
+  start)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+  status)
+        status
+        ;;
+  restart)
+        stop
+        sleep 10
+        start
+        ;;
+  *)
+        echo "Usage: rsv {start|stop|restart|status}"
+        exit 1
+esac
+
+exit $RETVAL

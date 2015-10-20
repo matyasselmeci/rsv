@@ -1,0 +1,11 @@
+[org.atlas.xroot.xrdcp-compare]
+default-cron-interval = 1,31 * * * *
+
+execute = local
+service-type = xroot
+output-format = brief
+enable-by-default = false
+description = Copy an ATLAS test file directly from the server and via the FXR, then compare the two
+
+[org.atlas.xroot.xrdcp-compare env]
+

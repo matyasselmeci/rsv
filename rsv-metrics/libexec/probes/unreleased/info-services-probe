@@ -1,0 +1,612 @@
+#!/usr/bin/python
+
+"""
+gip_advertise RSV probe.
+Author: Brian Bockelman
+
+This probe tests the following metrics:
+   * org.osg.gip.consistency: The resource_group and resource entries in
+     config.ini agree with the registered names in OIM.  The SE names also
+     should match OIM.
+      * CRITICAL if no active, enabled resource_group/resource found
+      * UNKNOWN if MyOSG data is not valid XML
+      * CRITICAL if OIM resource_group does not match config.ini resource_group
+         * config.ini resource_group defaults to sitename if resource_group
+           value not present
+      * CRITICAL if OIM resource does not match config.ini resource
+         * config.ini resource defaults to sitename if resource value not
+           present
+   * org.osg.gip.freshness: The BDII data is less than 30 minutes old.
+      * UNKNOWN if the BDII cannot be contacted or ldapsearch is not found.
+      * WARNING if the BDII's data for this site is more than 20 minutes old.
+      * CRITICAL if the BDII's data for this site is more than 30 minutes old.
+   * org.osg.gip.lastrun: The GIP has been run recently and all its providers
+     and probes have succeeded.
+      * UNKNOWN if unable to list or stat the temp directory
+      * WARNING if a provider is more than 10 minutes old
+      * CRITICAL if a provider is more than 20 minutes old or doesn't exist.
+   * org.osg.gip.se: One SRM endpoint exists; the SE has non-zero size.
+   * org.osg.gip.ce: One CE endpoint exists; total CPUs is non-zero.
+   * org.osg.gip.valid: The CE passes the GIP's self-consistency test.
+
+The probe can end up in UNKNOWN (i.e., unable to determine actual status)
+for the following reasons:
+   * Unable to read or parse config.ini.
+   * Unable to find any site data in OSG BDII.
+   * Unable to query the BDII.
+   * Unable to query MyOSG.
+By design, failure of any central service results in an UNKNOWN status, which
+is not counted against the site's availability metrics.
+
+"""
+
+#TODO fix run_metric: escape and metric_xml seems not to be defined
+
+import re
+import os
+import pwd
+import sys
+import stat
+import time
+import socket
+import urllib2
+import optparse
+import ConfigParser
+# hashlib new in 2.5, md5 not in 2.6
+try:
+    import hashlib as mymd5
+except ImportError:
+    import md5 as mymd5
+
+from xml.dom.minidom import parse
+
+# Prepare the environment for the rest of the script.  Includes:
+#   * $VDT_LOCATION
+#   * name of metric
+#   * hostname
+#   * username of user running this script
+
+def parse_args():
+    global metricname
+    parser = optparse.OptionParser()
+    parser.add_option("--vdt-location", dest="vdt_loc",
+        help="Value of $VDT_LOCATION, if not in environment")
+    parser.add_option("--metric", dest="metric", help="Metric to run")
+    opts, args = parser.parse_args()
+    if opts.vdt_loc:
+        os.environ['VDT_LOCATION'] = opts.vdt_loc
+    if not opts.metric:
+        parser.print_help()
+        print "No metric name specified!"
+        sys.exit(2)
+    metricname = opts.metric
+
+parse_args()
+
+# Bootstrap the GIP
+if 'GIP_LOCATION' not in os.environ:
+    if 'VDT_LOCATION' in os.environ:
+        os.environ['GIP_LOCATION'] = os.path.join(os.environ['VDT_LOCATION'],
+            'gip')
+if 'GIP_LOCATION' in os.environ:
+    gip_dir = os.path.join(os.environ['GIP_LOCATION'], 'lib', 'python')
+    if gip_dir not in sys.path:
+        sys.path.append(gip_dir)
+    gip_libexec_dir = os.path.join(os.environ['GIP_LOCATION'], 'libexec')
+    if gip_libexec_dir not in sys.path:
+        sys.path.append(gip_libexec_dir)
+
+try:
+   import gip_common
+   import osg_info_wrapper
+except ImportError, ie:
+   print "Unable to import the GIP common library.  This likely indicates a bad environment."
+   print "The python search path is: %s." % ", ".join(sys.path)
+   if 'VDT_LOCATION' not in os.environ:
+       print "Note: $VDT_LOCATION is not in environment."
+   else:
+       print "Note: $VDT_LOCATION=%s" % os.environ['VDT_LOCATION']
+   if 'GIP_LOCATION' not in os.environ:
+       print "Note: $GIP_LOCATION is not in environment."
+   else:
+       print "Note: $GIP_LOCATION=%s" % os.environ['GIP_LOCATION']
+   sys.exit(2)
+
+try:
+    hostname = socket.gethostname()
+    hostname = socket.getfqdn()
+except:
+    hostname = 'UNKNOWN'
+
+try:
+    username = pwd.getpwuid(os.geteuid())[0]
+except:
+    username = "UNKNOWN"
+
+if 'VDT_LOCATION' in os.environ:
+    fd = os.popen("source $VDT_LOCATION/setup.sh; echo $GLOBUS_HOSTNAME")
+    output = fd.read()
+    output = output.strip()
+    if not fd.close() and output:
+        hostname = output
+
+MAX_TIMESTAMP_AGE = 30*60
+WARNING_TIMESTAMP_AGE = 20*60
+
+class WarningException(Exception):
+    pass
+
+class CriticalException(Exception):
+    pass
+
+class UnknownException(Exception):
+    pass
+
+
+# Global variables
+myosg_url = "http://myosg.grid.iu.edu/rgsummary/xml?datasource=summary" \
+    "&summary_attrs_showservice=on&all_resources=on"
+
+
+def verify_ldapsearch():
+    fd = os.popen("which ldapsearch")
+    result = fd.read()
+    if fd.close():
+        raise CriticalException("Unable to find ldapsearch on host %s." % \
+            hostname)
+
+def get_config_ini():
+    vdt_location = os.environ.get("VDT_LOCATION", "/opt/vdt")
+    config_ini_path = os.path.join(vdt_location, "osg", "etc", "config.ini")
+    try:
+        fp = open(config_ini_path, 'r')
+    except:
+        raise UnknownException("Unable to open the config.ini at %s on host" \
+            " %s.  VDT_LOCATION=%s" % (config_ini_path, hostname, vdt_location))
+    try:
+        cp = ConfigParser.ConfigParser()
+        cp.readfp(fp)
+    except:
+        raise UnknownException("Unable to parse the config.ini at %s on host " \
+            "%s." % (config_ini_path, hostname))
+    return cp
+
+def get_config_ini_hostname(cp):
+    """
+    Change the hostname detected automatically to the one from config.ini
+    """
+    global hostname
+    hostname = gip_common.cp_get(cp, "Site Information", "host_name", hostname)
+
+def get_myosg_dom(config_ini):
+    global myosg_url
+    myosg_url = gip_common.cp_get(config_ini, "RSV", "myosg_url", myosg_url)
+    try:
+        proxy_url = os.environ.get("http_proxy", None)
+        if proxy_url:
+            proxy_handler = urllib2.ProxyHandler({'http': proxy_url})
+            opener = urllib2.build_opener(proxy_handler)
+            fp = opener.open(myosg_url)
+        else:
+            fp = urllib2.urlopen(myosg_url)
+    except Exception, e:
+        raise UnknownException("Unable to contact MyOSG server.  Exception: " \
+            " %s." % str(e))
+    try:
+        dom = parse(fp)
+    except Exception, e:
+        raise UnknownException("Unable to parse MyOSG server data due to %s." \
+            % str(e))
+    return dom
+
+def get_resource_doms(dom, service="CE", myhostname=None):
+    """
+    Return a tuple of the resource_group_dom, resource_dom
+    """
+    if myhostname is None:
+        myhostname = hostname
+    if myhostname == 'UNKNOWN':
+        raise UnknownException("Unable to determine CE's hostname.")
+    for resource_group_dom in dom.getElementsByTagName("ResourceGroup"):
+        for resource_dom in resource_group_dom.getElementsByTagName(
+                "Resource"):
+            for service_dom in resource_dom.getElementsByTagName("Service"):
+                try:
+                    sname = service_dom.getElementsByTagName("Name")[0]
+                    sname = str(sname.firstChild.data)
+                except:
+                    continue
+                if sname != service:
+                    continue
+                try:
+                    shost = service_dom.getElementsByTagName("ServiceUri")[0]
+                    shost = str(shost.firstChild.data).split(":")[0]
+                except:
+                    continue
+                if shost == myhostname:
+                    return resource_group_dom, resource_dom
+    raise CriticalException("Unable to find a OIM resource matching " \
+        "hostname %s providing a service of type %s." % (myhostname, service))
+
+def get_resource_group_name(resource_group_dom):
+    """
+    Determine the resource_group_name, given the resource_group dom object.
+    """
+    for child_dom in resource_group_dom.childNodes:
+        if child_dom.localName == "GroupName":
+            try:
+                resource_group_name = str(child_dom.firstChild.data)
+                return resource_group_name
+            except:
+                continue
+    raise UnknownException("Able to determine resource group, but could "
+        "not find the resource_group name in the XML; probably a MyOSG issue.")
+
+def get_resource_name(resource_dom):
+    """
+    Determine the resource_name, given the resource dom object.
+    """
+    for child_dom in resource_dom.childNodes:
+        if child_dom.localName == "Name":
+            try:
+                resource_name = str(child_dom.firstChild.data)
+                return resource_name
+            except:
+                continue
+    raise UnknownException("Able to determine resource, but could "
+        "not find the resource name in the XML; probably a MyOSG issue.")
+
+split_re = re.compile("\s*,?\s*")
+def se_consistency(config_ini, dom, sect, host):
+    resource_group_dom, resource_dom = get_resource_doms(dom, myhostname=host,
+        service="SRMv2")
+    resource_name = get_resource_name(resource_dom)
+    ci_resource_name = gip_common.cp_get(config_ini, sect, "name", "CHANGEME")
+    if ci_resource_name == 'CHANGEME':
+        raise CriticalException("Could not find the 'name' attribute in the " \
+            "section [%s] of config.ini." % sect)
+    stdout  = "SRM host %s:\n" % host
+    stdout += "\t- config.ini name: %s\n" % ci_resource_name
+    stdout += "\t- OIM name: %s" % resource_name
+
+    if ci_resource_name != resource_name:
+        raise CriticalException("SE for SRM host '%s' has config.ini name " \
+            "'%s' which does not match the registered OIM name '%s'." % (host,
+            ci_resource_name, resource_name))
+
+    return stdout
+
+host_re = re.compile("^.*?://(.*):")
+def all_se_consistency(config_ini, dom):
+    all_stdout = []
+    for sect in config_ini.sections():
+        if not sect.startswith("se") and not sect.startswith("SE"):
+            continue
+        enabled = gip_common.cp_getBoolean(config_ini, sect, "enabled")
+        if not enabled:
+            continue
+        srm = gip_common.cp_get(config_ini, sect, "srm_endpoint",
+            "httpg://UNKNOWN.example.com:8443/srm/v2/server")
+        srm_list = split_re.split(srm)
+        hosts = []
+        for srm in srm_list:
+            m = host_re.match(srm)
+            if m:
+                hosts.append(m.groups()[0])
+        if len(hosts) == 1 and hosts[0] == 'UNKNOWN.example.com':
+            raise CriticalException("Unable to determine srm_endpoint in " \
+                "section [%s] of config.ini" % sect)
+        for host in hosts:
+            all_stdout.append(se_consistency(config_ini, dom, sect, host))
+    return "\n".join(all_stdout)
+
+def metric_consistency(config_ini):
+    dom = get_myosg_dom(config_ini)
+    resource_group_dom, resource_dom = get_resource_doms(dom)
+
+    # Determine the resource names from OIM
+    resource_group_name = get_resource_group_name(resource_group_dom)
+    resource_name = get_resource_name(resource_dom)
+
+    # Determine the names from config.ini
+    cp = config_ini
+    ci_resource_name = gip_common.cp_get(cp, "Site Information", "resource",
+        gip_common.cp_get(cp, "Site Information", "site_name", "UNKNOWN"))
+    ci_resource_group_name = gip_common.cp_get(cp, "Site Information",
+        "resource_group", gip_common.cp_get(cp, "Site Information",
+        "site_name", "UNKNOWN"))
+    if ci_resource_name == "UNKNOWN":
+        raise CriticalException("Unable to find resource or sitename in "
+            "Site Information section")
+    if ci_resource_group_name == "UNKNOWN":
+        raise CriticalException("Unable to find resource_group or sitename"
+            " in Site Information section")
+
+    stdout  = "OIM Resource Name: %s\n" % resource_name
+    stdout += "config.ini Resource Name: %s\n" % ci_resource_name
+    stdout += "OIM Resource Group Name: %s\n" % resource_group_name
+    stdout += "config.ini Resource Group Name: %s\n" % ci_resource_group_name
+
+    # Compare the two
+    if resource_group_name != ci_resource_group_name:
+        raise CriticalException("Config.ini resource group name '%s' does not "\
+            "match the OIM resource group name '%s'." % (ci_resource_group_name,
+            resource_group_name))
+    if resource_name != ci_resource_name:
+        raise CriticalException("Config.ini resource name '%s' does not match" \
+            "the OIM resource name '%s'." % (ci_resource_name, resource_name))
+
+    stdout += "\n" + all_se_consistency(config_ini, dom)
+
+    return stdout, ""
+
+def metric_gip_lastrun():
+    try:
+        sys.argv = [sys.argv[0]]
+        cp = gip_common.config()
+    except:
+        raise UnknownException("Unable to open and parse config.ini.")
+    plugin_dir = "$GIP_LOCATION/plugins"
+    cp_get = gip_common.cp_get
+    cp_getInt = gip_common.cp_getInt
+    plugin_dir = os.path.expandvars(cp_get(cp, "gip", "plugin_dir", plugin_dir))
+    provider_dir = "$GIP_LOCATION/providers"
+    provider_dir = os.path.expandvars(cp_get(cp, "gip", "provider_dir", provider_dir))
+    temp_dir = "$GIP_LOCATION/var/tmp"
+    temp_dir = os.path.expandvars(cp_get(cp, "gip", "temp_dir", temp_dir))
+    
+    freshness = 2*cp_getInt(cp, "gip", "freshness", 300) # WARNING level
+    cache_ttl = 2*cp_getInt(cp, "gip", "cache_ttl", 600) # CRITICAL level
+    
+    try:
+        provider_listing = os.listdir(provider_dir)
+    except:
+        raise UnknownException("Unable to list %s as user '%s'; this is " \
+            "needed to check GIP cache freshness." % (provider_dir, username))
+    try:
+        plugin_listing = os.listdir(plugin_dir)
+    except:
+        raise UnknownException("Unable to list %s as user '%s'; this is " \
+            "needed to check GIP cache for freshness." % (plugin_dir,
+            username))
+    stdout = "Provider dir: %s\nPlugin dir: %s\n\n" % (provider_dir, plugin_dir)
+
+    now = time.time()
+    min_age, max_age = now, None
+    for provider_name in provider_listing:
+        file = os.path.join(provider_dir, provider_name)
+        hash = calculate_hash(file)
+        file = os.path.join(temp_dir, provider_name + ".ldif." + hash)
+        try:
+            ctime = os.stat(file)[stat.ST_CTIME]
+        except:
+            raise CriticalException("Provider %s does not have an entry " \
+                "in the GIP cache (%s)." % (provider_name, file))
+        age = int(now - ctime)
+        if age > cache_ttl:
+            raise CriticalException("Provider %s last output is %i seconds" \
+            " old, above the maximum age of %i." % (provider_name, age,
+            cache_ttl))
+        if age > freshness:
+            raise WarningException("Provider %s last output is %i seconds" \
+            " old, above the warning threshold of %i." % (provider_name, age, 
+            freshness))
+        min_age = min(min_age, age)
+        max_age = max(max_age, age)
+    if min_age != now:
+        stdout += "Minimum provider age: %i\n" % min_age
+    if max_age is not None:
+        stdout += "Maximum provider age: %i\n" % max_age
+
+    min_age, max_age = now, None
+    for plugin_name in plugin_listing:
+        file = os.path.join(plugin_dir, plugin_name)
+        hash = calculate_hash(file)
+        file = os.path.join(temp_dir, plugin_name + ".ldif." + hash)
+        try:
+            ctime = os.stat(file)[stat.ST_CTIME]
+        except:
+            raise CriticalException("Plugin %s does not have an entry " \
+                "in the GIP cache (%s)." % (plugin_name, file))
+        age = int(now - ctime)
+        if age > cache_ttl:
+            raise CriticalException("Plugin %s last output is %i seconds" \
+            " old, above the maximum age of %i." % (plugin_name, age, 
+            cache_ttl))
+        if age > freshness:
+            raise WarningException("Plugin %s last output is %i seconds" \
+            " old, above the warning threshold of %i." % (plugin_name, age,
+            freshness))
+        min_age = min(min_age, age)
+        max_age = max(max_age, age)
+    if min_age != now:
+        stdout += "Minimum plugin age: %i\n" % min_age
+    if max_age is not None:
+        stdout += "Maximum plugin age: %i\n" % max_age
+
+    return stdout, ""
+
+def calculate_hash(filename):
+    try:
+        m = mymd5.md5()
+        m.update(open(filename, 'r').read())
+        return m.hexdigest()
+    except:
+        raise UnknownException("Unable to read %s as user %s; this is " \
+            "needed to check GIP cache for freshness.  Exception:" \
+            % (filename, username))
+
+def metric_freshness():
+    try:
+        # This prevents gip_common.config from choking.
+        sys.argv = [sys.argv[0]]
+        cp = gip_common.config()
+
+        gip_cluster = __import__("gip_cluster")
+        cid = gip_cluster.getClusterID(cp)
+        cname = "GlueClusterUniqueID=%s" % cid
+        gname = gip_common.cp_get(cp, "site", "group", "OSG")
+    except:
+        raise UnknownException("Unable to open and parse config.ini.")
+
+    if gname == 'OSG-ITB':
+        stdout = "Setting BDII server to is-itb2.grid.iu.edu based on grid " \
+            "name OSG-ITB.\n"
+        cp.set("bdii", "endpoint", "ldap://is-itb2.grid.iu.edu:2170")
+    else:
+        stdout = "Setting BDII server to default based on grid name %s.\n" \
+            % gname
+
+    my_bdii = cp.get("bdii", "endpoint")
+
+    fd = os.popen("which ldapsearch")
+    fd.read()
+    if fd.close():
+        raise UnknownException("Unable to test BDII endpoint %s for CE " \
+            "information for cluster %s because ldapsearch command was not " \
+            "found." % (my_bdii, cid))
+
+    gip_ldap = __import__("gip_ldap")
+    try:
+        entries = gip_ldap.read_bdii(cp, "(&(objectClass=GlueLocation)"
+            "(GlueLocationName=TIMESTAMP))")
+    except:
+        raise UnknownException("Unable to read data from BDII to perform"
+            " RSV test.  This may indicate a central BDII issue and is not"
+            " a site failure.")
+
+    now = time.time()
+    timestamp = 0
+    all_entries = []
+    entry = None
+    for entry in entries:
+        all_entries.append("dn: %s" % ", ".join(entry.dn))
+        if cname in entry.dn:
+            try:
+                timestamp = int(float(entry.glue['LocationVersion']))
+                break
+            except:
+                raise CriticalException("Unable to parse timestamp out of" \
+                    "LDIF entry:\n- %s" % "\n- ".join(entry.to_ldif().\
+                    splitlines()))
+    if not timestamp:
+        raise CriticalException("Unable to find timestamp entry for cluster" \
+            " %s in BDII %s.  This is likely a subtle bug; contact osg-gip@" \
+            "opensciencegrid.org for assistance" % (cid, my_bdii))
+    age = now - timestamp
+    if age > MAX_TIMESTAMP_AGE:
+        raise CriticalException("BDII information at %s is %i seconds old, " \
+            "more than the critical threshold of %i.  LDAP:\n- %s" % (my_bdii,
+             age, MAX_TIMESTAMP_AGE, "\n- ".join(entry.to_ldif().
+             splitlines())))
+    if age > WARNING_TIMESTAMP_AGE:
+        raise WarningException("BDII information at %s is %i seconds old, " \
+            "more than the warning threshold of %i  LDAP:\n- %s." % (my_bdii,
+            age, WARNING_TIMESTAMP_AGE, "\n- ".join(entry.to_ldif().
+            splitlines())))
+
+    stdout += "BDII information is %i seconds old." % age
+    return stdout, ""
+
+def metric_se():
+    try:
+        # This prevents gip_common.config from choking.
+        sys.argv = [sys.argv[0]]
+        cp = gip_common.config()
+    except:
+        raise UnknownException("Unable to open and parse config.ini.")
+    entries = osg_info_wrapper.main(cp=cp, return_entries=True)
+    se_entries = [i for i in entries if 'GlueSE' in i.objectClass]
+    if len(se_entries) == 0:
+        raise CriticalException("BDII output has no storage information; "
+            "contact osg-gip@opensciencegrid.org for help.")
+    first_se = se_entries[0]
+    total_size = first_se.glue.get("SESizeTotal", None)
+    if total_size is None:
+        raise CriticalException("BDII SE information has no size entry!"
+            "  Contact osg-gip@opensciencegrid.org; it is likely a GIP bug.")
+    if total_size == 0:
+        raise CriticalException("SE exists in the BDII output, but its size"
+            " is zero.  Consult the Release Documentation or contact "
+            "osg-gip@opensciencegrid.org for help.")
+    stdout = "There are %i SEs listed in the GIP output." % len(se_entries)
+    return stdout, ""
+
+def metric_ce():
+    try:
+        # This prevents gip_common.config from choking.
+        sys.argv = [sys.argv[0]]
+        cp = gip_common.config()
+    except:
+        raise UnknownException("Unable to open and parse config.ini.")
+    entries = osg_info_wrapper.main(cp=cp, return_entries=True)
+    ce_entries = [i for i in entries if 'GlueCE' in i.objectClass]
+    if len(ce_entries) == 0:
+        raise CriticalException("BDII output has no CE information; "
+            "contact osg-gip@opensciencegrid.org for help.")
+    first_ce = ce_entries[0]
+    total_size = first_ce.glue.get("CEInfoTotalCPUs", None)
+    if total_size is None:
+        raise CriticalException("BDII CE information has no size entry!"
+            "  Contact osg-gip@opensciencegrid.org; it is likely a GIP bug.")
+    if total_size == 0:
+        raise CriticalException("CE exists in the BDII output, but its size"
+            " is zero.  Consult the Release Documentation or contact "
+            "osg-gip@opensciencegrid.org for help.")
+    stdout = "There are %i CE queues." % len(ce_entries)
+    return stdout, ""
+
+
+def run_metric(metric_name, fcn, args, kwargs):
+    stdout, stderr = "", ""
+    try:
+        stdout, stderr = fcn(*args, **kwargs)
+        exit_code = 0
+    except WarningException, we:
+        if stdout:
+            stdout += "\n" + str(we)
+        else:
+            stdout = str(we)
+        exit_code = 1
+    except CriticalException, ce:
+        if stdout:
+            stdout += "\n" + str(ce)
+        else:
+            stdout = str(ce)
+        exit_code = 2
+    except Exception, e:
+        # UnknownExceptions and all other Exceptions
+        if stdout:
+            stdout += "\n" + str(e)
+        else:
+            stdout = str(e)
+        exit_code = 3
+    try:
+        info = {"exit_code": escape(str(exit_code)),
+            "metric": escape(str(metric_name)),
+            "stdout": escape(str(stdout)), "stderr": escape(str(stderr))}
+        
+        return metric_xml % info
+    except:
+        return ""
+
+def main():
+    config_ini = get_config_ini()
+    get_config_ini_hostname(config_ini)
+    if metricname == "org.osg.gip.consistency":
+        print run_metric(metricname, metric_consistency, (config_ini,), {})
+    elif metricname == "org.osg.gip.lastrun":
+        print run_metric(metricname, metric_gip_lastrun, tuple(), {})
+    elif metricname == "org.osg.gip.freshness":
+        print run_metric(metricname, metric_freshness, tuple(), {})
+    elif metricname == "org.osg.gip.ce":
+        print run_metric(metricname, metric_ce, tuple(), {})
+    elif metricname == "org.osg.gip.se":
+        print run_metric(metricname, metric_se, tuple(), {})
+    else:
+        print "Unknown metric: %s" % metricname
+        sys.exit(2)
+
+if __name__ == '__main__':
+    main()
+

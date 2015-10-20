@@ -1,0 +1,11 @@
+[org.osg.certificates.crl-expiry]
+default-cron-interval = 30 */6 * * *
+
+execute = grid
+transfer-files = /usr/libexec/rsv/probes/rsvprobe.py
+service-type = OSG-CE
+output-format = brief
+enable-by-default = true
+
+
+[org.osg.certificates.crl-expiry env]

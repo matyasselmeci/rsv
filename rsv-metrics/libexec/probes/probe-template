@@ -1,0 +1,60 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use RSVMetric;
+
+print_output_header();
+
+# If your probe needs arguments beyond -m (metric) and -u (host) then put them into
+# a hash table here, and pass it to process_command_line()
+# Make sure to include '=s', '=i', etc if your arguments expects a value.  See 
+# the documentation for Getopt::Long for more information.
+my %extra_opts = ("some-option=s"     => "Option description",
+                  "another-options=s" => "Another description");
+
+# Use process_command_line() to read the options.  %extra_opts is only needed if you
+# define extra arguments beyond -u and -m
+my %options = process_command_line(%extra_opts);
+
+# Set defaults for your custom arguments if they are optional
+$options{'some-option'} ||= 3;
+
+# Validate custom options if they are required
+if(!defined($options{'another-options'})) {
+    print "ERROR: --another-option is required!\n";
+    usage(%extra_opts);
+}
+
+# List of binaries required to be in the PATH to run this probe.  This will exit with 
+# CRITICAL status if they cannot be found.
+find_binaries("cp", "ls");
+
+# Do some stuff - whatever the probe is supposed to be about.
+# You can use $options{u} for the host and $options{m} for the metric name
+# Here is the code from the ping probe.  The shellquote function can be used
+# to build a sanitized command line if any of the arguments are untrusted.
+my $ping_cmd = shellquote("ping", "-q", "-W", $options{'ping-timeout'},
+        "-c", $options{'ping-count'}, $options{u}) . " 2>&1";
+my $out = `$ping_cmd`;
+my $ret = $? >> 8;
+
+if($ret == 0) {
+    print "OK\n";
+    print "Host $options{u} is alive and responding to pings.\n";
+}
+elsif ($ret == 1) {
+    print "CRITICAL\n";
+    print "Host $options{u} is alive but not responding to pings.\n";
+}
+elsif ($ret == 2) {
+    print "CRITICAL\n";
+    print "Unable to ping host $options{u}\n";
+    dump_debug();
+}
+else {  ## Unknown status here
+    print "CRITICAL\n";
+    print "ERROR: Cannot execute ping command $ping_cmd\n";
+}
+
+exit 0;

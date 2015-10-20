@@ -1,0 +1,263 @@
+#!/usr/bin/python
+# First version Nov 2011, Marco Mambelli marco@hep.uchicago.edu
+"""Probe verifying Xroot servers.
+Includes metrics:
+- org.osg.xroot.ping: test connection to remote host
+- org.osg.xroot.grid-xrdcp-direct: copy file from remote host
+- org.osg.xroot.grid-xrdcp-fxr: copy file via federated xroot redirector
+- org.osg.xroot.grid-xrdcp-compare: copy file directly, via redirector and compare the two
+and 3 ATLAS specific ones (similar but testing for an ATLAS file):
+- org.atlas.xroot.xrdcp-direct
+- org.atlas.xroot.xrdcp-fxr
+- org.atlas.xroot.xrdcp-compare
+
+This probe uses the xrdcp command (coming with xroot)
+The --small option uses xrdcp_small (that copies only 1MB of the file) if available, else falls back to xrdcp
+
+Timeout is used only for xrdcp/xrdcp_small execution: actual run time may be longer
+- Python operations not counted,
+- xrdcp-compare may take twice as long (2 xrdcp/xrdcp_small invocations)
+"""
+
+import os
+import filecmp  # for comparing the files in run
+import tempfile
+import shutil   # rmtree in run
+
+# Add the current directory to the path:
+# auxiliary files are staged in the same directory during remote execution
+import sys
+sys.path.insert(0, ".")
+
+import rsvprobe
+from rsvprobe import shellquote_tuple
+
+# Unix commands used
+CMD_XRDCP = "xrdcp"
+CMD_XRDCP_SMALL = "xrdcp_small"
+
+
+# Auxiliary functions
+def uri2rootport(uri):
+  """Return the port part of a URI ('1094' as default)."""
+  return rsvprobe.uri2port(uri, 1094)
+
+def getrooturi(uri):
+  """Complete a URI adding 'root://' if the schema is missing and the 
+trailing '/' if missing; to get something like 'schema://host:port/'
+"""
+  if uri.find("://") < 0: 
+    uri = "root://%s" % uri 
+  if uri.rfind('/', uri.find('://')+3) < 0:  # not uri.endswith('/'):
+    uri = "%s/" % uri 
+  return uri
+
+def getfileuri(uri):
+  """Complete a URI adding the schema 'file://' to the URI if no schema is present.
+E.g. converts '/abspath' to 'file:///abspath'
+"""
+  if uri.find("://") < 0: 
+    uri = "file://%s" % uri 
+  return uri
+
+
+class XrootProbe(rsvprobe.RSVProbe):
+  """Probe verifying Xroot servers
+"""
+
+  def __init__(self):
+    rsvprobe.RSVProbe.__init__(self)
+    self.metric = ""
+    self.short_metric = ""
+    self.is_local = False 
+    #self.select_wlcg_output = True       
+    # Federated Xrootd Redirector
+    metric_list = ["org.osg.xroot.ping",
+                   "org.atlas.xroot.xrdcp-direct","org.atlas.xroot.xrdcp-fxr",
+                   "org.atlas.xroot.xrdcp-compare",
+                   "org.osg.xroot.grid-xrdcp-direct","org.osg.xroot.grid-xrdcp-fxr",
+                   "org.osg.xroot.grid-xrdcp-compare"
+                  ]
+    self.supported_metrics = []
+    for i in metric_list:
+      metric = rsvprobe.RSVMetric("xroot", i, rsvprobe.RSVMetric.STATUS)
+      metric.service_version = ">= xroot 3.0"
+      metric.probe_type = "xroot"
+      metric.probe_revision = "1.0"
+      #in default:
+      #metric.probe_spec_version = RSVMetric.DEFAULT_VERSION
+      #metric.enable_by_default = False
+      ## Unix cron type metric interval
+      metric.cron_interval = "15 */6 * * *"
+      self.supported_metrics.append(metric)
+    self.todelete = []
+    self.dir_todelete = []
+    ## Specific options and defaults
+    self.tempdir = rsvprobe.get_temp_dir()
+    self.test_file = None
+    self.destination_dir = "/tmp"
+    self.fxr_uri = "root://glrd.usatlas.org/"
+    self.use_xrdcp_small = False
+    self.help_message = """Probe to check if Xrootd works using test files.
+Files are retrieved directly or using the global redirector and compared.
+IMPORTANT NOTE: This probe tests different aspects of the xrootd server;
+it is REQUIRED to specify a metric using the -m argument as shown below.
+-u or -h are used to specify the Xroot server to test.\n
+"""
+    self.addopt("", "test-file=", 
+                "--test-file FILE \tRemote test file to be used for testing\n\t\t(Default for ATLAS: /atlas/test/<host>-1M)")
+    self.addopt("", "destination-dir=", 
+                "--destination-dir <dir> \tDirectory on local host to copy test file\n\t\t(Default: /tmp/)")
+    self.addopt("", "fxr=", "--fxr URI \tURI for the federated Xroot server. (Default: root://glrd.usatlas.org:1094/)")
+    self.addopt("", "small", "--small \tCopy only the first 1MB of the test file")
+    self.is_atlas_test = False
+    # central server
+
+  def parseopt(self):
+    """Parse options specific to this probe and return options and reminder to allow further processing"""
+    options, optlist, remainder = rsvprobe.RSVProbe.parseopt(self)
+    for opt, arg in options:
+      if opt == '--test-file':
+        self.test_file = arg 
+      elif  opt == '--destination-dir':
+        self.destination_dir = arg 
+      elif  opt == '--fxr':
+        self.fxr_uri = getrooturi(arg)
+      elif  opt == '--small':
+        self.use_xrdcp_small = True
+    # Constraints and normalization
+    if not self.metric:
+      # help and list have been already handled with
+      self.return_unknown("No metric specified in a multimetric probe. Use --list to list supported metrics. Aborting probe")
+    found = False
+    if not rsvprobe.inlist(rsvprobe.RSVProbe.HOST_OPTIONS+rsvprobe.RSVProbe.URI_OPTIONS, optlist):
+      self.return_unknown("You must specify the remote server. Use --host/uri, check help with --help. Aborting probe")
+    # normalize the URI to root://nethost/
+    self.uri = getrooturi(self.uri)
+    if self.metric.startswith("org.atlas.xroot"):
+      self.is_atlas_test = True
+      self.short_metric = self.metric[len("org.atlas.xroot."):]
+    else:
+      self.is_atlas_test = False
+      if self.metric == "org.osg.xroot.ping":
+        self.short_metric = "ping"
+      else:
+        self.short_metric = self.metric[len("org.osg.xroot.grid-"):]
+    if not self.is_atlas_test and not self.test_file and not self.metric == "org.osg.xroot.ping":
+      self.return_unknown(
+        "The action %s requires a --test-file option.  Please see the options to see all valid metrics and required parameters." % 
+        self.metric)
+    return options, optlist, remainder
+
+  def run(self):
+    "Probe actions"
+    self.parseopt()
+
+    # run ping test. Always? If not move inside if condition
+    res, msg = rsvprobe.ping(rsvprobe.uri2host(self.uri), uri2rootport(self.uri))
+    if not res:
+      self.return_critical("Unable to connect to %s:%s. Ping test failed: %s" % 
+                           (rsvprobe.uri2host(self.uri), uri2rootport(self.uri), msg))
+
+    if self.short_metric == "ping":
+      self.return_ok("Ping test successfull") 
+
+    if self.use_xrdcp_small:
+      cmdxrdcp = rsvprobe.which(CMD_XRDCP_SMALL)
+      if not cmdxrdcp:
+        # self.out_debug() ?
+        self.add_message("%s not found, trying %s" % (CMD_XRDCP_SMALL, CMD_XRDCP))
+        cmdxrdcp = rsvprobe.which(CMD_XRDCP)
+    else:
+      cmdxrdcp = rsvprobe.which(CMD_XRDCP)
+    if not cmdxrdcp:
+      self.return_unknown("%s command not found. Aborting the probe." % CMD_XRDCP)
+
+    # Set the environment to use x509 proxy
+    if self.x509proxy:
+      os.environ['XrdSecGSIUSERPROXY'] = self.x509proxy
+    if self.x509usercert:
+      os.environ['XrdSecGSIUSERCERT'] = self.x509usercert
+    if self.x509userkey:
+      os.environ['XrdSecGSIUSERKEY'] = self.x509userkey
+ 
+    # Set file names/path, ...  ($o{'timestampUnixSeconds'}. "-xroot-probe-test-file.$$")
+    # mktemp is deprecated, mkstemp is opening the file. Better to create a subdir
+    #file1, fname1 = tempfile.mkstemp(suffix='-direct', prefix='xroot-probe-test-file', dir=self.tempdir)
+    #file2, fname2 = tempfile.mkstemp(suffix='-server', prefix='xroot-probe-test-file', dir=self.tempdir)
+    # I need the name, not the file open
+    #file1.close()
+    #file2.close()
+    tmpdir = tempfile.mkdtemp(prefix='xroot-probe-test-dir', dir=self.tempdir)
+    self.dir_todelete.append(tmpdir)
+    fname1 = os.path.join(tmpdir, 'xrdcpdirect')
+    fname2 = os.path.join(tmpdir, 'xrdcpserver')
+    # ATLAS file: $o{'xrdcpServerTestfileUri'} = $o{'xrdcpServiceType'}. "://". $o{'hostName'}. 
+    #   $o{'xrdcpPortNumber'}. "/" . "/atlas/test/". $o{'hostName'}. "-1M";
+    if self.is_atlas_test:
+      uri1 = "%s/atlas/test/%s-1M" % (self.uri, rsvprobe.uri2host(self.uri))
+    else:
+      uri1 = "%s%s" % (self.uri, self.test_file)
+    if self.is_atlas_test:
+      uri2 = "%s/atlas/test/%s-1M" % (self.fxr_uri, rsvprobe.uri2host(self.uri))
+    else:
+      uri2 = "%s%s" % (self.fxr_uri, self.test_file)
+
+    # Run the tests
+    if  self.short_metric == "xrdcp-direct":
+      self.verify_xrdcp(uri1, fname1, cmd_xrdcp=cmdxrdcp)
+      self.return_ok("Xrootd was succesfully tested! direct download succeeded; File received correctly.")
+    elif  self.short_metric == "xrdcp-fxr":
+      self.verify_xrdcp(uri2, fname2, cmd_xrdcp=cmdxrdcp)
+      self.return_ok("Xrootd was succesfully tested! central redirector download succeeded; File received correctly.")
+    elif  self.short_metric == "xrdcp-compare":
+      self.verify_xrdcp(uri1, fname1, cmd_xrdcp=cmdxrdcp)
+      self.verify_xrdcp(uri2, fname2, cmd_xrdcp=cmdxrdcp)
+      are_equal = filecmp.cmp(fname1, fname2, shallow=False)
+      if are_equal:
+        self.return_ok(
+          "Xrootd was succesfully tested! Download from server and central redirector succeeded; Received files are valid.")
+      else:
+        self.return_critical("ERROR: The file from %s (%s) was different from the one from the central redirector (%s)." % 
+                             (rsvprobe.uri2host(self.uri), uri1, uri2))
+    # should never end up here (invalid name)
+    self.return_unknown("Invalid logic, metric name: %s" % self.metric)   
+
+  def atexit(self):
+    for i in self.dir_todelete:
+      shutil.rmtree(i, ignore_errors=True)
+    for i in self.todelete:
+      try:
+        os.remove(i)
+      except OSError:
+        # file already missing
+        pass
+    rsvprobe.RSVProbe.atexit(self)
+
+  def verify_xrdcp(self, src, dst, cmd_xrdcp=CMD_XRDCP, todelete=[]):
+    "Tests a download with xrdcp"
+    cmd = "%s %s %s" % shellquote_tuple(cmd_xrdcp, src, dst) #  "%s %s %s 2>&1"
+    ec, out = rsvprobe.run_command(cmd, self.timeout)
+    if not ec == 0 or not os.path.isfile(dst):
+      # xrdcp failed
+      for i in todelete + [dst]:
+        try:
+          os.remove(i)
+        except OSError:
+          # file already missing
+          pass
+      self.add_critical("xrdcp failed (%s): %s\nActual error message was: %s" %
+                        (ec, cmd, out))
+      self.return_critical("ERROR: Cannot copy file: %s to %s ... Bailing now." %
+                           (src, dst))
+
+
+##### Main code #####
+def main():
+  "main: calling probe.run"  
+  p = XrootProbe()
+  p.run()
+
+if __name__ == "__main__":
+  main()
+

@@ -1,0 +1,120 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use RSVMetric;
+
+print_output_header();
+
+my %options = process_command_line();
+
+# Define the directories we will examine
+my %dirs;
+
+# OSG 3.0+ CEs will not have OSG_LOCATION defined
+if(defined $ENV{OSG_LOCATION}) {
+    # OSG_LOCATION is obviously required and critical
+    $dirs{OSG_LOCATION}{isCritical} = 1;
+    $dirs{OSG_LOCATION}{isRequired} = 1;
+    $dirs{OSG_LOCATION}{permission} = "7[75]5";
+}
+
+# OSG_APP is required, but we'll just give a warning if something is wrong
+$dirs{OSG_APP}{isCritical} = 0;
+$dirs{OSG_APP}{isRequired} = 1;
+$dirs{OSG_APP}{permission} = "7[75][75]";
+
+# OSG_DATA is optional
+$dirs{OSG_DATA}{isCritical} = 0;
+$dirs{OSG_DATA}{isRequired} = 0;
+$dirs{OSG_DATA}{permission} = "77[75]";
+
+# Examine each directory in turn
+my $critical = 0;
+my $warning = 0;
+my $details = "";
+foreach my $dir (keys %dirs) {
+    if(!defined($ENV{$dir})) {
+        if($dirs{$dir}{isRequired}) {
+            if($dirs{$dir}{isCritical}) {
+                $details .= "The required $dir environment variable is not set. (CRITICAL)\n\n";
+                $critical++;
+            }
+            else {
+                $details .= "The required $dir environment variable is not set.\n\n";
+                $warning++;
+            }
+        }
+        else {
+            $details .= "The non-required $dir environment variable is not set.\n\n";
+        }
+        next;
+    }
+
+    my $path = $ENV{$dir};
+    
+    if(($path eq "UNAVAILABLE") or (!-d $path)) {
+        if($dirs{$dir}{isRequired}) {
+            if($dirs{$dir}{isCritical}) {
+                $critical++;
+                $details .= "Required and critical directory is non-existent ($dir=$path)\n\n";
+            }
+            else {
+                $warning++;
+                $details .= "Required directory is non-existent ($dir=$path)\n\n";
+            }
+        }
+        else {
+            $details .= "Non-required directory is non-existent ($dir=$path)\n\n";
+        }
+        next;
+    }
+
+    # This semi-complicated line gets the stat in a form like: "0755"
+    my $mode = sprintf("%04o", (stat($path))[2] & 07777);
+
+    # All directories can have the first bit (sticky, sgid, suid) set to anything
+    # so we just ignore it if it is present.
+    if($mode !~ /\d?$dirs{$dir}{permission}/) {
+        $details .= "The $dir directory ($path) has INCORRECT permissions.\n";
+        if($dirs{$dir}{isCritical}) {
+            $critical++;
+        }
+        else {
+            $warning++;
+        }
+    }
+    else {
+        $details .= "The $dir directory ($path) has correct permissions.\n";
+    }
+
+    $details .= "Found: $mode\n";
+    $details .= "Required: " . $dirs{$dir}{permission} . " (this is a regular expression)\n\n";
+}
+
+
+my $status = "OK";
+my $header = "";
+if($critical) {
+    $status = "CRITICAL";
+    $header .= "Found $critical CRITICAL errors.\n";
+}
+
+if($warning) {
+    $status = "WARNING" unless($critical);
+    $header .= "Found $warning WARNINGs.\n";
+}
+    
+status($status, "\n$header\n$details");
+exit 0;
+
+
+sub status {
+    my ($status, $message) = @_;
+    print "$status\n";
+    print "$message\n";
+
+    # We'll always dump the environment to STDERR to help debug the metric.  This won't
+    # be put into the metric record but it will be available in the job's .err file.
+    print STDERR `/usr/bin/env`;
+}

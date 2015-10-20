@@ -1,0 +1,226 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2010, University of Nebraska-Lincoln
+##
+## Original Author: Brian Bockelman
+## Maintained By: Soichi Hayashi
+##
+## Contributor: Indiana University
+##
+## This Perl script tests if the osg-display is operational and has recent data
+##
+################################################################################
+
+use strict;
+use RSVProbeBase;
+use JSON;
+use Image::ExifTool;
+use DateTime::Format::Strptime;
+
+use Data::Dumper;
+
+our %o;         *o         = \%RSVProbeBase::o;
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+sub Init {
+
+    &RSVProbeBase::Set_MultiMetric ("true");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-Display");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG-Display 0.8");
+    &RSVProbeBase::Set_ProbeType ("OSG-Display");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("1,21,41 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro ("Probe to report if the OSG-Display is functional.");
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions (" [--url <value>]            URL to test\n".
+                                         "                                    Defaults to the URI.");
+
+    ## Uncomment if you want additional command line options
+    ## Optional second argument defines non-default %o hash key
+    &RSVProbeBase::Extra_CLI_Option ("url=s","displayUrl");
+}
+
+sub Run {
+    &Process_Multi_Metrics ();
+    if ($o{'metric'} eq "org.osg.display.available") {
+        &Run_Available();
+    } elsif ($o{'metric'} eq "org.osg.display.fresh") {
+        &Run_Fresh();
+    } elsif ($o{'metric'} eq "org.osg.display.json") {
+        &Run_Json();
+    } elsif ($o{'metric'} eq "org.osg.display.image") {
+        &Run_Image();
+    } else {
+        print "Unknown metric name: $o{'metric'}\n";
+        exit 1;
+    }
+    &RSVProbeBase::Set_MetricName ($o{'metric'});
+}
+
+# Availability metric - see if the home page returns.
+sub Run_Available {
+    my $url = $o{'serviceUri'};
+    if ($o{'displayUrl'}) {
+        $url = $o{'displayUrl'};
+    }
+
+    $o{'cmd'} = "curl --connect-timeout 5 $url -s -S -f 2>&1";
+    &RSVProbeBase::Run_Command ($o{'cmd'}, "backtick");
+
+    if ($o{'cmdExitValue'} != 0){
+        my $curl_error = "cURL retrieval of $o{'displayUrl'}; exit code $o{'cmdExitValue'}; error: [$o{'cmdOut'}]";
+        &RSVProbeBase::Exit_Error (2, "$curl_error");
+    }
+    &RSVProbeBase::Exit_Error (0, "OSG-Display URL responded OK."); ## else
+}
+
+# This routine is obsoleted by Run_Json that check the syntax of json as well as freshness of the json
+# Freshness metric - parse the display.json and see if the site has been recently updated.
+sub Run_Fresh {
+    my $url = "$o{'serviceUri'}/osg_display/display.json";
+    if ($o{'displayUrl'}) {
+        $url = $o{'displayUrl'};
+    }
+
+    $o{'cmd'} = "curl --connect-timeout 5 $url -s -S -f 2>/dev/null";
+    &RSVProbeBase::Run_Command ($o{'cmd'}, "backtick");
+
+    if ($o{'cmdExitValue'} != 0){
+        my $curl_error = "cURL retrieval of $o{'displayUrl'}; exit code $o{'cmdExitValue'}; error: [$o{'cmdOut'}]";
+        &RSVProbeBase::Exit_Error (2, "$curl_error");
+    }
+
+    my $time = 0;
+    if ($o{'cmdOut'} =~ /'time': (\d+)/){
+        $time = $1;
+    } else {
+        &RSVProbeBase::Exit_Error(2, "Display data did not return the last-updated time.");
+    }
+
+    my $age = time() - $time;
+    if ($age < 0) {
+        &RSVProbeBase::Exit_Error(2, "Display data returned a time ". (-$age)." seconds in the future!");
+    } elsif ($age > 900) {
+        &RSVProbeBase::Exit_Error(2, "Display data is $age seconds old, more than max allowed of 900.");
+    } elsif ($age > 600) {
+        &RSVProbeBase::Exit_Error(1, "Display data is $age seconds old, more than the warning threshold of 600.");
+    }
+    &RSVProbeBase::Exit_Error (0, "Display data is $age seconds old; within the staleness threshold.");
+}
+
+# Check if JSON parses without error, and if data is fresh
+sub Run_Json {
+    my $url = "$o{'serviceUri'}/osg_display/display.json";
+    if ($o{'displayUrl'}) {
+        $url = $o{'displayUrl'};
+    }
+
+    $o{'cmd'} = "curl --connect-timeout 5 $url -s -S -f 2>/dev/null";
+    &RSVProbeBase::Run_Command ($o{'cmd'}, "backtick");
+
+    if ($o{'cmdExitValue'} != 0){
+        my $curl_error = "cURL retrieval of $o{'displayUrl'}; exit code $o{'cmdExitValue'}; error: [$o{'cmdOut'}]";
+        &RSVProbeBase::Exit_Error (2, "$curl_error");
+    }
+
+    #try parsing the json
+    my $json = new JSON;
+    my $data;
+    eval {
+        $data = $json->allow_singlequote->decode($o{'cmdOut'});
+    };
+    if($@) {
+        &RSVProbeBase::Exit_Error(2, $@);
+    };
+
+    #check freshness metric - see if the site has been recently updated.
+    my $time = $data->{time};
+    my $age = time() - $time;
+    if ($age < 0) {
+        #&RSVProbeBase::Exit_Error(2, "Display data returned a time ". (-$age)." seconds in the future!");
+    } elsif ($age > 900) {
+        &RSVProbeBase::Exit_Error(2, "Display data is $age seconds old, more than max allowed of 900.");
+    } elsif ($age > 600) {
+        &RSVProbeBase::Exit_Error(1, "Display data is $age seconds old, more than the warning threshold of 600.");
+    }
+    &RSVProbeBase::Exit_Error (0, "Display data is $age seconds old; within the staleness threshold.");
+}
+
+#check validity of jpg images
+sub Run_Image {
+    my $url_base = "$o{'serviceUri'}/osg_display/";
+    if ($o{'displayUrl'}) {
+        $url_base = $o{'displayUrl'};
+    }
+
+    my $exif = new Image::ExifTool;
+    my $strp = new DateTime::Format::Strptime(pattern=>'%Y:%m:%d %H:%M:%S+00:00', time_zone => 'GMT');
+
+    #test each jpg images (we only use jpgs)
+    my @images = ('jobs.jpg', 'transfers.jpg');
+    foreach (@images) {
+        #download the image
+        my $url = $url_base.$_;
+        my $output = "/tmp/".$_;
+        $o{'cmd'} = "curl --connect-timeout 5 $url -s -S -f -o $output 2>/dev/null";
+        &RSVProbeBase::Run_Command ($o{'cmd'}, "backtick");
+        if ($o{'cmdExitValue'} != 0){
+            my $curl_error = "cURL retrieval of $url; exit code $o{'cmdExitValue'}; error: [$o{'cmdOut'}]";
+            &RSVProbeBase::Exit_Error (2, "$curl_error");
+        }
+
+        #check if there is any exif error
+        my $info = $exif->ImageInfo($output);
+        #print Dumper $info;
+        my $error = $$info{'Error'};
+        if($error) {
+            my $curl_error = "$error: $url";
+            &RSVProbeBase::Exit_Error (2, "$curl_error");
+        }
+
+        #check modified date 
+        #my $modtime = $strp->parse_datetime($$info{'FileModifyDate'});
+        #my $modtime = $modtime->epoch();
+        #my $age = time() - $modtime;
+    }
+    &RSVProbeBase::Exit_Error (0, "No issue found in EXIF information for all jpeg images.");
+}
+
+sub Process_Multi_Metrics {
+    ## Additional details for this multi-metric probe
+    $o{'metricName'}{'org.osg.display.available'} = "available";
+    $o{'metricName'}{'org.osg.display.fresh'} = "fresh";
+    $o{'metricName'}{'org.osg.display.json'} = "json";
+    $o{'metricName'}{'org.osg.display.image'} = "image";
+    ## Do above step for each metric possible
+    if (defined ($o{'listmetric'})) {
+        foreach my $metric_name (sort keys %{$o{'metricName'}}) {
+            &RSVProbeBase::Set_MetricName($metric_name);
+            &RSVProbeBase::Set_EnableByDefault("true");
+            &RSVProbeBase::Set_MetricInterval ("1,21,41 * * * *");
+            &RSVProbeBase::List_Summary_Metric();
+        }
+        exit 0;
+    }
+}
+

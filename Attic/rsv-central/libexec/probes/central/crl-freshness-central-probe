@@ -1,0 +1,117 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## $Id: cacert-crl-freshness-centralized-probe,v 1.0 2008/11/22 $
+##
+## Original Author: Anand Padmanabhan
+##
+## This Perl script tests if CRLs have been downloaded recently
+## Type ./cacert-crl-freshness-centralized-probe -h for more information
+##
+##
+## REQUIRES
+##  'RSVProbeBase
+##  'RSVProbeCACert
+##
+################################################################################
+
+## Perl modules to use
+use strict;
+use RSVProbeBase;
+use RSVProbeCACert;
+
+######## Global variables go here ################################
+our %o;         *o         = \%RSVProbeBase::o;
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+################## Local Variables for this probe #####################
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+
+
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+###### Local Sub routines begin ###########
+################################################################################
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.central.crl.freshness");
+
+    ## Pass "status" or "performance" depending on metric type
+            
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-Central-Monitor");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CA 1.1 / VDT CA v40");
+    &RSVProbeBase::Set_ProbeType ("OSG-Central-CA-Install");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("45 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("IMPORTANT NOTE: This is a central probe that checks if the CRLs have been updated recently.\n\n");
+	
+    ## Flag this as a local probe
+    ## &RSVProbeBase::Set_LocalProbe();
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+    (" --ca-install-base-dir <dir>      Location of Fetch CRL installation\n".
+     "                                   (Default: No defaults)\n".
+     " [--warning-hours <\# hours>]      Number of hours elapsed before warning is to be issued\n". 
+     "                                    when vdt-update-cert fails to update \n".
+     " [--error-hours <\# hours>]        Number of hours elapsed before error is to be issued\n". 
+     "                                    when vdt-update-cert fails to update \n".
+     " [--cacerts-dir <directory> ]     Location of CA certificate files\n".
+     "                                   (Default: <ca-install-base-dir>/globus/TRUSTED_CA\n"
+     );
+
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("ca-install-base-dir=s","caInstallBaseDir");
+    &RSVProbeBase::Extra_CLI_Option ("cacerts-dir=s","certDir");
+    &RSVProbeBase::Extra_CLI_Option ("warning-hours=i","warnHrs");
+    &RSVProbeBase::Extra_CLI_Option ("error-hours=i","errorHrs");
+    
+     ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ## Initialize local variables
+    &Initialize_Local();
+
+    ## Real tests begin now - check for expired certs now 
+    &RSVProbeCACert::Check_Freshness_CRL();
+
+    ## Print metric, and we're all done!
+    &RSVProbeBase::Print_Metric ();
+}
+
+## Initialize local variables
+sub Initialize_Local{
+    if (! $o{'caInstallBaseDir'}){
+        my $status_out="The location of the Fetch-CRL local installation (--ca-install-base-dir) is a required parameter. Please check your RSV invocation.\n";
+        my $status_code=3;
+        &RSVProbeBase::Exit_Error ($status_code,$status_out);
+    }
+    $o{'certDir'} = $o{'caInstallBaseDir'} ."/globus/TRUSTED_CA/" if (! $o{'certDir'});
+    $o{'warnHrs'}  = 9 if (! $o{'warnHrs'}) ; ## Warning after 9 hrs
+    $o{'errorHrs'} = 2*24 if (! $o{'errorHrs'}); ## Error after 48 Hrs
+}
+
+## None for now

@@ -1,0 +1,57 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use RSVMetric;
+
+print_output_header();
+
+my %options = process_command_line();
+
+my $cemon_config_path = "/etc/glite-ce-monitor/cemonitor-config.xml";
+
+my $ret = open my $cemon_config_fh, "<", $cemon_config_path;
+if (! $ret) {
+    print "UNKNOWN\n";
+    print "CEMon config file $cemon_config_path not found\n";
+    exit 0;
+}
+
+my $keyfile_path;
+while (my $line = <$cemon_config_fh>) {
+    chomp($line);
+    if ($line =~ /sslkeyfile="([^"]+)"/) {
+        $keyfile_path = $1;
+        last;
+    }
+}
+
+close $cemon_config_fh;
+
+if (! $keyfile_path) {
+    print "CRITICAL\n";
+    print "CEMon config file $cemon_config_path does not contain location of container key file (sslkeyfile)\n";
+    exit 0;
+}
+
+if (! -e $keyfile_path) {
+    print "CRITICAL\n";
+    print "Container key file $keyfile_path does not exist\n";
+    exit 0;
+}
+
+my $keyfile_mode = (stat($keyfile_path))[2];
+my $keyfile_perms = $keyfile_mode & 07777;
+
+if (! ($keyfile_perms == 0400 || $keyfile_perms == 0600)) {
+    print "CRITICAL\n";
+    print "Container key file $keyfile_path has incorrect permissions\n";
+    printf("%04o, should be 0400 or 0600\n", $keyfile_perms);
+    exit 0
+}
+else {
+    print "OK\n";
+    exit 0;
+}
+
+

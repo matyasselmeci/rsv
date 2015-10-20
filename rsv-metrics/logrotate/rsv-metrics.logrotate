@@ -1,0 +1,9 @@
+
+/var/log/rsv/metrics/*.log {
+  weekly
+  rotate 2
+  compress
+  compressoptions -9f
+  copytruncate
+  missingok
+}

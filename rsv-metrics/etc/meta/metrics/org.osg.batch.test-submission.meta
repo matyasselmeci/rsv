@@ -1,0 +1,11 @@
+[org.osg.batch.test-submission]
+default-cron-interval = 47 */6 * * *
+
+execute = local
+service-type = OSG-HTCondor-CE
+output-format = brief
+need-proxy = true
+enable-by-default = false
+description = Tests job submission into batch system
+
+[org.osg.batch.test-submission env]

@@ -1,0 +1,132 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use File::Basename;
+use RSVMetric;
+
+print_output_header();
+
+my %extra_opts = ( "destination-dir=s" => "Directory to place remote file",
+                   "delay=i" => "Time in seconds to sleep between transfer to/from");
+
+my %options = process_command_line(%extra_opts);
+
+# Set defaults
+$options{'destination-dir'} ||= "/tmp";
+$options{'delay'} ||= 30;
+
+find_binaries("globus-url-copy", "uberftp");
+
+
+#
+# Set up file paths
+#
+my $test_file = "/usr/share/rsv/probe-helper-files/gridftp-probe-test-file";
+my $local_uri = "file://$test_file";
+
+if(!-e $test_file) {
+    print "CRITICAL\n";
+    print "The helper file is missing from '$test_file'.\n";
+    print "Your RSV installation may be incomplete or corrupt.\n";
+    exit 0;
+}
+
+my $time = time;
+my $filename = basename($test_file) . ".$time.$$";
+my $remote_file = "$filename.remote";
+my $remote_uri = "gsiftp://$options{u}/$options{'destination-dir'}/$remote_file";
+
+
+# 
+# Transfer to
+#
+my $cmd = shellquote("globus-url-copy", $local_uri, $remote_uri) . " 2>&1";
+my $out = `$cmd`;
+if($? != 0) {
+    print "CRITICAL\n";
+    print "Failed to transfer to remote host.\n";
+    print "Command: $cmd\n";
+    print "Output:\n$out\n";
+    exit 0;
+}
+else {
+    print STDERR "Successful transfer to remote host.\n";
+    print STDERR "Command: $cmd\n";
+    print STDERR "Output:\n$out\n\n";
+}
+
+# The previous RSV developer (Arvind Gopu) said that this probe fails to find
+# the remote file unless a delay is implemented between transfers.
+sleep($options{delay});
+
+#
+# Transfer from
+#
+my $new_local_path = "/tmp/$filename.local";
+my $new_local_uri = "file://$new_local_path";
+$cmd = shellquote("globus-url-copy", $remote_uri, $new_local_uri) . " 2>&1";
+$out = `$cmd`;
+if($? != 0) {
+    print "CRITICAL\n";
+    print "Successful transfer to remote host.\n";
+    print "Failed to transfer from remote host.\n";
+    print "Command: $cmd\n";
+    print "Output:\n$out\n";
+    cleanup_files();
+    exit 0;
+}
+elsif(!-e $new_local_path) {
+    print "CRITICAL\n";
+    print "Successful transfer to remote host.\n";
+    print "When transferring the file back from the remote host, globus-url-copy\n";
+    print "returned an exit status of 0 (no error) but the file does not exist locally\n";
+    print "Command: $cmd\n";
+    print "Output:\n$out\n";
+    cleanup_files();
+    exit 0;
+}
+else {
+    print STDERR "Successful transfer from remote host.\n";
+    print STDERR "Command: $cmd\n";
+    print STDERR "Output:\n$out\n\n";
+}
+
+#
+# Compare files
+#
+$cmd = shellquote("diff", $test_file, $new_local_path) . " 2>&1";
+$out = `$cmd`;
+if($? != 0) {
+    print "CRITICAL\n";
+    print "Successful transfer to remote host.\n";
+    print "Successful transfer from remote host.\n";
+    print "The file that was returned from the remote host does not match the original file.\n";
+    print "Diff:\n$out\n";
+    cleanup_files();
+    exit 0;
+}
+
+print "OK\n";
+print "Successful transfer to remote host.\n";
+print "Successful transfer from remote host.\n";
+print "Original file and received file are identical.\n";
+cleanup_files();
+exit 0;
+
+
+sub cleanup_files {
+    # First cleanup the local file if it exists
+    if($new_local_path and -e $new_local_path) {
+        if(not unlink($new_local_path)) {
+            print STDERR "Failed to unlink existing local file '$new_local_path': $!";
+        }
+    }
+
+    # Then cleanup the remote file using UberFTP
+    my $cmd = shellquote("uberftp", "-rm", $remote_uri) . " 2>&1";
+    my $out = `$cmd`;
+    if($? != 0) {
+        print STDERR "Failed to remove remote file '$remote_uri'.  Output:\n$out\n";
+    }
+}

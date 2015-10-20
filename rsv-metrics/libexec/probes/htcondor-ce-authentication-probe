@@ -1,0 +1,36 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use RSVMetric;
+
+print_output_header();
+
+my %options = process_command_line();
+
+find_binaries("condor_ce_ping");
+my $host = $options{u};
+$host =~ s/:(\d+)$//;
+my $port = $1 || 9619;
+my $quoted_host = shellquote($host);
+my $cmd = "condor_ce_ping -pool $quoted_host:$port -name $quoted_host -table READ WRITE";
+
+my $output = `$cmd`;
+
+if($? == 0) {
+    print "OK\n";
+    print "Output from $cmd:\n";
+    print "$output\n";
+}
+else {
+    # The message from globusrun is not generally helpful.  So we will
+    # print it, but we'll also try a globus-url-copy and include that
+    # output because it tends to have better error messages.
+    print "CRITICAL\n";
+    print "Output from $cmd\n";
+    print "$output\n";
+
+    # TODO Now run globus-url-copy
+}
+
+exit 0;

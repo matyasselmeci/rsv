@@ -1,0 +1,102 @@
+#!/bin/bash
+
+component=${1?Usage: $0 '<component>'}
+
+E_OK=0
+E_ERROR=1
+E_COMPONENT_NOT_INSTALLED=2
+E_UNKNOWN_COMPONENT=3
+
+safe_source () {
+    [[ -r $1 ]] && . $1 || :
+}
+
+print_tomcat_java () {
+    # Tries to determine which Java Tomcat uses
+    local tomcatv
+    tomcatv=
+    rpm -q tomcat5 &> /dev/null && tomcatv=tomcat5
+    rpm -q tomcat6 &> /dev/null && tomcatv=tomcat6
+
+    [[ -z $tomcatv ]] && return $E_COMPONENT_NOT_INSTALLED
+    (
+        safe_source /etc/$tomcatv/$tomcatv.conf
+        safe_source /etc/sysconfig/$tomcatv
+
+        if [[ -r /usr/share/java-utils/java-functions ]]; then
+            . /usr/share/java-utils/java-functions
+            set_javacmd
+            echo "$JAVACMD"
+        else
+            if [[ -n $JAVA_HOME && -x $JAVA_HOME/bin/java ]]; then
+                echo "$JAVA_HOME/bin/java"
+            else
+                exit $E_ERROR
+            fi
+        fi
+    )
+    return $?
+}
+
+print_bestman2_java () {
+    # Tries to determine which Java bestman2 uses
+    rpm -q bestman2-server &> /dev/null || return $E_COMPONENT_NOT_INSTALLED
+    (
+        safe_source /etc/sysconfig/bestman2
+        if [[ -n $JAVA_HOME && -x $JAVA_HOME/bin/java ]]; then
+            echo "$JAVA_HOME/bin/java"
+        else
+            exit $E_ERROR
+        fi
+    )
+    return $?
+}
+
+print_bigtop_java () {
+    (
+        safe_source /usr/libexec/bigtop-detect-javahome
+        if [[ -n $JAVA_HOME && -x $JAVA_HOME/bin/java ]]; then
+            echo "$JAVA_HOME/bin/java"
+        else
+            exit $E_ERROR
+        fi
+    )
+    return $?
+}
+
+print_hadoop_java () {
+    rpm -q hadoop &> /dev/null || return $E_COMPONENT_NOT_INSTALLED
+    print_bigtop_java
+    return $?
+}
+
+print_hadoop_0_20_java () {
+    rpm -q hadoop-0.20 &> /dev/null || return $E_COMPONENT_NOT_INSTALLED
+    (
+        safe_source /etc/default/hadoop-0.20 # needed to get HADOOP_HOME
+        safe_source /usr/lib/hadoop-0.20/bin/hadoop-config.sh
+        if [[ -n $JAVA_HOME && -x $JAVA_HOME/bin/java ]]; then
+            echo "$JAVA_HOME/bin/java"
+        else
+            exit $E_ERROR
+        fi
+    )
+    return $?
+}
+
+print_xrootd_hdfs_java () {
+    rpm -q xrootd-hdfs &> /dev/null || return $E_COMPONENT_NOT_INSTALLED
+    print_bigtop_java
+    return $?
+}
+
+
+case $component in
+    (bestman2) print_bestman2_java; exit $? ;;
+    (hadoop) print_hadoop_java; exit $? ;;
+    (hadoop-0.20) print_hadoop_0_20_java; exit $? ;;
+    (tomcat) print_tomcat_java; exit $? ;;
+    (xrootd-hdfs) print_xrootd_hdfs_java; exit $? ;;
+    (*)      echo Unknown component $component; exit $E_UNKNOWN_COMPONENT ;;
+esac
+

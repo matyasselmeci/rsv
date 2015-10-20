@@ -1,0 +1,11 @@
+[org.osg.general.vo-supported]
+default-cron-interval = 54 6,18 * * *
+
+execute = grid
+transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
+service-type = OSG-CE
+output-format = brief
+enable-by-default = true
+
+
+[org.osg.general.vo-supported env]

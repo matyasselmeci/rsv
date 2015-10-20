@@ -1,0 +1,204 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use File::Basename;
+use RSVMetric;
+
+print_output_header();
+
+my %extra_opts = ("srm-destination-dir=s"  => "Required: Remote destination to put temp file",
+                  "srm-webservice-path=s"  => "Required: Remote webservice path, e.g. srm/v2/server",
+                  "srm-protocol-version=i" => "1 or 2",
+                  "verbose=s"              => "enable debugging output for gfal-* commands");
+
+my %options = process_command_line(%extra_opts);
+
+$options{'srm-protocol-version'} ||= 2;
+
+if(!defined($options{'srm-destination-dir'}) or !defined($options{'srm-webservice-path'})) {
+    print "ERROR: You must pass both --srm-destination-dir and --srm-webservice-path\n\n";
+    usage(%extra_opts);
+}
+
+# --verbose or --verbose=1 => enabled, --verbose=0 => disabled
+for ($options{verbose}) {
+    $_ = 1 if defined && /^\s*$/;
+}
+
+find_binaries("gfal-copy", "gfal-ls", "gfal-rm");
+
+# 
+# Transfer to the remote server
+#
+
+my $local_file = "/usr/share/rsv/probe-helper-files/storage-probe-test-file";
+my $local_uri = "file://$local_file";
+
+if(!-e $local_file) {
+    print "CRITICAL\n";
+    print "The helper file is missing from '$local_file'.\n";
+    print "Your RSV installation may be incomplete or corrupt.\n";
+    exit 0;
+}
+
+my $time = time;
+my $host = $options{u};
+$host =~ s/:(\d+)$//;
+$options{'srm-destination-dir'} =~ s{/$}{};
+my $port = $1 || 8443;
+my $remote_file = basename($local_file) . ".$time.$$";
+my $remote_uri = "srm://$host:$port/$options{'srm-webservice-path'}?SFN=$options{'srm-destination-dir'}/$remote_file";
+my @verbose_op = ('-vvv') if $options{verbose};
+
+# TODO - might need '-x509_user_proxy=' included in here
+my $srm_copy_cmd1 = shellquote("gfal-copy", @verbose_op, $local_uri, $remote_uri) . " 2>&1";
+my $out1 = `$srm_copy_cmd1`;
+if($? != 0) {
+    print "CRITICAL\n";
+    print "Failed to transfer file to remote server.\n";
+    print "Command: $srm_copy_cmd1\n";
+    print "Output from gfal-copy:\n$out1\n";
+    exit 0;
+}
+else {
+    print STDERR "Successful transfer to remote server.\n";
+    print STDERR "Command: $srm_copy_cmd1\n";
+    print STDERR "Output from gfal-copy:\n$out1\n\n";
+}
+
+#
+# Transfer file back from remote server
+#
+
+# $new_local_file must have a different basename than $remote_file or else the
+# script will break if the probe is running on the same host as the srm server.
+my $new_local_file = "/tmp/${remote_file}.copy";
+my $new_local_uri = "file://$new_local_file";
+
+# TODO - might need '-x509_user_proxy=' included in here
+my $srm_copy_cmd2 = shellquote("gfal-copy", @verbose_op, $remote_uri, $new_local_uri) . " 2>&1";
+my $retries;
+my $out2 = `$srm_copy_cmd2`;
+
+# a stale nfs cache can delay seeing the file for up to 60s
+while ($? != 0 && $out2 =~ /No such file or directory/ && ++$retries < 4) {
+    print STDERR "Remote file appears to be missing from remote server:\n",
+                 "Will sleep for 20s and retry... ($retries)\n";
+    sleep 20;
+    $out2 = `$srm_copy_cmd2`;
+}
+
+if($? != 0) {
+    print "CRITICAL\n";
+    print "Successful transfer to remote server.\n";
+    print "Command: $srm_copy_cmd1\n"         if $options{verbose};
+    print "Output from gfal-copy:\n$out1\n\n" if $options{verbose};
+    print "Failed to transfer file from remote server.\n";
+    print "Command: $srm_copy_cmd2\n";
+    print "Output from gfal-copy:\n$out2\n";
+    cleanup_files();
+    exit 0;
+}
+else {
+    print STDERR "Successful transfer from remote server.\n";
+    print STDERR "Command: $srm_copy_cmd2\n";
+    print STDERR "Output:\n$out2\n\n";
+}
+
+
+# 
+# Compare files
+#
+my $out3 = `diff $local_file $new_local_file`;
+if($? != 0) {
+    print "CRITICAL\n";
+    print "Successful transfer to remote server.\n";
+    print "Command: $srm_copy_cmd1\n"         if $options{verbose};
+    print "Output from gfal-copy:\n$out1\n\n" if $options{verbose};
+    print "Successful transfer from remote server.\n";
+    print "Command: $srm_copy_cmd2\n"         if $options{verbose};
+    print "Output:\n$out2\n\n"                if $options{verbose};
+    print "The file that was returned from the remote server does not match the original file.\n";
+    print "Diff:\n$out3\n";
+    cleanup_files();
+    exit 0;
+}
+
+
+# 
+# List file from remote host
+#
+
+# The original srmcp-srm-probe did this, so we'll preserve this behavior
+my $srm_ls_cmd = shellquote("gfal-ls", @verbose_op, $remote_uri) . " 2>&1";
+my $out4 = `$srm_ls_cmd`;
+if($? != 0) {
+    print "CRITICAL\n";
+    print "Successful transfer to remote server.\n";
+    print "Command: $srm_copy_cmd1\n"         if $options{verbose};
+    print "Output from gfal-copy:\n$out1\n\n" if $options{verbose};
+    print "Successful transfer from remote server.\n";
+    print "Command: $srm_copy_cmd2\n"         if $options{verbose};
+    print "Output:\n$out2\n\n"                if $options{verbose};
+    print "Original file and received file are identical.\n";
+    print "The remote file could not be listed using gfal-ls.\n";
+    print "Command: $srm_ls_cmd\n";
+    print "Output:\n$out4\n";
+    cleanup_files();
+    exit 0;
+}
+
+cleanup_files(1);
+print "OK\n";
+print "Successful transfer to remote host.\n";
+print "Command: $srm_copy_cmd1\n"         if $options{verbose};
+print "Output from gfal-copy:\n$out1\n\n" if $options{verbose};
+print "Successful transfer from remote host.\n";
+print "Command: $srm_copy_cmd2\n"         if $options{verbose};
+print "Output:\n$out2\n\n"                if $options{verbose};
+print "Original file and received file are identical.\n";
+print "Remote file was properly listed using gfal-ls.\n";
+print "Command: $srm_ls_cmd\n"            if $options{verbose};
+print "Output:\n$out4\n"                  if $options{verbose};
+exit 0;
+
+
+sub cleanup_files {
+    my $recap = $_[0];
+
+    my $unlink_fail;
+    # First the local file
+    if($new_local_file and -e $new_local_file) {
+        if(not unlink($new_local_file)) {
+            print STDERR "Failed to unlink existing local file '$new_local_file': $!\n";
+            $unlink_fail = 1;
+        }
+    }
+
+    # And also the remote file
+    my $srm_rm_cmd = shellquote("gfal-rm", @verbose_op, $remote_uri) . " 2>&1";
+    my $out5 = `$srm_rm_cmd`;
+    if (($? != 0)||($out5 !~ /\tDELETED$/)) {
+        print STDERR "Failed to remove remote file '$remote_uri'.  Output:\n$out5\n";
+        if ($recap) {
+            print "WARNING\n";
+            print "Successful transfer to remote server.\n";
+            print "Command: $srm_copy_cmd1\n"         if $options{verbose};
+            print "Output from gfal-copy:\n$out1\n\n" if $options{verbose};
+            print "Successful transfer from remote server.\n";
+            print "Command: $srm_copy_cmd2\n"         if $options{verbose};
+            print "Output:\n$out2\n\n"                if $options{verbose};
+            print "Original file and received file are identical.\n";
+            print "Remote file was properly listed using gfal-ls.\n";
+            print "Command: $srm_ls_cmd\n"            if $options{verbose};
+            print "Output:\n$out4\n\n"                if $options{verbose};
+            print "Failed to unlink existing local file '$new_local_file': $!\n\n"
+               if $unlink_fail && $options{verbose};
+        }
+        print "Remote file could not be deleted correctly.\n";
+        print "Command: $srm_rm_cmd\n";
+        print "Output:\n$out5\n";
+        exit 0;
+    }
+}

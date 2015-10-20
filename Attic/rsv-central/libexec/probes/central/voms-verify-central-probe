@@ -1,0 +1,107 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+##
+## Original Author: Anand Padmanabhan
+##
+## This Perl script tests if all the OSG VOMS servers can be reached
+## Type ./cacert-verify-voms-central-probe -h for more information
+##
+##
+## REQUIRES
+##  'RSVProbeBase
+##  'RSVProbeCACert
+##
+################################################################################
+
+## Perl modules to use
+use strict;
+use RSVProbeBase;
+use RSVProbeCACert;
+
+######## Global variables go here ################################
+our %o;         *o         = \%RSVProbeBase::o;
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+################## Local Variables for this probe #####################
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+
+
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+###### Local Sub routines begin ###########
+################################################################################
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.central.voms.verify");
+
+    ## Pass "status" or "performance" depending on metric type
+            
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-Central-Monitor");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CA 1.1 / VDT CA v40");
+    &RSVProbeBase::Set_ProbeType ("OSG-Central-CA-Install");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("50 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("IMPORTANT NOTE: This is a central probe that checks if DNs can be downloaded from the VOMS server.\n\n");
+	
+    ## Flag this as a local probe
+    ## &RSVProbeBase::Set_LocalProbe();
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions
+    (" --edg-install-base-dir <dir>      Root location of the local VDT-based EDG-GridMap install.\n".
+     "                                   (Required parameter No Defaults)\n".
+     " [--percent-bad-threshold <int> ]  Percentage of bad VOMS beyond which to report critical status\n".
+     "                                   (Default: 10\%)\n");
+
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("edg-install-base-dir=s","edgInstallBaseDir");
+    &RSVProbeBase::Extra_CLI_Option ("percent-bad-threshold=i","percentBadThreshold");
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ## Initialize local variables
+    &Initialize_Local();
+
+    ## Real tests begin now - check for expired certs now 
+    &RSVProbeCACert::Check_VOMS();
+
+    ## Print metric, and we're all done!
+    &RSVProbeBase::Print_Metric ();
+}
+
+## Initialize local variables
+sub Initialize_Local{
+    if (! $o{'edgInstallBaseDir'}){
+        my $status_out="The location of the local VDT-based EDG-Gridmap installation directory (--edg-install-base-dir) is a required parameter. Please check your RSV\
+ invokation.\n";
+        my $status_code=3;
+        &RSVProbeBase::Exit_Error ($status_code,$status_out);
+    }
+    $o{'percentBadThreshold'} = 10 if (!defined($o{'percentBadThreshold'}));
+}
+

@@ -1,0 +1,132 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+##
+## Original Author: Anand Padmanabhan
+##
+## This Perl script tests if CA certificates on the local host are still valid
+## Type cacert-verify-igtf-central-probe -h for more information
+##
+##
+## REQUIRES
+##  'RSVProbeBase
+##  'RSVProbeCACert
+##
+################################################################################
+
+## Perl modules to use
+use strict;
+use RSVProbeBase;
+use RSVProbeCACert;
+
+######## Global variables go here ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+################## Local Variables for this probe #####################
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+###### Local Sub routines begin ###########
+################################################################################
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.central.cacert.verify-igtf");
+
+    ## Pass "status" or "performance" depending on metric type
+        
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("OSG-Central-Monitor");
+    &RSVProbeBase::Set_ServiceVersion (">= OSG CA 1.1 / VDT CA v40");
+    &RSVProbeBase::Set_ProbeType ("OSG-Central-CA-Install");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("5 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro 
+	("IMPORTANT NOTE: This is a central probe that checks if Tarball and RPM releases from VDT and OSG are insync with the IGTF release\n\n");
+	
+    ## Flag this as a local probe
+    ## &RSVProbeBase::Set_LocalProbe();
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpOptions 
+    (" [--repo <value> ]                Repo name - values: \"goc\", \"vdt\"\n".
+     "                                   (Default: \"goc\"\n".
+     " [--igtf-tarball-url <URL> ]      Location of CA certificate tarball distributed by IGTF\n".
+     "                                   (Default: http://dist.eugridpma.info/distribution/igtf/current/accredited/\n".
+     "                                   Please use the default values unless you are certain)\n".
+     " [--tarball-url <URL> ]           Location of CA certificate tarball distributed by repo\n".
+     "                                   (Defaults: goc: http://software.grid.iu.edu/pacman/cadist/ca-certs-version\n".
+     "                                              vdt: http://vdt.cs.wisc.edu/software/certificates/vdt-igtf-ca-certs-version\n".
+#    "                                   Please use the default values unless you are certain)\n".
+     " [--rpm-url <URL> ]               Location of CA certificate RPMs distributed by OSG\n".
+     "                                   (Defaults: goc: http://yum.grid.iu.edu/rpms/noarch\n".
+     "                                              vdt: http://vdt.cs.wisc.edu/vdt_rpms/vdt-ca-certs\n".
+     "                                    Please use the default values unless you are certain)\n"
+   );
+    
+    ## Uncomment if you want additional command line options
+    &RSVProbeBase::Extra_CLI_Option ("repo=s","repoName");
+    &RSVProbeBase::Extra_CLI_Option ("igtf-tarball-url=s","igtfTarballUrl");
+    &RSVProbeBase::Extra_CLI_Option ("tarball-url=s","tarballUrl");
+    &RSVProbeBase::Extra_CLI_Option ("rpm-url=s","rpmUrl");
+#    &RSVProbeBase::Extra_CLI_Option ("osg-tar=s","osgTar");
+#    &RSVProbeBase::Extra_CLI_Option ("vdt-tar=s","vdtTar");
+#    &RSVProbeBase::Extra_CLI_Option ("osg-rpm=s","osgRpm");
+#    &RSVProbeBase::Extra_CLI_Option ("vdt-rpm=s","vdtRpm");
+
+    ## Uncomment if you do not want detailsData to be trimmed to $o{'detailsDataMaxLength}
+    &RSVProbeBase::Set_DetailsDataTrim ("False");
+}
+
+
+sub Run {
+    ## Initialize local variables
+    &Initialize_Local();
+
+    ## Real tests begin now - check for expired certs now 
+    &RSVProbeCACert::Check_IGTF();
+
+    ## Print metric, and we're all done!
+    &RSVProbeBase::Print_Metric ();
+}
+
+## Initialize local variables
+sub Initialize_Local{
+    $o{'repoName'} = "goc" if (! $o{'repoName'});
+    $o{'igtfTarballUrl'} =  "http://dist.eugridpma.info/distribution/igtf/current/accredited/" if (! $o{'igtfTarballUrl'});
+    
+    if ($o{'repoName'} =~ /^vdt$/i) {
+	$o{'tarballUrl'} = "http://vdt.cs.wisc.edu/software/certificates/vdt-igtf-ca-certs-version" if (! $o{'tarballUrl'});
+	$o{'rpmUrl'} = "http://vdt.cs.wisc.edu/vdt_rpms/vdt-ca-certs" if (! $o{'rpmUrl'});
+    }
+    elsif ($o{'repoName'} =~ /^goc$/i) {
+	$o{'tarballUrl'} = "http://software.grid.iu.edu/pacman/cadist/ca-certs-version" if (! $o{'tarballUrl'});
+	$o{'rpmUrl'} = "http://software.grid.iu.edu/rpms/noarch" if (! $o{'rpmUrl'});
+    }
+    else {
+	my $status_out="Invalid repo name passed to --repo parameter. Please check your RSV invocation.\n";
+	my $status_code=3;
+	&RSVProbeBase::Exit_Error ($status_code,$status_out);
+    }
+}
+
+## None for now

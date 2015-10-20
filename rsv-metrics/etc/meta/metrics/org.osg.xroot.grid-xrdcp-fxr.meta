@@ -1,0 +1,11 @@
+[org.osg.xroot.grid-xrdcp-fxr]
+default-cron-interval = 1,31 * * * *
+
+execute = local
+service-type = xroot
+output-format = brief
+enable-by-default = false
+description = Copy a file via the Federated Xroot Redirector
+
+[org.osg.xroot.grid-xrdcp-fxr env]
+

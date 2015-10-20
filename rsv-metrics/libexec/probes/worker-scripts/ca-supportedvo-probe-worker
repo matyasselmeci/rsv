@@ -1,0 +1,71 @@
+#!/usr/bin/env perl
+use File::Temp qw/ tempdir /;
+use File::Basename;
+
+my $local_url=$ARGV[0];
+my $supported_vo_file = $ARGV[1];
+my $cert_dir = $ARGV[2];
+
+my %ca_vos;
+
+my $status_code = 0;
+my $status_out = "";
+
+# Step 1: Download the list of CAs needed by VOs from GOC 
+chomp(my $cwd = `pwd`);
+my $working_dir = tempdir("osgrsv-supportedvo-XXXXXX", TMPDIR => 1, CLEANUP => 1);
+chdir($working_dir);
+    
+my $cmd = "wget $local_url &>/dev/null";
+my $cmdExitValue=system($cmd);
+    
+chdir($cwd);
+
+if ($cmdExitValue !=0){
+    # Could not download the CA list from OSG. Setting test value as Unknown
+    $status_code = 3;
+    $status_out = "Could not download the CA list for VOs from OSG ('$local_url'). Unable to verify are all needed CAs are present.";
+    print "$status_code<split>$status_out";
+    exit 1;
+}
+my $local_ca_vo_file = "$working_dir/".basename($local_url);
+open FILE, "< $local_ca_vo_file" or print "3<split>The downloaded ca list from OSG could not be opened. Unable to verify if all needed CAs are present." and exit 1;
+my @contents = <FILE>;
+foreach my $line (@contents) {
+    next if ($line =~ m/^\s*#/); #Ignore comment lines
+    chomp($line);
+    my @values = split /\s*,\s*/, $line;
+    my $vo = lc($values[0]);
+    $ca_vos{$vo} = $line;
+}
+close FILE;
+
+# Step 2: Get the supported VO list from the site and verify that the necessary is present 
+
+if (! -e $supported_vo_file){
+    print "3<split>Unable to open the file ('$supported_vo_file') containing the list of VOs supported by this site.";
+    exit 1
+}
+
+open FILE, "< $supported_vo_file" or print "3<split>Unable to open the file ('$supported_vo_file') containing the list of VOs supported by this site." and exit 1;
+@contents = <FILE>;
+foreach my $vo (@contents) {
+    next if($vo =~ /^\s*$/i); #Empty lines
+    next if($vo =~ /^\s*#/i); #comment lines
+    chomp($vo);
+    $vo = lc($vo);
+    my @values = split /\s*,\s*/, $ca_vos{lc($vo)};
+    for (my $i=1; $i<=$#values;$i++) {
+        my $hash = $values[$i];
+        if (!-e "$cert_dir/$hash.0"){
+            $status_code = 2;
+            $status_out .= "CA file with hash ('$hash') needed by VO ('$vo') was not found (in '$cert_dir')\n";
+        }
+    }
+}
+close FILE;
+
+$status_out .= "OK: All CAs needed by OSG VOs supported at this site are present.\n" if ($status_code==0);
+
+print "$status_code<split>$status_out";
+exit 0;

@@ -1,0 +1,83 @@
+#!/usr/bin/python
+
+import os
+import re
+import subprocess
+import sys
+
+
+sys.path.insert(0, '.')
+
+import rsvprobe
+
+def tar_ssh_run(host, port=None, ssh='ssh'):
+    """
+    Send main java-version-probe and required files to be run on remote host.
+
+    Can specify an alternate ssh program to connect with (eg, gsissh).
+    """
+
+    # find the ../probes dir relative to this file
+    from os.path import dirname, abspath, join
+    probes_dir = abspath(join(dirname(abspath(__file__)), '..', 'probes'))
+    transfer_files = ['rsvprobe.py', 'java-version-probe',
+                      'worker-scripts/java-version-probe-worker']
+    
+    tar_command = ['tar', 'Cc', probes_dir] + transfer_files
+
+    # on remote end: untar files in temp dir, run probe, and clean up
+    remote_command = """
+        set -e
+        tmpd=$(mktemp -d)
+        trap 'rm -rf "$tmpd"' EXIT
+        cd "$tmpd"
+        tar x
+        ./java-version-probe
+        exit
+    """
+
+    ssh_command = [ssh]
+    if port is not None:
+        ssh_command += ['-p', port]
+    ssh_command += [host, remote_command]
+        
+    p1 = subprocess.Popen(tar_command, stdout=subprocess.PIPE)
+    p2 = subprocess.Popen(ssh_command, stdin=p1.stdout)
+    p2.communicate()
+
+    return p2.returncode
+
+class JavaVersionLocalProbe(rsvprobe.RSVProbe):
+    """
+    Runs java-version-probe on a remote ssh host.
+    """
+
+    def __init__(self):
+        #super(JavaVersionLocalProbe, self).__init__()
+        rsvprobe.RSVProbe.__init__(self)
+        self.metric = ""
+        metric = rsvprobe.RSVMetric("OSG-CE",
+                 "org.osg.general.java-version-ssh", rsvprobe.RSVMetric.STATUS)
+        metric.service_version = ">= OSG CE 1.0.0"
+        metric.probe_type = "OSG-CE"
+        self.supported_metrics = [metric]
+        self.details = "---\n"
+
+        # down the road we may look into supporting gsissh...
+        # self.port = None
+        # self.ssh = 'ssh'
+
+    def run(self):
+        """Main routine for the probe"""
+        self.parseopt()
+        
+        # pass through output of remotely run probe
+        return tar_ssh_run(self.host)
+
+def main():
+    probe = JavaVersionLocalProbe()
+    return probe.run()
+
+if __name__ == '__main__':
+    sys.exit(main())
+

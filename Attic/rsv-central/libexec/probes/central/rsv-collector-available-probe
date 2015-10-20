@@ -1,0 +1,91 @@
+#!/usr/bin/env perl
+
+###############################################################################
+##
+## Copyright 2009, The Trustees of Indiana University. 
+##
+## Open Science Grid Operations Team, Indiana University
+## Original Author: Arvind Gopu (http://peart.ucs.indiana.edu)
+##
+## This Perl script tests if an RSV collector is functioning normally
+## Try ./rsv-collector-available-probe -h for information
+##
+## REQUIRES
+##  'RSV::Probe_Base'
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use RSVProbeBase;
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         *o         = \%RSVProbeBase::o;      
+our %metric;    *metric    = \%RSVProbeBase::metric;
+
+&RSVProbeBase::Init();
+&RSVProbeBase::Run();
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+################################################################################
+## Local Sub-Routines
+################################################################################
+
+sub Init {
+
+    &RSVProbeBase::Set_MetricName ("org.osg.rsv.collector.available");
+
+    ## Pass "status" or "performance" depending on metric type
+    &RSVProbeBase::Set_MetricType ("status");
+    &RSVProbeBase::Set_ServiceType ("RSV");
+    &RSVProbeBase::Set_ServiceVersion (">= RSV Gratia Collector 1.04.4");
+    &RSVProbeBase::Set_ProbeType ("OSG-RSV");
+
+    ## Should automating tools run this probe on above probeType by default?
+    &RSVProbeBase::Set_EnableByDefault ("true");
+    
+    ## Unix cron type metric interval
+    &RSVProbeBase::Set_MetricInterval ("1,21,41 * * * *");
+
+    ## Define this value from RCS/SVN version
+    ## What version of the WLCG specification does this probe conform to?
+    &RSVProbeBase::Set_ProbeRevision ('3.0');
+    &RSVProbeBase::Set_ProbeSpecVersion ("0.91");
+
+    ## Basic intro for the probe; This string will be used by Print_Usage ()
+    &RSVProbeBase::Set_ProbeHelpIntro ("Probe to report if RSV collector is functional.");
+
+    ## Additional options to print in Usage info used by Print_Usage ()
+    ## &RSVProbeBase::Set_ProbeHelpOptions ("");
+
+    ## Uncomment if you want additional command line options
+    ## Optional second argument defines non-default %o hash key
+    ## &RSVProbeBase::Extra_CLI_Option ("new-option=s","");
+}
+
+
+sub Run {
+    $o{'cmd'} = "/usr/bin/curl -f --silent --insecure --retry 3 --retry-delay 5 http://$o{'serviceUri'}/gratia-administration/monitor-status.html 2>/dev/null";
+    &RSVProbeBase::Run_Command ($o{'cmd'}, "backtick");
+
+    if ($o{'cmdExitValue'} != 0){
+	my $error = "RSV Collector status not found; curl exit code $o{'cmdExitValue'}; error: [$o{'cmdOut'}]";
+	&RSVProbeBase::Ping_Host();
+	&RSVProbeBase::Exit_Error (2, "$error. Host responding to pings.")    if (($o{'cmdExitValue'} == 0) || ($o{'cmdExitValue'} == 1));
+	&RSVProbeBase::Exit_Error (2, "$error. Host not responding to pings") if (($o{'cmdExitValue'} == 2) || ($o{'cmdExitValue'} == 3));
+    }
+    my @information = split ("\\\|",$o{'cmdOut'});
+    &RSVProbeBase::Exit_Error (2,"Expected status information not found in [$o{'cmdOut'}]")     if ($#information <= 1);
+    my %stats;
+    foreach my $pair (@information) {
+	my @tmp = split ("\=", $pair);
+	$stats{$tmp[0]} = $tmp[1];
+    }
+    &RSVProbeBase::Exit_Error (0, "$stats{'record-count-hour'} records in last hour.") if ($stats{'record-count-hour'} > 0);
+    &RSVProbeBase::Exit_Error (2, "0 records in last hour.");
+}

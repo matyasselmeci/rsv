@@ -1,0 +1,258 @@
+#!/usr/bin/python2
+
+import os
+import re
+import subprocess
+import sys
+
+
+sys.path.insert(0, '.')
+
+import rsvprobe
+
+# Helper script error codes
+E_OK = 0
+E_ERROR = 1
+E_COMPONENT_NOT_INSTALLED = 2
+E_UNKNOWN_COMPONENT = 3
+
+def run_with_subprocess(cmd):
+    """Run a command using subprocess, returning a tuple of (output, error,
+    returncode) where output and error are the contents of stdout and stderr,
+    respectively. Forces 'C' locale in case we need to parse the output.
+
+    """
+    new_env = dict(os.environ, LC_ALL='C')
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=new_env)
+        output, error = proc.communicate()
+        returncode = proc.returncode
+    except OSError, (errno, strerror):
+        output, error = "", "Could not execute %s: %s" % (cmd[0], strerror)
+        returncode = 1
+
+    return (output, error, returncode)
+
+
+def real_which(program):
+    """Returns the real path to a program, with all symlinks resolved."""
+    which_file = rsvprobe.which(program)
+    if which_file:
+        return os.path.realpath(which_file)
+    else:
+        return None
+
+
+def rpm_query_files(*filepaths):
+    """Return a list of RPMs owning the files in 'filepaths'."""
+    if filepaths:
+        # The 'PACKAGE:' string is used to filter out errors -- any line not
+        # containing it will be discarded.
+        cmd = (['rpm', '--query', '--file',
+                r'--queryformat=PACKAGE:%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n'] +
+               list(filepaths))
+        output, error, returncode = run_with_subprocess(cmd)
+
+        return [line.lstrip('PACKAGE:') for line in output.split("\n") if line.startswith('PACKAGE:')]
+    else:
+        return []
+
+
+def rpm_query_whatprovides(*dependencies):
+    """Return a list of RPMs that provide the dependencies in
+    'dependencies'.
+
+    """
+    if dependencies:
+        # The 'PACKAGE:' string is used to filter out errors -- any line not
+        # containing it will be discarded.
+        cmd = (['rpm', '--query', '--whatprovides',
+                r'--queryformat=PACKAGE:%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n'] +
+               list(dependencies))
+        output, error, returncode = run_with_subprocess(cmd)
+
+        return [line.lstrip('PACKAGE:') for line in output.split("\n") if line.startswith('PACKAGE:')]
+    else:
+        return []
+
+
+# Helper functions for YAML output, which is indent-sensitive
+def indent_multiline_string(in_string, spaces):
+    """Indent each line of a multi-line string by 'spaces' spaces. Do not
+    indent single-line strings.
+
+    """
+    if in_string.find("\n") != -1:
+        return "\n".join([(' ' * spaces) + line for line in in_string.split("\n")])
+    else:
+        return in_string
+
+
+def list_to_string(in_list):
+    """Convert a python list to a string containing its YAML representation.
+    The Python list [] is represented as the YAML string '[]' and is on the same
+    line as its label. The Python list [1,2,3] is represented as the YAML string
+    '- 1
+    - 2
+    - 3'
+    and is on lines following its label.
+
+    """
+    if not in_list:
+        return "[]"
+    else:
+        return "\n- " + "\n- ".join(in_list)
+
+
+# Functions to get a list of installed JREs/JDKs
+# We just look for the appropriate dependencies. Note that 'jdk' (Oracle JDK 6)
+# does not provide 'java' or 'java-devel' (though its helper package
+# java-1.6.0-sun-compat does) so we search for that one specifically.
+
+def get_installed_jre_packages():
+    """Return a list of all JREs installed."""
+    # Convert to a set and back to a list again to uniqueify.
+    return sorted(list(set(rpm_query_whatprovides('java', 'java7', 'jdk'))))
+
+def get_installed_jdk_packages():
+    """Return a list of all JDKs installed."""
+    # Convert to a set and back to a list again to uniqueify.
+    return sorted(list(set(rpm_query_whatprovides('java-devel', 'java7-devel', 'jdk'))))
+
+
+
+def get_java_binary_version(java_binary):
+    """Return the following:
+        1. The version string of a Java binary (searching $PATH if needed), as reported by running "'java_binary' -version"
+        2. The real path to the binary
+        3. Which RPM (if any) provides that binary
+    The string '(Not found)' is returned if the binary can't be executed or
+    returns an error. Otherwise, the string is a YAML hash containing the keys
+    'Version' (a multiline string), 'Full path' (a string) and 'Provided by' (a
+    string).
+
+    """
+    cmd = (java_binary, '-version')
+    _, version_output, returncode = run_with_subprocess(cmd) # '-version' output goes onto stderr
+
+    if returncode == 0:
+        full_path = real_which(java_binary)
+        providers = rpm_query_files(full_path)
+        if providers:
+            # In theory we can have multiple providers, but in practice that won't happen
+            provider_str = providers[0]
+        else:
+            provider_str = "(Non-RPM install)"
+        ret = """
+Version: |
+%s
+Full path: %s
+Provided by: %s""" % (indent_multiline_string(version_output, 2), full_path, provider_str)
+        return ret
+    else:
+        return "(Not found)"
+
+
+def get_jre_in_path():
+    """Get the version info of the current JRE by looking at the 'java' binary
+    in $PATH. See get_java_binary_version for format.
+
+    """
+    return get_java_binary_version('java')
+
+def get_jdk_in_path():
+    """Get the version info of the current JDK by looking at the 'javac' binary
+    in $PATH. See get_java_binary_version for format.
+
+    """
+    return get_java_binary_version('javac')
+
+
+def get_java_used_by_component(component):
+    """Get version info of Java used by a specific component, such as Tomcat.
+    See get_java_binary_version for the format.
+
+    """
+    # Since most services choose which Java to run from the environment, or by
+    # sourcing a file, we need a bash helper script to do the actual work.
+
+    worker_script_path = os.path.join(os.getcwd(), "worker-scripts", "java-version-probe-worker")
+    if not os.path.exists(worker_script_path):
+        worker_script_path = os.path.join(os.getcwd(), "java-version-probe-worker")
+    cmd = ("bash", worker_script_path, component)
+    output, _, returncode = run_with_subprocess(cmd)
+
+    if returncode == E_COMPONENT_NOT_INSTALLED:
+        return "(Not found)"
+    elif returncode != E_OK:
+        return "(UNKNOWN)"
+    else:
+        java_binary = os.path.realpath(output.strip())
+        return get_java_binary_version(java_binary)
+
+
+class JavaVersionProbe(rsvprobe.RSVProbe):
+    """Probe listing the versions of Java that are available, and which ones
+    are in use.  For now, we're just reporting info, so this probe will always
+    be OK.
+
+    Output is in YAML so it is human-readable and can be parsed by an
+    aggregator script. The following keys/values are used:
+
+    'Installed JRE RPMs': A list of strings
+    'java command in path': A hash or the string '(Not found)', see
+        get_java_binary_version for format
+    'Installed JDK RPMs': A list of strings
+    'javac command in path': A hash or the string '(Not found)', see
+        get_java_binary_version for format
+    'java used by <component>': A hash (see get_java_binary_version) or one of
+        the following strings: '(UNKNOWN)', '(Not found)'.
+        <component> is one of the components in 'known_components'
+
+    """
+
+    known_components = ['bestman2', 'hadoop-0.20', 'hadoop', 'tomcat', 'xrootd-hdfs']
+
+    def __init__(self):
+        rsvprobe.RSVProbe.__init__(self)
+        self.metric = ""
+        metric = rsvprobe.RSVMetric("OSG-CE", "org.osg.general.java-version", rsvprobe.RSVMetric.STATUS)
+        metric.service_version = ">= OSG CE 1.0.0"
+        metric.probe_type = "OSG-CE"
+        self.supported_metrics = [metric]
+        self.details = "---\n"
+
+    def add_details_item(self, label, text):
+        self.details += label + ": "
+        self.details += indent_multiline_string(text, 2)
+        self.details += "\n\n"
+
+    def run(self):
+        """Main routine for the probe"""
+        self.parseopt()
+
+        jres = get_installed_jre_packages()
+        self.add_details_item('Installed JRE RPMs', list_to_string(jres))
+        self.add_details_item('java command in path', get_jre_in_path())
+        jdks = get_installed_jdk_packages()
+        self.add_details_item('Installed JDK RPMs', list_to_string(jdks))
+        self.add_details_item('javac command in path', get_jdk_in_path())
+
+        for component in self.known_components:
+            self.add_details_item('java used by ' + component, get_java_used_by_component(component))
+        self.details += "---\n"
+
+        self.return_ok("Java packages queried.\n" + self.details)
+
+
+
+
+
+def main():
+    probe = JavaVersionProbe()
+    probe.run()
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

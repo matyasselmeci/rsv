@@ -1,0 +1,445 @@
+#!/usr/bin/env perl
+
+# Rewrite of the srm-client probes by Doug Strain
+# Created 2009, refactored 2011
+#
+## This Perl script tests if srm client commands work correctly 
+## Contains the following tests:
+##
+## org.osg.srm.srmclient-copy: uploads a file then copies it (srmcp)
+## org.osg.srm.srmclient-get: srmcp a file to server and back, compares w/ diff
+## org.osg.srm.srmclient-mkdir: Makes a directory, then removes it
+## org.osg.srm.srmclient-rmdir: Makes a directory, then removes it
+## org.osg.srm.srmclient-mv: Copies a file to the server and then moves it.
+## org.osg.srm.srmclient-ping: Pings a server (srmping)
+## org.osg.srm.srmclient-put: Put a file onto the server, then srmls to verify
+## org.osg.srm.srmclient-reservespace: Test srm-reserve-space
+## org.osg.srm.srmclient-releasespace: Test srm-reserve-space then release
+## org.osg.srm.srmclient-rm: srmcp a file to the server then remove it (srmrm).
+##
+################################################################################
+
+######## Perl modules to use ######################################
+use strict;
+use warnings;
+use RSVMetric;
+
+
+######## Retrieve Global variables ################################
+########   and begin setup         ################################
+
+print_output_header();
+
+my %extra_opts = ("srm-webservice-path=s"  => "Required: Remote webservice path, e.g. srm/v2/server",
+                  "srm-destination-dir=s" => "Destination directory on server",
+                  "srm-client-type=s" => "Client type, fermi or lbnl",
+                  "sitename=s" => "Sitename for pigeon",
+                  "x=s" => "proxy value",
+                  "verbose" => "Verbosity level",
+                  "srm-protocol-version=i" => "1 or 2");
+my %metric=();
+our %options = process_command_line(%extra_opts);
+my $local_file = "/usr/share/rsv/probe-helper-files/storage-probe-test-file";
+my $local_uri = "file://$local_file";
+
+$options{'srm-protocol-version'} ||= 2;
+if (!defined($options{'srm-destination-dir'})) 
+	{$options{'srm-destination-dir'}="/tmp";}
+if (!defined($options{'srm-client-type'})) 
+	{$options{'srm-client-type'}="lbnl";}
+if (!defined($options{'srm-webservice-path'})) 
+	{$options{'srm-webservice-path'}="srm/v2/server";}
+
+if(not defined($options{'srm-webservice-path'})) {
+    print "ERROR: You must pass --srm-webservice-path\n\n";
+    usage(%extra_opts);
+}
+
+
+
+######## Retrieve Global variables ################################
+## And alias to RSV::Probe_Base variables
+our %o;         
+my $timestamp=`date +\%s`;
+chomp $timestamp;
+our @job_managers = ("ping","put","get","copy",
+                "reservespace","releasespace",
+                "rm","mkdir", "rmdir", "mv");
+our $cmd_output="";
+my $out_value=2;
+my $out_desc="";
+my $out="";
+my $ret=0;
+
+### Get correct probe
+ my $probe_name = $options{"m"};
+ my $probe_match=0;
+ $probe_name    =~ /.*\.srmclient-(.*)$/;
+ $probe_name    = $1;
+ my $srm_probe_name="";
+    foreach $srm_probe_name (@job_managers) {
+        if ($srm_probe_name eq $probe_name) { $probe_match=1; }
+    }
+    if ($probe_match != 1)
+    {
+    print "CRITICAL\n";
+    print "$probe_name is not a supported option.  See rsv-control for valid operations.\n";
+    exit 0;
+    }
+
+
+
+# TODO - might need '-x509_user_proxy=' included in here
+my @defaults=();
+my $cmd_line="";
+my $ping_bin="srm-ping";
+my $ls_bin="srm-ls";
+my $copy_bin="srm-copy";
+my $rm_bin="srm-rm";
+my $mv_bin="srm-mv";
+my $mkdir_bin="srm-mkdir";
+my $rmdir_bin="srm-rmdir";
+my $release_bin="srm-sp-release";
+my $reserve_bin="srm-sp-reserve";
+if ($options{'srm-client-type'} eq "fermi")
+  {
+	$ping_bin="srmping";
+	$copy_bin="srmcp";
+	$ls_bin="srmls";
+	$rm_bin="srmrm";
+        $mv_bin="srmmv";
+	$mkdir_bin="srmmkdir";
+	$rmdir_bin="srmrmdir";
+	$release_bin="srm-release-space";
+	$reserve_bin="srm-reserve-space";
+	@defaults=(
+            "-retry_num=1", "-debug", "-$options{'srm-protocol-version'}",
+            "-webservice_path=$options{'srm-webservice-path'}"
+        );
+  }
+# find_binaries($binary_file);
+
+my $srm_uri="srm://".$options{'u'}."/".$options{'srm-webservice-path'};
+$srm_uri = $srm_uri . "?SFN=".$options{'srm-destination-dir'};
+
+###     srm-client-ping
+###
+###  Performs a srm-ping on a host and records the result
+   if ($probe_name eq "ping")
+   {
+    $cmd_line = shellquote($ping_bin, "srm://$options{u}", @defaults) . " 2>&1";
+    $out = `$cmd_line`;
+    $ret = $? >> 8;
+    ## Set metric status based on srmping command's exit value
+    if ($ret == 0)
+    {
+        $out_value=0;
+        $out_desc="SRM server running on $options{'u'} is alive and responding to the srmping command.\n";
+    } elsif ($ret == 1) {
+        $out_value=2;
+        $out_desc="SRM server running on $options{'u'} is not responding to the srmping command. \n";
+    } else {
+        $out_value=3;
+        $out_desc="SRM server running on $options{'u'} returned unknown exit code upon runnnig [$cmd_line]. \n";
+    }
+    ## Special parsing for dcache and no mapping
+    if ($out =~/backend_type=dCache/)
+        {
+                if ($out =~/backend_version=/)
+                { $out_value=0;}
+                else
+                { 
+                        $out_value=2;
+                        $out_desc="dCache did not provide backend type.";
+                }
+        } 
+        else
+        {
+                if ($out =~/gumsIDMapped=null/)
+                {
+                        $out_value=1;
+                        $out_desc="Srm Ping worked, but did not authenticate to a gums id.";
+                }
+        }
+   }
+
+   if ($probe_name eq "put")
+   {
+     $srm_uri .= "/".$timestamp."-srmclient-probe-test-file-put.$$";
+     my $copy_cmd = shellquote($copy_bin, @defaults, $local_uri, $srm_uri) . " 2>&1";
+     $out=`$copy_cmd`; 
+     my $srmls_cmd = shellquote($ls_bin, @defaults, $srm_uri) . " 2>&1";
+     $out.=`$srmls_cmd`;
+     $ret = $? >> 8;
+     if ($ret ==0)
+        {
+                $out_value=0;
+                $out_desc="SRM server $options{'u'} able to receive an example file via srm-cp and list example test file";
+        }
+        else
+        {
+                $out_value=2;
+                $out_desc="SRM server could not list file copied by srm-cp on $options{'u'}.";
+        }
+     my $rm_cmd = shellquote($rm_bin, $srm_uri) . " 2>&1";
+     $out.=`$rm_cmd`;
+   }
+
+
+
+
+   if ($probe_name eq "mv")
+   {
+     $srm_uri .= "/".$timestamp."-srmclient-probe-test-file-mv.$$";
+     my $srm_uri_mv .= "/".$timestamp."-srmclient-probe-test-file-moved.$$";
+     my $copy_cmd = shellquote($copy_bin, @defaults, $local_uri, $srm_uri) . " 2>&1";
+     $out=`$copy_cmd`;
+     my $mv_cmd = shellquote($mv_bin, @defaults, $srm_uri, $srm_uri_mv) . " 2>&1";
+     $out.=`$mv_cmd`;
+     my $srmls_cmd = shellquote($ls_bin, @defaults, $srm_uri_mv) . " 2>&1";
+     $out.=`$srmls_cmd`;
+     $ret = $? >> 8;
+     if ($ret ==0)
+        {
+                $out_value=0;
+                $out_desc="SRM server $options{'u'} able to move and list a file via srm-mv";
+                my $rm_cmd = shellquote($rm_bin, $srm_uri_mv) . " 2>&1";
+      		$out.=`$rm_cmd`;
+        }
+        else
+        {
+                $out_value=2;
+                $out_desc="SRM server could not list file moved by srm-mv on $options{'u'}.";
+                my $rm_cmd = shellquote($rm_bin, $srm_uri) . " 2>&1";
+      		$out.=`$rm_cmd`;
+        }
+   }
+
+   if (($probe_name eq "mkdir")|| ($probe_name eq "rmdir"))
+   {
+	$srm_uri .= "/".$timestamp."-srmclient-probe-test-directory.$$";
+        my $mkdir_cmd = shellquote($mkdir_bin, @defaults, $srm_uri) . " 2>&1";
+        $out=`$mkdir_cmd`;
+        my $srmls_cmd = shellquote($ls_bin, @defaults, $srm_uri) . " 2>&1";
+        $out.=`$srmls_cmd`;
+        $ret = $? >> 8;
+        if ($probe_name eq "mkdir")
+	{
+	        if ($o{'cmdExitValue'} == 0)
+                {
+                        $out_value=0;
+                        $out_desc="SRM server $metric{'hostName'} was able to create and list a directory.";
+                }
+                else
+                {
+                        $out_value=2;
+                        $out_desc="SRM server $metric{'hostName'} received files and was able to copy to a different location.";
+                }
+	}
+        my $rmdir_cmd = shellquote($rmdir_bin, @defaults, $srm_uri) . " 2>&1";
+        $out.=`$rmdir_cmd`;
+	if ($probe_name eq "rmdir")
+        {
+        	my $srmls_cmd = shellquote($ls_bin, @defaults, $srm_uri) . " 2>&1";
+        	$out.=`$srmls_cmd`;
+        	my $ret2 = $? >> 8;
+                if (($ret==0)&&($ret2 != 0))
+                {
+                        $out_value=0;
+                        $out_desc="SRM server was able to create and remove a directory.";
+                }
+                else
+                {
+                        $out_value=2;
+                        if ($ret!=0)
+                        {
+                                $out_desc="SRM server was not able to create/list the directory before removing it.";
+                        }
+                        if ($ret2 == 0)
+                        {
+                                $out_desc="SRM server was able to create the directory, but failed to remove it.";
+                        }
+
+                }
+        }
+   }
+   if ($probe_name eq "rm")
+   {
+     $srm_uri .= "/".$timestamp."-srmclient-probe-test-file-rm.$$";
+     my $srmls_cmd = shellquote($ls_bin, @defaults, $srm_uri) . " 2>&1";
+     my $copy_cmd = shellquote($copy_bin, @defaults, $local_uri, $srm_uri) . " 2>&1"; 
+     my $rm_cmd = shellquote($rm_bin, @defaults, $srm_uri) . " 2>&1"; 
+     $out=`$copy_cmd`;
+     $out.=`$srmls_cmd`;
+     $ret = $? >> 8;
+     $out.=`$rm_cmd`;
+     $out.=`$srmls_cmd`;
+     my $ret2 = $? >> 8;
+     if (($ret==0)&&($ret2 !=0))
+     {
+        $out_value=0;
+        $out_desc="SRM server $metric{'hostName'} was able to create and remove a file.";
+     }
+     else
+     {
+        $out_value=2;
+        if ($ret!=0)
+        {
+            $out_desc="SRM server was either not able to create a file to delete or was not able to list that file.";
+        }
+        if ($ret2 !=0)
+        {
+            $out_desc="SRM server was able to create a file but could not delete it.";
+        }
+     }
+   }
+   if ($probe_name eq "get")
+   {
+     $srm_uri .= "/".$timestamp."-srmclient-probe-test-file-get.$$";
+     my $local_uri2="/tmp/rsv.".$timestamp."-copyfile.$$";
+     my $copy_cmd1 = shellquote($copy_bin, @defaults, $local_uri, $srm_uri) . " 2>&1"; 
+     my $copy_cmd2 = shellquote($copy_bin, @defaults, $srm_uri, "file://$local_uri2") . " 2>&1"; 
+     $out=`$copy_cmd1`;
+     $out.=`$copy_cmd2`;
+     my $diff_files_cmd = shellquote("diff", $local_file, $local_uri2) . " 2>&1";
+     my $diff_out=`$diff_files_cmd`; 
+     $ret = $? >> 8;
+     if (($diff_out eq '') &&($ret == 0 ))
+     {
+        $out_value=0;
+        $out_desc="SRM write/read was succesfully tested;\n Upload to and download from SRM server $o{'hostName'} succeeded; Received file is valid.";
+     }
+     else
+     {
+        $out_value=2;
+        $out_desc="ERROR: File copied was different from our testfile or srm copy failed; Absolute error message was: $diff_out";
+     }
+     my $rm_cmd = shellquote($rm_bin, @defaults, $srm_uri) . " 2>&1"; 
+     $out.=`$rm_cmd`;
+   }
+
+   if ($probe_name eq "copy")
+   {
+     my $srm_uri1 = $srm_uri . "/".$timestamp."-srmclient-probe-test-file-copy.$$";
+     my $srm_uri2 = $srm_uri . "/".$timestamp."-srmclient-probe-test-file-copy2.$$";
+     my $copy_cmd1 = shellquote($copy_bin, @defaults, $local_uri, $srm_uri1) . " 2>&1"; 
+     my $copy_cmd2 = shellquote($copy_bin, @defaults, $srm_uri1, $srm_uri2) . " 2>&1"; 
+     my $ls_cmd = shellquote($ls_bin, @defaults, $srm_uri2) . " 2>&1";
+     $out=`$copy_cmd1`;
+     $out.=`$copy_cmd2`;
+     $out.=`$ls_cmd`;
+     $ret = $? >> 8;
+     if ($ret == 0)
+     {
+        $out_value=0;
+        $out_desc="SRM server received files and was able to copy to a different location";
+     }
+     else
+     {
+        $out_value=2;
+        $out_desc="SRM server either failed to receive the file, to copy file, or would not list the file.\n";
+     }
+     my $rm_cmd1 = shellquote($rm_bin, @defaults, $srm_uri1) . " 2>&1"; 
+     my $rm_cmd2 = shellquote($rm_bin, @defaults, $srm_uri2) . " 2>&1"; 
+     $out.=`$rm_cmd1`;
+     $out.=`$rm_cmd2`;
+   }
+
+   if (($probe_name eq "reservespace")||($probe_name eq "releasespace"))
+   {
+        my $srm_reserve_cmd;
+	if ($options{'srm-client-type'} eq 'fermi')
+	{
+                $srm_reserve_cmd = shellquote(
+                    $reserve_bin, qw(
+                    --retention_policy=REPLICA
+                    --access_latency=ONLINE
+                    -retry_num=0
+                    -desired_size=1024
+                    -guaranteed_size=1024),
+                    "-webservice_path=$options{'srm-webservice-path'}",
+                    "-lifetime=600",
+                    "srm://$options{'u'}"
+                ) . " 2>&1";
+	}
+	else
+	{
+                $srm_reserve_cmd = shellquote(
+                    $reserve_bin, qw(
+                    -size 1024 -gsize 1024 -lifetime 600 -serviceurl),
+                    "srm://$options{'u'}/$options{'srm-webservice-path'}"
+                );
+	}
+	$out=`$srm_reserve_cmd`;
+        $ret = $? >> 8;
+        if ($probe_name eq "reservespace")
+        {
+                if ($ret == 0)
+                { $out_value=0; $out_desc="SRM server reserved space with token output."; }
+                else
+                { $out_value=2; $out_desc="SRM server was not able to reserve space."; }
+        }
+        # Now try release
+        if ($ret == 0)
+        {
+		my $srm_release_cmd;
+                my $token=$out;
+                $token=~s/Space token =//;
+		if ($options{'srm-client-type'} eq 'fermi')
+		{
+		    $srm_release_cmd = shellquote(
+                        $release_bin,
+                        "-space_token=$token",
+                        "-webservice_path=$options{'srm-webservice-path'}",
+                        "srm://$options{'u'}"
+		    ) . " 2>&1";
+		}
+		else
+		{
+		    $srm_release_cmd = shellquote(
+                        $release_bin,
+		        "-spacetoken=$token",
+		        "-serviceurl",
+		        "srm://$options{'u'}/$options{'srm-webservice-path'}"
+		    );
+		}
+                $out .= `$srm_release_cmd`;
+                if ($probe_name eq "releasespace")
+                {
+                 if ($o{'cmdExitValue'} == 0)
+                 { $out_value=0; $out_desc="SRM server reserved space and then released space."; }
+                 else
+                 { $out_value=2; $out_desc="SRM server was not able to release a reserved space."; }
+                }
+        }
+        else
+        {
+                if ($probe_name eq "releasespace")
+                { $out_value=2; $out_desc="SRM server was not able to reserve a space."; }
+        }
+   }
+
+
+   if ($out =~ /SRM_NOT_SUPPORTED/)
+   {
+        $out_value=1;
+	$out_desc="SRM function is not supported by the server.  SRM_NOT_SUPPORTED detected. \n";
+   }
+
+if ($out_value==0) { print "OK\n;"; }
+if ($out_value==1) { print "WARNING\n;"; }
+if ($out_value==2) { print "CRITICAL\n;"; }
+if ($out_value==3) { print "UNKNOWN\n;"; }
+print $out_desc;
+print "\nCommand output:\n";
+print $out;
+
+exit 0;
+
+
+################################################################################
+## Main Program ends ##
+################################################################################
+
+
+

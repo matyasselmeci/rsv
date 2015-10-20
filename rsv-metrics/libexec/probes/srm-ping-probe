@@ -1,0 +1,49 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use RSVMetric;
+
+print_output_header();
+
+my %extra_opts = ("srm-webservice-path=s"  => "Required: Remote webservice path, e.g. srm/v2/server",
+                  "srm-destination-dir=s" => "Destination directory on server",
+                  "srm-protocol-version=i" => "1 or 2");
+
+my %options = process_command_line(%extra_opts);
+
+$options{'srm-protocol-version'} ||= 2;
+
+if(not defined($options{'srm-webservice-path'})) {
+    print "ERROR: You must pass --srm-webservice-path\n\n";
+    usage(%extra_opts);
+}
+
+find_binaries("srm-ping");
+
+# TODO - might need '-x509_user_proxy=' included in here
+#my $srm_ping_cmd = "srm-ping srm://$options{u} -retry_num=0 -debug -$options{'srm-protocol-version'} -webservice_path=$options{'srm-webservice-path'} 2>&1";
+my $srm_ping_cmd = shellquote("srm-ping", "srm://$options{u}/$options{'srm-webservice-path'}", "-debug") . " 2>&1";
+my $out = `$srm_ping_cmd`;
+my $ret = $? >> 8;
+
+if($ret == 0) {
+    print "OK\n";
+    print "SRM server running at $options{u} is alive and responding to the srm-ping command.\n";
+    print "Output from srm-ping:\n$out\n";
+    exit 0;
+}
+elsif ($ret == 1) {
+    print "CRITICAL\n";
+    print "SRM server running at $options{u} is not responding to the srm-ping command.\n";
+    print "Output from srm-ping:\n$out\n";
+    exit 0;
+}
+else {  ## Unknown status here
+    print "CRITICAL\n";
+    print "The command '$srm_ping_cmd' returned an unknown exit code.\n";
+    print "Output from srm-ping:\n$out\n";
+    exit 0;
+}
+
+exit 0;
