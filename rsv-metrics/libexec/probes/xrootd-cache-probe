@@ -38,7 +38,7 @@ def human_size(n):
     while n >= 4096:
         n /= 1024
         u += 1
-    return "%d%s" % (n, " KMGTPEZY"[u]) if u else str(n)
+    return ("%d%s" % (n, " KMGTPEZY"[u])).rstrip()
 
 def human_elapsed(n):
     u = 0
