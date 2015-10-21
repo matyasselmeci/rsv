@@ -17,7 +17,26 @@
   missingok
 }
 
-/var/log/rsv/consumers/gratia-consumer.log {
+/var/log/rsv/consumers/json-consumer.log {
+  daily
+  rotate 1
+  compress
+  compressoptions -9f
+  copytruncate
+  missingok
+}
+/var/log/rsv/consumers/json-consumer.output {
+  monthly
+  size=1M
+  rotate 7
+  compress
+  compressoptions -9f
+  copytruncate
+  missingok
+}
+
+
+/var/log/rsv/consumers/json-consumer.log {
   daily                                          
   rotate 1
   compress
