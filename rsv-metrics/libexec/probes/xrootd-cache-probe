@@ -1,0 +1,166 @@
+#!/usr/bin/python
+
+import os
+import re
+import sys
+import time
+import subprocess
+
+import rsvprobe
+
+def run_with_subprocess(cmd):
+    """Run a command using subprocess, returning a tuple of (output, error,
+    returncode) where output and error are the contents of stdout and stderr,
+    respectively. Forces 'C' locale in case we need to parse the output.
+
+    """
+    new_env = dict(os.environ, LC_ALL='C')
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, env=new_env)
+        output, error = proc.communicate()
+        returncode = proc.returncode
+    except OSError, (errno, strerror):
+        output, error = "", "Could not execute %s: %s" % (cmd[0], strerror)
+        returncode = 1
+
+    return (output, error, returncode)
+
+def epoch_time_str(etime):
+    fmt = "%Y-%m-%d %H:%M:%S"
+    if re.search(r'^\d+$', etime):
+        return time.strftime(fmt, time.localtime(int(etime)))
+    else:
+        return etime
+
+def human_size(n):
+    u = 0
+    while n >= 4096:
+        n /= 1024
+        u += 1
+    return "%d%s" % (n, " KMGTPEZY"[u]) if u else str(n)
+
+def human_elapsed(n):
+    u = 0
+    if n >= 5*60:
+        n /= 60
+        u += 1
+        if n >= 5*60:
+            n /= 60
+            u += 1
+            if n >= 2*24:
+                n /= 24
+                u += 1
+    return "%d %s" % (n, ('sec', 'min', 'hours', 'days')[u])
+
+def epoch2human(etime):
+    if re.search(r'^\d+$', etime):
+        return "%s (%s ago)" % (epoch_time_str(etime),
+                                human_elapsed(int(time.time() - int(etime))))
+    else:
+        return etime
+
+def bytes2human(b):
+    if re.search(r'^[1-9]\d*$', b):
+        return "%s (%s)" % (b, human_size(int(b)))
+    else:
+        return b
+
+class XrootdCacheProbe(rsvprobe.RSVProbe):
+
+    af_fields = ["name", "ping_response_status", "LastHeardFrom",
+                 "total_cache_bytes", "used_cache_bytes", "free_cache_bytes"]
+
+    af_idx = dict( (field,i) for i,field in enumerate(af_fields) )
+
+    def __init__(self):
+        rsvprobe.RSVProbe.__init__(self)
+        self.metric = ""
+        metric = rsvprobe.RSVMetric("OSG-HTCondor-CE",
+                                    "org.osg.xrootd.stashcache-status",
+                                    rsvprobe.RSVMetric.STATUS)
+        metric.service_version = ">= OSG HTCondor-CE 1.0.0"
+        metric.probe_type = "OSG-HTCondor-CE"
+        self.supported_metrics = [metric]
+        self.details = []
+
+    def get_collector_cache_ads(self):
+
+        command = ["condor_status", "-pool", "%s:9619" % self.host, "-af:t"
+                  ] + self.af_fields
+
+        out,err,ret = run_with_subprocess(command)
+
+        if ret != 0:
+            self.return_critical("Failed to execute condor_status.\n\n"
+                                 "Command line was: %s\n\n"
+                                 "Error output was:\n"
+                                 "%s" % (' '.join(command), err))
+            return False
+
+        def is_xrootd_ad(ad):
+            return ad[self.af_idx["name"]].startswith("xrootd@")
+
+        ads = [ line.split('\t') for line in out.rstrip('\n').split('\n') ]
+        ads = filter(is_xrootd_ad, ads)
+        return ads
+
+    # what counts as OK for an individual ad?  can tweak this as needed...
+    # possibly consider adding a check for LastHeardFrom recency
+    def xrootd_ad_ok(self, ad):
+        ping_response_status = ad[self.af_idx["ping_response_status"]]
+        total_cache_bytes = ad[self.af_idx["total_cache_bytes"]]
+        if re.search(r'^\d+$', total_cache_bytes):
+            total_cache_bytes = int(total_cache_bytes)
+        else:
+            total_cache_bytes = None
+
+        return ping_response_status == 'ok' and total_cache_bytes
+
+    def ad_str(self, ad):
+        return '\n    '.join([
+            "[%s]" % ad[self.af_idx["name"]],
+            "Ping Response Status: %s"
+                    % ad[self.af_idx["ping_response_status"]],
+            "Last Heard From: %s"
+                    % epoch2human(ad[self.af_idx["LastHeardFrom"]]),
+            "Total Cache Bytes: %s"
+                    % bytes2human(ad[self.af_idx["total_cache_bytes"]]),
+            "Used Cache Bytes: %s"
+                    % bytes2human(ad[self.af_idx["used_cache_bytes"]]),
+            "Free Cache Bytes: %s"
+                    % bytes2human(ad[self.af_idx["free_cache_bytes"]]),
+        ])
+
+    def run(self):
+        self.parseopt()
+        ads = self.get_collector_cache_ads()
+
+        ok_ads = 0
+        for ad in ads:
+            if self.xrootd_ad_ok(ad):
+                ok_ads += 1
+
+        # for now, return OK as long as at least one cache server looks OK
+        msgfmt = "%d of %d stash cache servers had a healthy-looking status."
+        if ok_ads > 0:
+            return_fn = self.return_ok
+            msg = msgfmt % (ok_ads, len(ads))
+        elif len(ads) > 0:
+            return_fn = self.return_warning
+            msg = msgfmt % (ok_ads, len(ads))
+        else:
+            return_fn = self.return_critical
+            msg = "No xrootd@ machine ads found on collector."
+
+        details = '\n\n'.join([msg] + map(self.ad_str, ads)) + '\n'
+        return_fn(details)
+
+def main():
+    probe = XrootdCacheProbe()
+    probe.run()
+    return 0
+
+if __name__ == '__main__':
+    main()
+    sys.exit(0)

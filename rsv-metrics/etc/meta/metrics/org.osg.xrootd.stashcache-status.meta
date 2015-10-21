@@ -1,0 +1,11 @@
+[org.osg.xrootd.stashcache-status]
+default-cron-interval = 47 */6 * * *
+
+execute = local
+service-type = OSG-HTCondor-CE
+output-format = brief
+need-proxy = true
+enable-by-default = false
+description = Reports status of xrootd stash cache servers for a given collector
+
+[org.osg.xrootd.stashcache-status env]
