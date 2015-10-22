@@ -1,0 +1,286 @@
+#!/usr/bin/env python
+
+""" This script processes records generates a local json page for viewing results """
+
+import os
+import re
+import sys
+import time
+import pickle
+import ConfigParser
+import json
+import socket
+from time import strftime
+from optparse import OptionParser
+import RSVConsumer
+
+
+# __state holds all the metric info.  This is a multi-level data structure with the
+# following format:
+#   <Host> -> {}
+#             sitename = Site Name, as used by Pigeon
+#             metrics -> <Metric> -> {}
+#                                    time   = Last time metric ran
+#                                    status = Last status of metric
+#                                               ...
+#                        <Metric2> -> {}
+#                                     ...
+#  <Host2> -> {}
+#             ...
+
+
+# cur holds information that is only valid for this run, and should not be
+# stored in the state file.  This includes whether the metric is enabled and
+# when its next run time is.
+
+
+class JSONConsumer(RSVConsumer.RSVConsumer):
+
+    name = "json"
+    
+    def get_job_info(self):
+        """ Figure out if any jobs are missing """
+
+        try:
+            (ret, out, err) = self.run_command([self.rsv_control, "-j", "--parsable"], 15)
+        except RSVConsumer.TimeoutError:
+            msg = "rsv-control timed out while trying to get job information"
+            self.add_alert(msg)
+            self.log("ERROR: %s" % msg)
+            self.job_info_error = True
+            return
+
+        if ret != 0:
+            msg = "rsv-control returned a non-zero exit code while trying to get job information"
+            self.add_alert(msg)
+            self.log("ERROR: %s" % msg)
+            self.log("STDOUT:\n%s" % out)
+            self.log("STDERR:\n%s" % err)
+            self.job_info_error = True
+            return
+
+
+        for line in out.split("\n"):
+            match = re.match("ERROR: (.+)", line)
+            if match:
+                self.job_info_error = True
+                break
+
+            match = re.match("Hostname: (\S+)", line)
+            if match:
+                host = re.sub(":", "_", match.group(1))
+                if host not in self.cur:
+                    self.cur[host] = {}
+                continue
+
+            match = re.match("MISSING: (.+)", line)
+            if match:
+                missing_metrics = match.group(1).split('|')
+                for metric in missing_metrics:
+                    metric = metric.strip()
+                    if metric not in self.cur[host]:
+                        self.cur[host][metric] = {}
+                    self.cur[host][metric]["enabled"] = 1
+
+                self.add_alert("On host %s there are %s metrics enabled that are not running: %s" %
+                              (host, len(missing_metrics), " ".join(missing_metrics)))
+                continue
+
+            arr = line.split('|')
+            if len(arr) == 5:
+                metric = arr[4].strip()
+                if metric not in self.cur[host]:
+                    self.cur[host][metric] = {}
+
+                # Store that the metric is enabled and its next run time
+                self.cur[host][metric]["enabled"] = 1
+                self.cur[host][metric]["next"]    = arr[3].strip()
+
+    def get_next_run_time(self, host, metric):
+        """ Return the next run time or something appropriate if it is not defined """
+        try:
+            return self.cur[host][metric]["next"]
+        except KeyError:
+            return "NOT RUNNING"
+    
+    def initialize_variables(self):
+        self.state = {}
+        self.cur = {}
+        self.alerts = []
+        self.job_info_error = False
+        return
+    
+    def validate_html_output_dir(self):
+        """ Make sure we can read and write to the HTML output directory.  Create if necessary. """
+
+        self.__html_output_dir = os.path.join("/", "usr", "share", "rsv", "www")
+        if not os.access(self.__html_output_dir, os.F_OK):
+            self.log("Directory for HTML output does not exist at %s.  Creating it." % self.__html_output_dir)
+            try:
+                os.mkdir(self.__html_output_dir, 0755)
+            except OSError, err:
+                self.die("ERROR: Could not create directory.  Error: %s" % err)
+        if not os.access(self.__html_output_dir, os.R_OK):
+            self.die("ERROR: Cannot read HTML output directory '%s'" % self.__html_output_dir)
+        if not os.access(self.__html_output_dir, os.W_OK):
+            self.die("ERROR: Cannot write HTML output directory '%s'" % self.__html_output_dir)
+
+        return
+
+    def parse_arguments(self):
+        usage = """usage: json-consumer
+          --help | -h 
+          --version
+        """
+        version = "json-consumer 1.0"
+        description = "This script processes RSV records and generates an jsonpage."
+        parser = OptionParser(usage=usage, description=description, version=version)
+
+        (self.__options, self.__args) = parser.parse_args()
+
+
+    def add_alert(self, msg):
+        """ Add an alert to the list.  Alerts are displayed at the top of each HTML page. """
+        self.alerts.append(msg)
+
+    def load_state_file(self):
+        """ Load the previous state """
+        self.__state_file = os.path.join(self.__html_output_dir, "json.state.pickle")
+        if not os.path.exists(self.__state_file):
+            self.log("State file does not exist.")
+            return
+
+        try:
+            fd = open(self.__state_file, 'r')
+        except IOError, err:
+            # If we can't read/write to the state file we won't be able to save any
+            # results, but we should still write an HTML page with the problem.
+            msg = "Error trying to load state file - %s" % err
+            self.log(msg)
+            self.add_alert(msg)
+            return
+
+        try:
+            self.state = pickle.load(fd)
+        except EOFError, err:
+            # Should this be a warning?
+            self.log("State file is empty")
+        except pickle.UnpicklingError, err:
+            msg = "Error loading state file - %s" % err
+            self.log(msg)
+            # We should assume nobody will ever read the log file.  Push all error
+            # messages to the web page for higher visibility.
+            self.add_alert(msg)
+
+        fd.close()
+        return
+
+
+    def form_metric_row(self, host, metric, top_level):
+        """ Form a table row for the supplied host/metric """
+        localhostname = socket.gethostname()
+        # The top level page links to the host-specific pages
+        if top_level:
+            link = "%s/rsv/%s.html#%s" % (localhostname, host, metric)
+        else:
+            link = "#%s" % metric
+        # If the metric is older than 24 hours:
+        #    If it is enabled, mark it as "old"
+        #    If it is disabled, remove it entirely
+        one_day_ago = int(time.time()) - 24*60*60
+        if self.state[host]["metrics"][metric]["time"] >= one_day_ago:
+            id = self.state[host]["metrics"][metric]["status"].lower()
+        else:
+            try:
+                if self.cur[host][metric]["enabled"] == 1:
+                    id = "old"
+                else:
+                    raise KeyError
+            except KeyError:
+                # This indicates that the record is not enabled, so purge it
+                del self.state[host]["metrics"][metric]
+                return ""
+        pretty_time   = strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(self.state[host]["metrics"][metric]["time"]))
+        next_run_time = self.get_next_run_time(host, metric)
+        try:
+            if self.job_info_error:
+                enabled = "UNKNOWN"
+            elif self.cur[host][metric]["enabled"] == 1:
+                enabled = "YES"
+            else:
+                enabled = "NO"
+        except KeyError:
+            enabled = "NO"
+        metricRow = {'id':id, 'metric': metric, 'run_time': pretty_time, 'enabled': enabled, 'next_run_time': next_run_time, 'status':  self.state[host]["metrics"][metric]["status"], 'host': host, 'host_link': link}
+        return metricRow
+
+
+    def generate_json_files(self):
+        """ Write out the top-level HTML file and any host-specific files """
+        main_json = {}
+        main_json['alerts'] = self.alerts
+        main_json['rows'] = []
+        rows = []
+        for host in sorted(self.state.keys()):
+            for metric in sorted(self.state[host]["metrics"]):
+                rows.append(self.form_metric_row(host, metric, top_level=1))
+        main_json['rows'] = rows
+        try:
+            main_json_file = os.path.join(self.__html_output_dir, "index.json")
+            fp = open(main_json_file, 'w')
+            json.dump(main_json, fp)
+            fp.close()
+        except IOError, err:
+            self.log("Error writing main json file '%s': %s" % (main_json_file, err))
+        return
+
+    def write_state_file(self):
+        """ Save the state back to disk """
+        fd = open(self.__state_file, 'w')
+        pickle.dump(self.state, fd)
+        fd.close()
+        return
+
+    def process_record(self, raw_record):
+        """ Parse and error check a record, and stuff it into our data structure """
+
+        record = self.parse_record(raw_record)
+
+        if "serviceURI" in record:
+            record["serviceURI"] = re.sub(":", "_", record["serviceURI"])
+        elif "hostName" in record:
+            record["hostName"] = re.sub(":", "_", record["hostName"])
+        #
+        # Update the state
+        #
+        metric = record["metricName"]
+        host = record.get("serviceURI", record.get("hostName", ""))
+
+        if host not in self.state:
+            self.state[host] = {}
+            self.state[host]["metrics"] = {}
+            self.state[host]["sitename"] = None
+
+        # If the siteName line is present then stash it for the host
+        if "siteName" in record:
+            self.state[host]["sitename"] = record["siteName"]
+
+        # Set the top-level metric info
+        if metric not in self.state[host]["metrics"]:
+            self.state[host]["metrics"][metric] = {}
+        self.state[host]["metrics"][metric]["time"]   = float(record["timestamp"])
+        self.state[host]["metrics"][metric]["status"] = record["metricStatus"]
+
+        return
+
+
+
+consumer = JSONConsumer()
+consumer.initialize_variables()
+consumer.validate_html_output_dir()
+consumer.load_state_file()
+consumer.process_files(sort_by_time=True)
+consumer.get_job_info()
+consumer.generate_json_files()
+consumer.write_state_file()
+sys.exit(0)
