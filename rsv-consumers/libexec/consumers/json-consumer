@@ -9,6 +9,7 @@ import time
 import pickle
 import ConfigParser
 import json
+import socket
 from time import strftime
 from optparse import OptionParser
 import RSVConsumer
@@ -177,10 +178,10 @@ class JSONConsumer(RSVConsumer.RSVConsumer):
 
     def form_metric_row(self, host, metric, top_level):
         """ Form a table row for the supplied host/metric """
-
+        localhostname = socket.gethostname()
         # The top level page links to the host-specific pages
         if top_level:
-            link = "%s.html#%s" % (host, metric)
+            link = "%s/rsv/%s.html#%s" % (localhostname, host, metric)
         else:
             link = "#%s" % metric
         # If the metric is older than 24 hours:
@@ -210,7 +211,7 @@ class JSONConsumer(RSVConsumer.RSVConsumer):
                 enabled = "NO"
         except KeyError:
             enabled = "NO"
-        metricRow = {'id':id, 'metric': metric, 'pretty_time': pretty_time, 'enabled': enabled, 'next_run_time': next_run_time, 'status':  self.state[host]["metrics"][metric]["status"], 'host': host}
+        metricRow = {'id':id, 'metric': metric, 'run_time': pretty_time, 'enabled': enabled, 'next_run_time': next_run_time, 'status':  self.state[host]["metrics"][metric]["status"], 'host': host, 'host_link': link}
         return metricRow
 
 
