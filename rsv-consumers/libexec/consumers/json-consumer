@@ -8,12 +8,15 @@ import sys
 import time
 import pickle
 import ConfigParser
-import json
 import socket
 from time import strftime
 from optparse import OptionParser
 import RSVConsumer
 
+try:#If python 2.4
+    import json
+except ImportError: #If higher
+    import simplejson as json
 
 # __state holds all the metric info.  This is a multi-level data structure with the
 # following format:
