@@ -86,8 +86,12 @@ class XrootdCacheProbe(rsvprobe.RSVProbe):
 
     def get_collector_cache_ads(self):
 
-        command = ["condor_status", "-pool", "%s:9619" % self.host, "-af:t"
-                  ] + self.af_fields
+        if re.search(r':\d+$', self.host):
+            pool = self.host
+        else:
+            pool = "%s:9618" % self.host
+
+        command = ["condor_status", "-pool", pool, "-af:t"] + self.af_fields
 
         out,err,ret = run_with_subprocess(command)
 
