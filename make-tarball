@@ -43,8 +43,8 @@ print_instructions () {
     local dir
     dir="/p/vdt/public/html/upstream/rsv/$RSV_VERSION"
     echo Likely installation instructions:
-    echo -e \\tmkdir $dir
-    echo -e \\tmv rsv-$RSV_VERSION.tar.gz $dir/
+    echo "        mkdir $dir"
+    echo "        mv rsv-$RSV_VERSION.tar.gz $dir/"
 }
 
 cleanup () {
