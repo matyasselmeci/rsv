@@ -109,7 +109,7 @@ def process_options(arguments=None):
                      help="Skip the ping test against the host being monitored")
     group.add_option("--ce-type", "--gatekeeper-type", "--gk-type", dest="ce_type", default="gram",
                      help="Which CE type to use for remote tests via Condor-G. "
-                     "Valid values are 'gram' for Globus GRAM, 'htcondor-ce' (or 'condor-ce') for HTCondor-CE ,cream for CREAM and Nordugrid for nordugrid")
+                     "Valid values are 'gram' for Globus GRAM, 'htcondor-ce' (or 'condor-ce') for HTCondor-CE ,'cream' for CREAM and 'nordugrid' for Nordugrid")
     parser.add_option_group(group)
 
     if arguments is None:
@@ -153,7 +153,7 @@ def process_options(arguments=None):
 
     if options.ce_type and options.ce_type not in ('gram', 'condor-ce', 'htcondor-ce', 'cream', 'nordugrid'):
         parser.error("Invalid value for --ce-type. "
-                     "Valid values are 'gram' for Globus GRAM, 'htcondor-ce' (or 'condor-ce') for HTCondor-CE, 'cream' for CREAM-CE and nordugrid for nordugrid")
+                     "Valid values are 'gram' for Globus GRAM, 'htcondor-ce' (or 'condor-ce') for HTCondor-CE, 'cream' for CREAM-CE and 'nordugrid' for Nordugrid")
 
     return options, args
 

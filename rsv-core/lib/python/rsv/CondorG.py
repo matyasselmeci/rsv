@@ -85,17 +85,19 @@ class CondorG:
                 schedd_name = metric.host
             submit_file += "grid_resource = condor %s %s\n\n" % (schedd_name, collector_host)
             submit_file += "remote_universe = local\n"
-        elif ce_type in ('cream'):
+        elif ce_type == 'cream':
             self.rsv.log("INFO", "Submitting to CREAM gateway")
             jobmanager = metric.config_get("jobmanager")
             if not jobmanager:
                 self.rsv.log("CRITICAL", "CondorG->submit: jobmanager not defined in config")
+                sys.exit(1)
             submit_file += "grid_resource = cream %s:8443/%s\n\n" %(metric.host, jobmanager)
-        elif ce_type in ('nordugrid'):
+        elif ce_type == 'nordugrid':
             self.rsv.log("INFO", "Submitting to nordugrid gateway")
             globus_rsl = metric.config_get("globus_rsl")
             if not globus_rsl:
                 self.rsv.log("CRITICAL", "CondorG->submit: globus_rsl not defined in config")
+                sys.exit(1)
             submit_file += "grid_resource = nordugrid %s\n" %(metric.host)
             submit_file += "nordugrid_rsl = %s\n" %(globus_rsl)
         else:
