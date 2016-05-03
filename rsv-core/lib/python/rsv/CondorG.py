@@ -64,7 +64,6 @@ class CondorG:
         #
         # Build the submit file
         #
-        submit_file = "Universe = grid\n"
         ce_type = (  metric.config_get("ce-type")
                   or metric.config_get("gatekeeper-type")
                   or getattr(metric, "ce-type", None)
@@ -72,7 +71,8 @@ class CondorG:
                   or self.rsv.get_ce_type()
                   or '' )
         ce_type = ce_type.lower()
-        if ce_type not in ('condor-ce', 'htcondor-ce', 'gram', ''):
+        submit_file = "Universe = grid\n"
+        if ce_type not in ('condor-ce', 'htcondor-ce', 'gram', 'cream', 'nordugrid', ''):
             self.rsv.log("WARNING", "Invalid ce-type/gatekeeper-type in config (should be 'gram' or 'htcondor-ce'). "
                                     "Falling back to 'gram'")
         if ce_type in ('condor-ce', 'htcondor-ce'):
@@ -85,8 +85,19 @@ class CondorG:
                 schedd_name = metric.host
             submit_file += "grid_resource = condor %s %s\n\n" % (schedd_name, collector_host)
             submit_file += "remote_universe = local\n"
-            if 'X509_USER_PROXY' in os.environ:
-                submit_file += "x509userproxy = %s\n" % os.environ['X509_USER_PROXY']
+        elif ce_type in ('cream'):
+            self.rsv.log("INFO", "Submitting to CREAM gateway")
+            jobmanager = metric.config_get("jobmanager")
+            if not jobmanager:
+                self.rsv.log("CRITICAL", "CondorG->submit: jobmanager not defined in config")
+            submit_file += "grid_resource = cream %s:8443/%s\n\n" %(metric.host, jobmanager)
+        elif ce_type in ('nordugrid'):
+            self.rsv.log("INFO", "Submitting to nordugrid gateway")
+            globus_rsl = metric.config_get("globus_rsl")
+            if not globus_rsl:
+                self.rsv.log("CRITICAL", "CondorG->submit: globus_rsl not defined in config")
+            submit_file += "grid_resource = nordugrid %s\n" %(metric.host)
+            submit_file += "nordugrid_rsl = %s\n" %(globus_rsl)
         else:
             self.rsv.log("INFO", "Submitting to GRAM gateway")
             jobmanager = metric.config_get("jobmanager")
@@ -95,6 +106,10 @@ class CondorG:
                 # TODO - this should not exit because it causes 'rsv-control --run --all-enabled' to end
                 sys.exit(1)
             submit_file += "grid_resource = gt2 %s/jobmanager-%s\n\n" % (metric.host, jobmanager)
+        
+        # The user proxy should be in the submit file regardless of the CE type
+        if 'X509_USER_PROXY' in os.environ:
+                submit_file += "x509userproxy = %s\n" % os.environ['X509_USER_PROXY']
 
         submit_file += "Executable = %s\n" % metric.executable
 

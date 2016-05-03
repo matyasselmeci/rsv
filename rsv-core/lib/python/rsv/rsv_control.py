@@ -21,7 +21,7 @@ def process_options(arguments=None):
     Level settings - 0=print nothing, 1=normal, 2=info, 3=debug
 
     Run a one-time test:
-    --run [--all-enabled] [--gatekeeper-type|--gk-type gram|condor-ce] --host <HOST> METRIC [METRIC ...]
+    --run [--all-enabled] [--gatekeeper-type|--gk-type gram|condor-ce|cream|nordugrid] --host <HOST> METRIC [METRIC ...]
     --test (same options and behavior as --run but w/o generating records)
     
     Show information about enabled and installed metrics:
@@ -109,7 +109,7 @@ def process_options(arguments=None):
                      help="Skip the ping test against the host being monitored")
     group.add_option("--ce-type", "--gatekeeper-type", "--gk-type", dest="ce_type", default="gram",
                      help="Which CE type to use for remote tests via Condor-G. "
-                     "Valid values are 'gram' for Globus GRAM, and 'htcondor-ce' (or 'condor-ce') for HTCondor-CE")
+                     "Valid values are 'gram' for Globus GRAM, 'htcondor-ce' (or 'condor-ce') for HTCondor-CE ,cream for CREAM and Nordugrid for nordugrid")
     parser.add_option_group(group)
 
     if arguments is None:
@@ -151,9 +151,9 @@ def process_options(arguments=None):
             parser.error("You must provide a list of metrics to run or else pass the " +
                          "--all-enabled flag to run all enabled metrics")
 
-    if options.ce_type and options.ce_type not in ('gram', 'condor-ce', 'htcondor-ce'):
+    if options.ce_type and options.ce_type not in ('gram', 'condor-ce', 'htcondor-ce', 'cream', 'nordugrid'):
         parser.error("Invalid value for --ce-type. "
-                     "Valid values are 'gram' for Globus GRAM, and 'htcondor-ce' (or 'condor-ce') for HTCondor-CE")
+                     "Valid values are 'gram' for Globus GRAM, 'htcondor-ce' (or 'condor-ce') for HTCondor-CE, 'cream' for CREAM-CE and nordugrid for nordugrid")
 
     return options, args
 
