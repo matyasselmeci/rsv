@@ -1,9 +1,16 @@
 #!/usr/bin/env python
 
 """ This class is basically the same as CondorG but to submit Vanilla jobs """
-import CondorG
+import os
+import tempfile
+import Condor
+from CondorG import CondorG
+import CondorG as libCondorG
+
 
 class CondorVanilla(CondorG):
+
+
       def submit(self, metric, attrs=None, timeout=None):
         """ Form a grid submit file and submit the job to Condor """
 
@@ -33,7 +40,7 @@ class CondorVanilla(CondorG):
                 submit_file += "x509userproxy = %s\n" % os.environ['X509_USER_PROXY']
         submit_file += "Executable = %s\n" % metric.executable
         args = ['-m', metric.name, '-u', metric.host] + metric.get_args_list()
-        submit_file += "Arguments  = %s\n" % quote_arguments(args)
+        submit_file += "Arguments  = %s\n" % libCondorG.quote_arguments(args)
 
         # Add in custom attributes
         if attrs:
@@ -41,7 +48,7 @@ class CondorVanilla(CondorG):
                 submit_file += "%s = %s\n" % (key, attrs[key])
 
         # Add in custom classAds
-        classAds = metric.get_classAds
+        classAds = metric.get_classAds()
         self.rsv.log("INFO", "Submitting with following special classAds")
         for ad in classAds:
                 submit_file += "+%s = %s\n" % (ad, classAds[ad])

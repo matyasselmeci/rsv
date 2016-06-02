@@ -98,7 +98,6 @@ def parse_job_output_brief(rsv, metric, stdout, stderr):
     details = None
 
     lines = stdout.split("\n")
-
     if lines[0] == "RSV BRIEF RESULTS:":
         status = lines[1].strip()
         details = "\n".join(lines[2:])
@@ -342,22 +341,22 @@ def execute_condor_vanilla_job(rsv,metric):
         rsv.results.condor_g_globus_submission_failed(metric)
         return
 
-    ret = condorg.wait()
+    ret = condorvanilla.wait()
 
     if ret == 0:
-        parse_job_output(rsv, metric, condorg.get_stdout(), condorg.get_stderr())
+        parse_job_output(rsv, metric, condorvanilla.get_stdout(), condorvanilla.get_stderr())
     elif ret == 1:
-        rsv.results.condor_grid_job_aborted(metric, condorg.get_log_contents())
+        rsv.results.condor_grid_job_aborted(metric, condorvanilla.get_log_contents())
     elif ret == 2:
-        rsv.results.condor_grid_job_failed(metric, condorg.get_stdout(), condorg.get_stderr(), condorg.get_log_contents())
+        rsv.results.condor_grid_job_failed(metric, condorvanilla.get_stdout(), condorvanilla.get_stderr(), condorvanilla.get_log_contents())
     elif ret == 3:
-        rsv.results.condor_g_globus_submission_failed(metric, condorg.get_log_contents())
+        rsv.results.condor_g_globus_submission_failed(metric, condorvanilla.get_log_contents())
     elif ret == 4:
-        rsv.results.condor_g_remote_gatekeeper_down(metric, condorg.get_log_contents())
+        rsv.results.condor_g_remote_gatekeeper_down(metric, condorvanilla.get_log_contents())
     elif ret == 5:
-        rsv.results.job_timed_out(metric, "condor-g submission", "", info=condorg.get_log_contents())
+        rsv.results.job_timed_out(metric, "condor-g submission", "", info=condorvanilla.get_log_contents())
     elif ret == 6:
-        rsv.results.job_was_held(metric, condorg.get_log_contents())
+        rsv.results.job_was_held(metric, condorvanilla.get_log_contents())
 
     return
 
