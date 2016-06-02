@@ -10,7 +10,7 @@ import tempfile
 import Condor
 import Sysutils
 
-KEYWORDS = ["return value", "error", "abort", "Globus job submission failed", "Detected Down Globus Resource"]
+KEYWORDS = ["return value", "error", "abort", "Globus job submission failed", "Detected Down Globus Resource", "held"]
 
 class CondorG:
     """ Interface to submit Condor-G jobs """
@@ -168,6 +168,9 @@ class CondorG:
         elif keyword == "Detected Down Globus Resource":
             self.remove()
             return 4
+        elif keyword == "held":
+            self.remove()
+            return 6
 
         # We should not reach here, but just in case
         return False

@@ -355,6 +355,8 @@ def execute_condor_g_job(rsv, metric):
         rsv.results.condor_g_remote_gatekeeper_down(metric, condorg.get_log_contents())
     elif ret == 5:
         rsv.results.job_timed_out(metric, "condor-g submission", "", info=condorg.get_log_contents())
+    elif ret == 6:
+        rsv.results.job_was_held(metric, condorg.get_log_contents())
 
     return
 
