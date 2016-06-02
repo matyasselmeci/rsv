@@ -278,6 +278,20 @@ class Metric:
         return env
 
 
+    def get_classAds(self):
+        """ Return the classAds configuration """
+        
+        classAds = {}
+        
+        section = self.name+ " classAds"
+        try:
+            for ad in self.config.options(section):
+                classAds[ad] = self.config.get(section, ad)
+        except ConfigParser.NoSectionError:
+             self.rsv.log("INFO", "No '%s' section found" % section, 4)
+
+        return classAds
+
     def get_args_list(self):
         """ Build the custom parameters to the script based on the config file """
 
@@ -469,7 +483,15 @@ class Metric:
                 self.rsv.echo("\t\tAction: %s" % environment[var][0])
                 if environment[var][1]:
                     self.rsv.echo("\t\tValue: %s" % environment[var][1])
-
+        
+        # ClassAds
+        self.rsv.echo("\nCustom classAds for this metric:")
+        classAds = self.get_classAds()
+        if len(environment) == 0:
+            self.rsv.echo("\t<none>")
+        else:
+            for ad in classAds:
+                self.rsvecho("\t%s=%s" % ad, classAds[ad])
         self.rsv.echo("") # newline for nicer formatting
         return
 
