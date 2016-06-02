@@ -382,10 +382,10 @@ class Results:
         self.brief_result(metric, status, data, stderr="")
     
     def job_was_held(self, metric, log):
-        """ Condor-G submissioned failed because the job went to held """
+        """ Condor-G submissioned failed because the job went on hold """
         status = "CRITICAL"
-        data   = "Condor-G submission failed the job went to held.\n"
-        data  += "Check the log and the held reason.\n\n"
+        data   = "Condor-G submission failed the job went on hold.\n"
+        data  += "Check the log and the hold reason.\n\n"
         data  += "Log:\n%s\n" % log
         
         self.brief_result(metric, status, data, stderr="")
