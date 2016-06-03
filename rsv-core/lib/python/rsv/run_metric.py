@@ -14,7 +14,7 @@ import RSV
 import Metric
 import CondorG
 import Sysutils
-
+import CondorVanilla
 
 
 def ping_test(rsv, metric):
@@ -98,7 +98,6 @@ def parse_job_output_brief(rsv, metric, stdout, stderr):
     details = None
 
     lines = stdout.split("\n")
-
     if lines[0] == "RSV BRIEF RESULTS:":
         status = lines[1].strip()
         details = "\n".join(lines[2:])
@@ -139,6 +138,9 @@ def execute_job(rsv, metric):
         else:
             rsv.log("INFO", "Executing job remotely using globus-job-run")
             execute_grid_job(rsv, metric)
+    elif execute_type == "vanilla":
+        rsv.log("INFO", "Executing job remotely using Condor")
+        execute_condor_vanilla_job(rsv, metric)
     else:
         rsv.log("ERROR", "The execute type of the probe is unknown: '%s'" % execute_type)
         sys.exit(1)
@@ -318,6 +320,46 @@ __DATA__""" % metric.name)
 
     return tempdir, shar_file
     
+def execute_condor_vanilla_job(rsv,metric):
+    """ Execute a Vanilla job """
+    # Submit the job                                                                                                                                                              
+    condorvanilla = CondorVanilla.CondorVanilla(rsv)
+
+    attrs = {}
+    if rsv.get_extra_globus_rsl():
+        attrs["globus_rsl"] = rsv.get_extra_globus_rsl()
+
+    original_environment = copy.copy(os.environ)
+    setup_job_environment(rsv, metric)
+
+    ret = condorvanilla.submit(metric, attrs)
+
+    os.environ = original_environment
+
+
+    if not ret:
+        rsv.results.condor_g_globus_submission_failed(metric)
+        return
+
+    ret = condorvanilla.wait()
+
+    if ret == 0:
+        parse_job_output(rsv, metric, condorvanilla.get_stdout(), condorvanilla.get_stderr())
+    elif ret == 1:
+        rsv.results.condor_grid_job_aborted(metric, condorvanilla.get_log_contents())
+    elif ret == 2:
+        rsv.results.condor_grid_job_failed(metric, condorvanilla.get_stdout(), condorvanilla.get_stderr(), condorvanilla.get_log_contents())
+    elif ret == 3:
+        rsv.results.condor_g_globus_submission_failed(metric, condorvanilla.get_log_contents())
+    elif ret == 4:
+        rsv.results.condor_g_remote_gatekeeper_down(metric, condorvanilla.get_log_contents())
+    elif ret == 5:
+        rsv.results.job_timed_out(metric, "condor-g submission", "", info=condorvanilla.get_log_contents())
+    elif ret == 6:
+        rsv.results.job_was_held(metric, condorvanilla.get_log_contents())
+
+    return
+
 
 def execute_condor_g_job(rsv, metric):
     """ Execute a remote job via Condor-G.  This is the preferred format so that we
