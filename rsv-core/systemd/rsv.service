@@ -9,8 +9,11 @@ Requires=condor-cron.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# the sleep 2 is needed to give condor-cron time to start up
-ExecStart=/bin/sh -c '/usr/bin/sleep 2 && /usr/bin/rsv-control --on'
+
+# give condor-cron some time to start up
+ExecStart=/bin/sh -c '/usr/bin/condor_cron_q > /dev/null 2>&1 || \
+ /usr/bin/sleep 10 && /usr/bin/rsv-control --on'
+
 ExecStop=/usr/bin/rsv-control --off
 
 [Install]
