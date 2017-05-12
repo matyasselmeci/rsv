@@ -204,8 +204,8 @@ Additionally it makes sure that all IGTF CAs are installed.
     #working_dir = tempdir
 
     #Check if the file CA cers are installed from ITB or OSG, new or old format
-    local_urls = ["http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt",
-                  "http://software.grid.iu.edu/pacman/cadist/cacerts_md5sum-new.txt"]
+    local_urls = ["http://repo.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt",
+                  "http://repo.grid.iu.edu/pacman/cadist/cacerts_md5sum-new.txt"]
     ca_format_type = 0
     ca_index = os.path.join(certdir, "INDEX.txt")
     if os.path.isfile(ca_index):
@@ -255,8 +255,8 @@ Additionally it makes sure that all IGTF CAs are installed.
 
     # Step 2: Get the list of Certs included in OSG from GOC website.
     #chdir($working_dir);
-    local_urls = ["http://software.grid.iu.edu/pacman/cadist/INDEX.txt",
-                  "http://software.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
+    local_urls = ["http://repo.grid.iu.edu/pacman/cadist/INDEX.txt",
+                  "http://repo.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
     local_url = local_urls[ca_format_type]
     lines = rsvprobe.get_http_doc(local_url)
     if not lines:
