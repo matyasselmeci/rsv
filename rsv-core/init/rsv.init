@@ -39,9 +39,9 @@ start() {
 status() {
     test -e $REDHAT_LOCKFILE
     lock_status=$?
-    ccq_output=`$CONDOR_EXE_QUEUE rsv -af 1`
+    ccq_output=`$CONDOR_EXE_QUEUE rsv 2>&1`
     ccq_status=$?
-    ccq_summary_line=`echo "$ccq_output" | wc -l`
+    ccq_summary_line=`$CONDOR_EXE_QUEUE rsv -af 1 | wc -l`
     case $ccq_summary_line in
         0         ) rsv_jobs_in_queue=N ;;
         *         ) rsv_jobs_in_queue=Y ;;
