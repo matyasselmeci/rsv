@@ -128,9 +128,9 @@ Additionally it makes sure that all IGTF CAs are installed.
     source_hash0 = {} # Old hash -> accreditation
     source_hash1 = {} # New hash -> accreditation
     local_urls = [["http://repo.grid.iu.edu/pacman/cadist/INDEX.txt",
-                   "http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt"],
+                   "http://repo-itb.grid.iu.edu/pacman/cadist/INDEX.txt"],
                   ["http://repo.grid.iu.edu/pacman/cadist/INDEX-new.txt",
-                   "http://software-itb.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
+                   "http://repo-itb.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
                  ]
     local_url = local_urls[ca_format_type][grid_type]
     # Download the CA list file from OSG/ITB cache
