@@ -320,7 +320,7 @@ errHrs:    Number hours since the failing downloads before an error is issued
         except OSError:
           self.add_message("Could not delete the error file (%s). Please delete it by hand to avoid potential future problems." % 
                            self.error_file)
-      self.return_ok("All %s CRLs have been recently updated and none is missing." % (error_count+warn_count+ok_count))
+      self.return_ok("All %s CRLs have been recently updated and none are missing." % (error_count+warn_count+ok_count))
     elif self.status == rsvprobe.WARNING:
       if os.path.isfile(self.error_file):
         lines = None
