@@ -1,0 +1,67 @@
+#!/usr/bin/python
+"""Probe verifying Xroot servers.
+Includes metrics:
+- org.atlas.xroot.xrdcp-direct
+- org.atlas.xroot.xrdcp-fxr
+- org.atlas.xroot.xrdcp-compare
+
+This probe uses the xrdcp command (coming with xroot)
+The --small option uses xrdcp_small (that copies only 1MB of the file) if available, else falls back to xrdcp
+
+Timeout is used only for xrdcp/xrdcp_small execution: actual run time may be longer
+- Python operations not counted,
+- xrdcp-compare may take twice as long (2 xrdcp/xrdcp_small invocations)
+"""
+
+# Add the current directory to the path:
+# auxiliary files are staged in the same directory during remote execution
+import sys
+
+sys.path.insert(0, ".")
+
+import rsvprobe
+
+
+class XrootProbe(rsvprobe.RSVProbe):
+    """
+      Probe verifying Xroot servers -- dummy code due to probe deprecation
+    """
+
+    def __init__(self):
+        rsvprobe.RSVProbe.__init__(self)
+        self.metric = ""
+        self.short_metric = ""
+        self.is_local = False
+        # Federated Xrootd Redirector
+        metric_list = ["org.atlas.xroot.xrdcp-direct",
+                       "org.atlas.xroot.xrdcp-fxr",
+                       "org.atlas.xroot.xrdcp-compare"]
+        self.supported_metrics = []
+        for i in metric_list:
+            metric = rsvprobe.RSVMetric("xroot", i, rsvprobe.RSVMetric.STATUS)
+            metric.service_version = ">= xroot 3.0"
+            metric.probe_type = "xroot"
+            metric.probe_revision = "1.0"
+            # in default:
+            # metric.probe_spec_version = RSVMetric.DEFAULT_VERSION
+            # metric.enable_by_default = False
+            # Unix cron type metric interval
+            metric.cron_interval = "15 */6 * * *"
+            self.supported_metrics.append(metric)
+        self.help_message = """Probe deprecated, please disable and stop using\n"""
+        self.is_atlas_test = False
+
+    def run(self):
+        """Probe actions"""
+        self.return_ok("This probe has been deprecated")
+
+
+# Main code
+def main():
+    """main: calling probe.run"""
+    p = XrootProbe()
+    p.run()
+
+
+if __name__ == "__main__":
+    main()
