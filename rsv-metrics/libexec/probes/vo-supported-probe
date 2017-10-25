@@ -1,0 +1,41 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use RSVMetric;
+
+print_output_header();
+
+my %options = process_command_line();
+
+my $file;
+if(defined $ENV{OSG_LOCATION}) {
+    $file = "$ENV{OSG_LOCATION}/monitoring/osg-supported-vo-list.txt";
+}
+else {
+    $file = "/var/lib/osg/supported-vo-list";
+}
+
+if(-e $file) {
+    if(not open(IN, '<', $file)) {
+        print "CRITICAL\n";
+        print "Cannot open the necessary file at '$file': $!\n";
+        exit 0;
+    }
+    else {
+        my $contents = join("", <IN>);
+        close(IN);
+        $contents =~ s/\n|\s+$/ /g;
+        
+        print "OK\n";
+        print "$contents\n";
+        exit 0;
+    }
+}
+else {
+    print "CRITICAL\n";
+    print "The necessary file does not exist at '$file'\n";
+    exit 0;
+}
+
+exit 0;
