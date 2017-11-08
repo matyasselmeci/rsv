@@ -111,11 +111,9 @@ class HTMLConsumer(RSVConsumer.RSVConsumer):
 
         try:
             self.state = pickle.load(fd)
-        except EOFError, err:
-            # Should this be a warning?
-            self.log("State file is empty")
-        except pickle.UnpicklingError, err:
-            msg = "Error loading state file - %s" % err
+        except (pickle.UnpicklingError, ValueError, AttributeError,
+                IndexError, TypeError, EOFError), err:
+            msg = "Error loading (possibly corrupt) state file - %s" % err
             self.log(msg)
             # We should assume nobody will ever read the log file.  Push all error
             # messages to the web page for higher visibility.

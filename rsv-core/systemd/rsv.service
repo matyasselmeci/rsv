@@ -1,0 +1,21 @@
+[Unit]
+Description=Resource Service Validator
+After=condor-cron.service
+Wants=condor-cron.service
+
+# needed so shutdown of condor-cron shuts down rsv too
+Requires=condor-cron.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# give condor-cron some time to start up
+ExecStart=/bin/sh -c '/usr/bin/condor_cron_q > /dev/null 2>&1 || \
+ /usr/bin/sleep 10 && /usr/bin/rsv-control --on'
+
+ExecStop=/usr/bin/rsv-control --off
+
+[Install]
+WantedBy=multi-user.target
+

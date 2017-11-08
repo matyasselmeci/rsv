@@ -5,6 +5,7 @@ bindir := $(prefix)/bin
 initrddir := $(sysconfdir)/rc.d/init.d
 libexecdir := $(prefix)/libexec
 mandir := $(prefix)/share/man
+unitdir := $(prefix)/lib/systemd/system
 python_sitelib := $(shell python -c 'from distutils.sysconfig import get_python_lib; print get_python_lib()')
 
 
@@ -22,9 +23,14 @@ install:
 	install -m 0755 bin/rsv-control $(DESTDIR)/$(bindir)/
 	install -d $(DESTDIR)/$(libexecdir)/rsv
 	cp -rf libexec/misc $(DESTDIR)/$(libexecdir)/rsv/
-	# Install the init script
-	install -d $(DESTDIR)/$(initrddir)
-	install -m 0755 init/rsv.init $(DESTDIR)/$(initrddir)/rsv
+	# Install the init script or systemd service file
+	if which systemctl > /dev/null 2>&1; then \
+		install -d $(DESTDIR)/$(unitdir); \
+		install -m 0644 systemd/rsv.service $(DESTDIR)/$(unitdir)/rsv.service; \
+	else \
+		install -d $(DESTDIR)/$(initrddir); \
+		install -m 0755 init/rsv.init $(DESTDIR)/$(initrddir)/rsv; \
+	fi
 	# Install the configuration
 	install -d $(DESTDIR)/$(sysconfdir)/rsv
 	install -m 0644 etc/consumers.conf $(DESTDIR)/$(sysconfdir)/rsv/

@@ -127,10 +127,10 @@ Additionally it makes sure that all IGTF CAs are installed.
     source_name = {} # list of crl files name -> data (hash0, hash1, accreditation)
     source_hash0 = {} # Old hash -> accreditation
     source_hash1 = {} # New hash -> accreditation
-    local_urls = [["http://software.grid.iu.edu/pacman/cadist/INDEX.txt",
-                   "http://software-itb.grid.iu.edu/pacman/cadist/INDEX.txt"],
-                  ["http://software.grid.iu.edu/pacman/cadist/INDEX-new.txt",
-                   "http://software-itb.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
+    local_urls = [["http://repo.grid.iu.edu/pacman/cadist/INDEX.txt",
+                   "http://repo-itb.grid.iu.edu/pacman/cadist/INDEX.txt"],
+                  ["http://repo.grid.iu.edu/pacman/cadist/INDEX-new.txt",
+                   "http://repo-itb.grid.iu.edu/pacman/cadist/INDEX-new.txt"]
                  ]
     local_url = local_urls[ca_format_type][grid_type]
     # Download the CA list file from OSG/ITB cache
@@ -320,7 +320,7 @@ errHrs:    Number hours since the failing downloads before an error is issued
         except OSError:
           self.add_message("Could not delete the error file (%s). Please delete it by hand to avoid potential future problems." % 
                            self.error_file)
-      self.return_ok("All %s CRLs have been recently updated and none is missing." % (error_count+warn_count+ok_count))
+      self.return_ok("All %s CRLs have been recently updated and none are missing." % (error_count+warn_count+ok_count))
     elif self.status == rsvprobe.WARNING:
       if os.path.isfile(self.error_file):
         lines = None
