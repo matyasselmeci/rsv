@@ -61,10 +61,12 @@ class HTMLConsumer(RSVConsumer.RSVConsumer):
 
         parser = OptionParser(usage=usage, description=description, version=version)
         parser.add_option("--max-history", dest="max_history", default=20, type="int",
-                          help="Number of historical entries to store for each metric.", metavar="SIZE")
+                           help="Number of historical entries to store for each metric.", metavar="SIZE")
         parser.add_option("--record-trim-length", dest="record_trim_length", type="int", default=10000,
                           help="Size in bytes to trim each record.  Default=%default", metavar="LENGTH" )
-
+        parser.add_option("--rsv-call-timeout",dest="rsv_call_timeout", type="int", default=15,
+                          help="Timeout for the rsv call. Default=%default")
+        
         (self.__options, self.__args) = parser.parse_args()
 
 
@@ -189,7 +191,7 @@ class HTMLConsumer(RSVConsumer.RSVConsumer):
         """ Figure out if any jobs are missing """
 
         try:
-            (ret, out, err) = self.run_command([self.rsv_control, "-j", "--parsable"], 15)
+            (ret, out, err) = self.run_command([self.rsv_control, "-j", "--parsable"], self.__options.rsv_call_timeout)
         except RSVConsumer.TimeoutError:
             msg = "rsv-control timed out while trying to get job information"
             self.add_alert(msg)
