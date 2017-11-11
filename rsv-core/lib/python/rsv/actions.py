@@ -426,7 +426,10 @@ def disable_consumer(rsv, consumer):
 
 def show_config_metric(rsv, metric):
     """ Dump the configuration for this metric/host combo """
-    metric.dump_config()
+    if metric.dead:
+        rsv.echo("Cannot show configuration for removed metric '%s'\n" % metric.name)
+    else:
+        metric.dump_config()
     
 
 def show_config_consumer(rsv, consumer):
