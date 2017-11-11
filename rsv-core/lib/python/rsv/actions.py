@@ -89,7 +89,10 @@ def list_metrics(rsv, options, pattern):
             num_disabled_metrics += 1
 
             if options.list_cron:
-                cron = metrics[metric].get_cron_string()
+                if metrics[metric].dead:
+                    cron = "METRIC REMOVED"
+                else:
+                    cron = metrics[metric].get_cron_string()
                 table.addToBuffer(metric, cron)
             else:
                 metric_type = metrics[metric].get_type()
