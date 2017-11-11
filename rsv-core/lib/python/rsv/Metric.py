@@ -32,6 +32,7 @@ class Metric:
         # Initialize vars
         self.name = metric
         self.rsv  = rsv
+        self.host = host
         self.dead = is_dead_metric(metric)
 
         if self.dead:
@@ -53,9 +54,7 @@ class Metric:
             rsv.log("ERROR", "Metric does not exist at %s" % self.executable)
             sys.exit(1)
 
-        self.host = None
-        if host:
-            self.host = host
+        if self.host:
             self.host_config_file = os.path.join(conf_dir, host, metric + ".conf")
             self.host_allmetrics_config_file = os.path.join(conf_dir, host, "allmetrics.conf")
 
