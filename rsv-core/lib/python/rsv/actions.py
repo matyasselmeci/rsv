@@ -306,7 +306,7 @@ def start_metric(rsv, condor, metric, host):
     """ Start a single metric against the supplied host """
 
     if metric.dead:
-        rsv.echo("Cannot start removed metric '%s' against host '%s'" % (metric.name, host.host))
+        rsv.echo("Cannot start removed metric '%s'" % (metric.name))
         return 1
 
     rsv.echo("Starting metric '%s' against host '%s'" % (metric.name, host.host))

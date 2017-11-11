@@ -215,7 +215,8 @@ class Metric:
 
     def get_type(self):
         """ Return the serviceType """
-
+        if self.dead:
+            return "REMOVED"
         try:
             return self.config.get(self.name, "service-type")
         except ConfigParser.NoOptionError:

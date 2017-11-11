@@ -463,6 +463,7 @@ def main(rsv, options, metrics):
 
             if metric.dead:
                 rsv.echo("\nSkipping metric %s because it has been removed\n" % metric_name)
+                continue
 
             # Check for some basic error conditions
             rsv.check_proxy(metric)
