@@ -462,7 +462,10 @@ def main(rsv, options, metrics):
             metric = Metric.Metric(metric_name, rsv, host, options)
 
             if metric.dead:
-                rsv.echo("\nSkipping metric %s because it has been removed\n" % metric_name)
+                if total > 1:
+                    rsv.echo("\nSkipping metric %s (%s of %s) because it has been removed\n" % (metric.name, count, total))
+                else:
+                    rsv.echo("\nSkipping metric %s because it has been removed\n" % metric.name)
                 continue
 
             # Check for some basic error conditions
