@@ -1,4 +1,5 @@
 #!/usr/bin/python
+from __future__ import print_function
 
 import os
 import re
@@ -6,6 +7,23 @@ import sys
 import ConfigParser
 
 VALID_OUTPUT_FORMATS = ["wlcg", "wlcg-multiple", "brief"]
+DEAD_METRICS_FILE = "/usr/libexec/rsv/dead-metrics"
+
+
+__dead_metrics = None
+def is_dead_metric(metric):
+    global __dead_metrics
+    if __dead_metrics is None:
+        try:
+            with open(DEAD_METRICS_FILE) as deadfile:
+                __dead_metrics = set([l.strip() for l in deadfile.readlines()])
+        except EnvironmentError as err:
+            print("Error opening dead metrics file %s: %s" % (
+                    DEAD_METRICS_FILE, err), file=sys.stderr)
+            __dead_metrics = set()
+
+    return metric in __dead_metrics
+
 
 class Metric:
     """ Instantiable class to read and store configuration for a single metric """
@@ -14,6 +32,12 @@ class Metric:
         # Initialize vars
         self.name = metric
         self.rsv  = rsv
+        self.dead = is_dead_metric(metric)
+
+        if self.dead:
+            self.rsv.log("DEBUG", "Metric %s is in dead metrics file" % self.name)
+            return
+
         conf_dir = os.path.join("/", "etc", "rsv", "metrics")
         meta_dir = os.path.join("/", "etc", "rsv", "meta", "metrics")
 

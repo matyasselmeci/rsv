@@ -461,6 +461,9 @@ def main(rsv, options, metrics):
             count += 1
             metric = Metric.Metric(metric_name, rsv, host, options)
 
+            if metric.dead:
+                rsv.echo("\nSkipping metric %s because it has been removed\n" % metric_name)
+
             # Check for some basic error conditions
             rsv.check_proxy(metric)
 

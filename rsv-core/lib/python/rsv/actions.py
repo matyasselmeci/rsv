@@ -305,6 +305,10 @@ def start_all_jobs(rsv, condor):
 def start_metric(rsv, condor, metric, host):
     """ Start a single metric against the supplied host """
 
+    if metric.dead:
+        rsv.echo("Cannot start removed metric '%s' against host '%s'" % (metric.name, host.host))
+        return 1
+
     rsv.echo("Starting metric '%s' against host '%s'" % (metric.name, host.host))
 
     if not condor.start_metric(metric, host):
@@ -361,6 +365,10 @@ def stop_consumer(rsv, condor, consumer):
 
 def enable_metric(rsv, metric, host, knobs):
     """ Enable the specified metric against the specified host. """
+
+    if metric.dead:
+        rsv.echo("Cannot enable removed metric '%s'" % metric.name)
+        return False
 
     rsv.echo("Enabling metric '%s' for host '%s'" % (metric.name, host.host))
 

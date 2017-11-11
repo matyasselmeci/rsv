@@ -17,6 +17,7 @@ install:
 	install -d $(DESTDIR)/$(libexecdir)/rsv
 	cp -r libexec/probes $(DESTDIR)/$(libexecdir)/rsv/
 	cp -r libexec/metrics $(DESTDIR)/$(libexecdir)/rsv/
+	install -m 0644 libexec/dead-metrics $(DESTDIR)/$(libexecdir)/rsv/
 	# Install configuration
 	install -d $(DESTDIR)/$(sysconfdir)/rsv/meta
 	cp -r etc/meta/metrics $(DESTDIR)/$(sysconfdir)/rsv/meta/
