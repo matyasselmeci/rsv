@@ -50,6 +50,7 @@ def ping_test(rsv, metric):
 
 def parse_job_output(rsv, metric, stdout, stderr):
     """ Parse the job output from the worker script """
+    assert not metric.dead, "Attempt to parse dead metric output"
 
     if metric.config_val("output-format", "wlcg"):
         parse_job_output_wlcg(rsv, metric, stdout, stderr)
@@ -126,6 +127,7 @@ def parse_job_output_brief(rsv, metric, stdout, stderr):
 
 def execute_job(rsv, metric):
     """ Execute the job """
+    assert not metric.dead, "Attempt to execute dead metric"
 
     execute_type = metric.config_get("execute").lower()
     if execute_type == "local":

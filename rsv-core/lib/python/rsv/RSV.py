@@ -361,6 +361,7 @@ class RSV:
     def check_proxy(self, metric):
         """ Determine if we're using a service cert or user proxy and
         validate appropriately """
+        assert not metric.dead, "Attempt to check proxy of dead metric"
 
         self.log("INFO", "Checking proxy:")
 

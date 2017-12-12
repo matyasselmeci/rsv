@@ -13,6 +13,7 @@ class CondorVanilla(CondorG):
 
       def submit(self, metric, attrs=None, timeout=None):
         """ Form a grid submit file and submit the job to Condor """
+        assert not metric.dead, "Attempt to submit dead metric"
 
         self.metric = metric
 
