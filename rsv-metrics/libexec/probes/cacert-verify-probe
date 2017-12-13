@@ -6,11 +6,7 @@
 import os
 import time
 import calendar
-# hashlib new in 2.5, md5 not in 2.6
-try:
-  import hashlib as mymd5
-except ImportError:
-  import md5 as mymd5
+import hashlib
 
 # Add the current directory to the path:
 # auxiliary files are staged in the same directory during remote execution
@@ -28,7 +24,7 @@ def md5sum(fname):
   """Return the md5 checksum of the file."""
   BLOCKSIZE = 4096 * 1024
   f = open(fname,'r')
-  checksum = mymd5.md5()
+  checksum = hashlib.md5()
   while True:
     data = f.read(BLOCKSIZE)
     if not data:
