@@ -20,11 +20,11 @@ from rsvprobe import shellquote_tuple
 CMD_OPENSSL = "/usr/bin/openssl"
 
 # Auxiliary functions
-def md5sum(fname):
-  """Return the md5 checksum of the file."""
+def hashfile(hasher, fname):
+  """Return the hasher checksum of the file."""
   BLOCKSIZE = 4096 * 1024
   f = open(fname,'r')
-  checksum = hashlib.md5()
+  checksum = hasher()
   while True:
     data = f.read(BLOCKSIZE)
     if not data:
@@ -33,6 +33,13 @@ def md5sum(fname):
   f.close()
   return checksum.hexdigest().lower()
 
+def md5sum(fname):
+  """Return the md5 checksum of the file."""
+  return hashfile(hashlib.md5, fname)
+
+def sha256sum(fname):
+  """Return the md5 checksum of the file."""
+  return hashfile(hashlib.sha256, fname)
 
 class CAcertProbe(rsvprobe.RSVProbe):
   """Probe verifying the CA certificates. It runs the same tests as the old perl probe:
