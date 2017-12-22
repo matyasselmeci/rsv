@@ -268,77 +268,91 @@ EOF
 
   ################################
   # Check last contact time with Gratia server.
-  my $wget_cmdline = shellquote(
-    qw(wget -q --tries=1 --timeout=10 -O -),
-    "http://$soaphost/gratia-administration/monitor-status.html?probename=$probename"
+  my @cur_time= localtime();
+  # localtime gives years from 1900
+  my $year = 1900 + $cur_time[5];
+  # perl uses 0 based months
+  my $month = 1 + $cur_time[4];
+  my $gracchost = "https://gracc.opensciencegrid.org";
+  my $curl_cmdline = shellquote(
+    qw(curl -q --retry 1  --connect-timeout 10 -XGET ),
+    "$gracchost/q/gracc.osg.raw3-$year.$month/_search",
+    "-d",
+    qq({ "query": { "query_string": { "query": "ProbeName:\\"$probename\\" AND EndTime:[now-2d TO now]" } }, "sort": [ { "\@received": { "order": "desc" } } ],"size": 1 })
   );
-  my $probe_contact_check = `$wget_cmdline`;
+  my $probe_contact_check = `$curl_cmdline`;
   chomp $probe_contact_check;
-  $probe_contact_check =~ s&^last-contact=([^\s]+)\s+([^\s]+?)\|?$&${1} ${2}&;
-
   # Check to see if we've ever had a contact with this collector
-  if ($probe_contact_check =~ /^last-contact=never/) {
-    setCritical();
-    $run_me_root = RMR_IF_NOT_OK;
-    &appendDetailsData ("ERROR: Probe $probename has never been seen by Gratia collector $soaphost\n");
-    normal_exit();
+  if ($probe_contact_check =~ /"hits.*total"\s*?:\s*?(\d+)/) {
+    if ($1 == 0) {
+      setCritical();
+      $run_me_root = RMR_IF_NOT_OK;
+      &appendDetailsData (<<EOF);
+ERROR: Probe $probename has not been seen by Gratia collector $gracchost in more than two days.
+EOF
+      normal_exit();
+    }
+  } else {
+    setWarning();
+    &appendDetailsData (<<EOF);
+WARNING: GRACC server $gracchost not responding.
+$curl_cmdline
+EOF
   }
 
-  # This means either the collector didn't respond or we've checked in at least once.
-  $probe_contact_check = ParseDate($probe_contact_check);
-  my $last_contact_string = UnixDate($probe_contact_check, "%Y-%m-%d %T %Z");
-  my $cmpDateHour = DateCalc("today", "- 1 hour");
-  my $cmpDateDay = DateCalc("today", "- 1 day");
-  my $probe_seen_by_soaphost;
-  if (!$probe_contact_check) {
-    setWarning();
-    &appendDetailsData (<<EOF);
-WARNING: Gratia server $soaphost not responding to obtain last contact details.
-EOF
-  } elsif (Date_Cmp($probe_contact_check, $cmpDateDay) < 1) {
-    setCritical();
-    $run_me_root = RMR_IF_NOT_OK;
-    &appendDetailsData (<<EOF);
-ERROR: Probe $probename has not been seen by Gratia collector $soaphost in >1d.
+  my $probe_seen_by_gracchost = 0;
+  if ($probe_contact_check =~ /"\@received"\s*?:\s*?"(.*?)"/) {
+    my $probe_contact_date = ParseDate($1);
+    my $last_contact_string = UnixDate($probe_contact_date, "%Y-%m-%d %T %Z");
+    my $cmpDateHour = DateCalc("today", "- 1 hour");
+    my $cmpDateDay = DateCalc("today", "- 1 day");
+    if (Date_Cmp($probe_contact_date, $cmpDateDay) < 1) {
+      setCritical();
+      $run_me_root = RMR_IF_NOT_OK;
+      &appendDetailsData (<<EOF);
+ERROR: Probe $probename has not been seen by Gratia collector $gracchost in >1d.
 Last contact time = $last_contact_string.
 EOF
-    normal_exit();
-  } elsif (Date_Cmp($probe_contact_check, $cmpDateHour) < 1) {
-    setWarning();
-    $run_me_root = RMR_IF_NOT_OK;
-    &appendDetailsData (<<EOF);
-WARNING: Probe $probename has not been seen by Gratia collector $soaphost in >1h.
+      normal_exit();
+    } elsif (Date_Cmp($probe_contact_date, $cmpDateHour) < 1) {
+      setWarning();
+      $run_me_root = RMR_IF_NOT_OK;
+      &appendDetailsData (<<EOF);
+WARNING: Probe $probename has not been seen by Gratia collector $gracchost in >1h.
 Last contact time = $last_contact_string
 EOF
-  } else {
-    $probe_seen_by_soaphost = 1;
-    &appendDetailsData (<<EOF);
+    } else {
+      $probe_seen_by_gracchost = 1;
+      &appendDetailsData (<<EOF);
 Probe $probename has sent data to Gratia collector within the last hour.
 EOF
+    }
   }
 
   ################################
   # Cross-check locally configured site name matches Gratia server sitename.
   # Note: don't do this for metric probes going to the GOC.
-  if ($probe_seen_by_soaphost && !(($current_gratia_probe_type eq "metric") && ($soaphost =~ /grid\.iu\.edu/))) {
-    my $wget_cmd = shellquote(
-      qw(wget -q --tries=1 --timeout=10 -O -),
-      "http://$soaphost/gratia-administration/monitor-status.html?sitename=$sitename"
+  if ($probe_seen_by_gracchost && $current_gratia_probe_type ne "metric") {
+    my $curl_cmd = shellquote(
+      qw(curl -q --retry 1  --connect-timeout 10 -XGET ),
+      "$gracchost/q/gracc.osg.raw3-$year.$month/_search",
+      "-d",
+      qq({ "query": { "query_string": { "query": "SiteName:$sitename AND ProbeName:\\"$probename\\" AND EndTime:[now-2d TO now]" } }, "sort": [ { "\@received": { "order": "desc" } } ],"size": 1 })
     );
-    my $grep_cmd = shellquote("grep", "-e", "^\\(probename=\\)\\{0,1\\}$probename\[|:][ \t]*last-contact=");
-    my $cmdline = "$wget_cmd 2>/dev/null | $grep_cmd >/dev/null 2>&1";
-    my $probe_site_check = system($cmdline) == 0;
-    if (!$probe_site_check) {
-      setWarning();
-      &appendDetailsData (<<EOF);
-WARNING: Probe $probename not found in check of probes reporting to $soaphost from $sitename.
-Check Collector SiteName translation on $soaphost
-$cmdline
+    my $probe_site_check = `$curl_cmd`;
+    if ($probe_site_check =~ /"hits.*total"\s*?:\s*?(\d+)/) {
+      if ($1 == 0) {
+        setWarning();
+        &appendDetailsData (<<EOF);
+WARNING: Probe $probename not found in check of probes reporting to $gracchost from $sitename.
+Check Collector SiteName translation on GRACC
+
 EOF
-    } else {
-      &appendDetailsData (<<EOF);
-Configured site name ($sitename) for probe $probename matches Gratia translation.
+      } else {
+        &appendDetailsData (<<EOF);
+Configured site name ($sitename) for probe $probename matches translation.
 EOF
+      }
     }
   }
 
