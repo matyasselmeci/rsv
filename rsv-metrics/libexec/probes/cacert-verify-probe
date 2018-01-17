@@ -38,7 +38,7 @@ def md5sum(fname):
   return hashfile(hashlib.md5, fname)
 
 def sha256sum(fname):
-  """Return the md5 checksum of the file."""
+  """Return the sha256 checksum of the file."""
   return hashfile(hashlib.sha256, fname)
 
 class CAcertProbe(rsvprobe.RSVProbe):
