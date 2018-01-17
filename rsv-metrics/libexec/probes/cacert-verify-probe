@@ -246,7 +246,7 @@ Additionally it makes sure that all IGTF CAs are installed.
         self.add_message("Could not calculate sha256sums of your CA file %s. This may result in a probe error. Please verify the file." % f)
         # eliminate error? file may have been deleted in the mean time, just skip?
         pass
-    # Download the ms5sum file from OSG/ITB cache
+    # Download the checksum file from OSG/ITB cache
     lines = rsvprobe.get_http_doc(local_url)
     if not lines:
       self.return_unknown("Could not download the sha256sum for CA list from OSG (%s) or the file is empty. Unable to verify CAs." % local_url)
