@@ -284,7 +284,7 @@ EOF
   my $probe_contact_check = `$curl_cmdline`;
   chomp $probe_contact_check;
   # Check to see if we've ever had a contact with this collector
-  if ($probe_contact_check =~ /"hits.*total"\s*?:\s*?(\d+)/) {
+  if ($probe_contact_check =~ /"hits.*?total"\s*:\s*(\d+)/) {
     if ($1 == 0) {
       setCritical();
       $run_me_root = RMR_IF_NOT_OK;
