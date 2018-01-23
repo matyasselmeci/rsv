@@ -143,11 +143,11 @@ def get_java_binary_version(java_binary):
             provider_str = providers[0]
         else:
             provider_str = "(Non-RPM install)"
+        version_output_oneline = version_output.strip().replace('\n', '; ')
         ret = """
-Version: |
-%s
+Version: %s
 Full path: %s
-Provided by: %s""" % (indent_multiline_string(version_output, 2), full_path, provider_str)
+Provided by: %s""" % (version_output_oneline, full_path, provider_str)
         return ret
     else:
         return "(Not found)"
