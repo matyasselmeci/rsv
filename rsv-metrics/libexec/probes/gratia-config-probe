@@ -336,7 +336,7 @@ EOF
   if ($probe_seen_by_gracchost && $current_gratia_probe_type ne "metric") {
     my $curl_cmd = shellquote(
       qw(curl -q --retry 1  --connect-timeout 10 -XGET ),
-      "$gracchost/q/gracc.osg.raw3-$year.$month/_search",
+      "$gracchost/q/$graccindex/_search",
       "-d",
       qq({ "query": { "query_string": { "query": "SiteName:$sitename AND ProbeName:\\"$probename\\" AND EndTime:[now-2d TO now]" } }, "sort": [ { "\@received": { "order": "desc" } } ],"size": 1 })
     );
