@@ -274,9 +274,10 @@ EOF
   # perl uses 0 based months
   my $month = 1 + $cur_time[4];
   my $gracchost = "https://gracc.opensciencegrid.org";
+  my $graccindex = sprintf "gracc.osg.raw-%04d.%02d", $year, $month;
   my $curl_cmdline = shellquote(
     qw(curl -q --retry 1  --connect-timeout 10 -XGET ),
-    "$gracchost/q/gracc.osg.raw3-$year.$month/_search",
+    "$gracchost/q/$graccindex/_search",
     "-d",
     qq({ "query": { "query_string": { "query": "ProbeName:\\"$probename\\" AND EndTime:[now-2d TO now]" } }, "sort": [ { "\@received": { "order": "desc" } } ],"size": 1 })
   );
