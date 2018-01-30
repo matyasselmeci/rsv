@@ -6,7 +6,7 @@ use Getopt::Long qw(GetOptions);
 use File::Basename;
 use Date::Manip;
 use Cwd 'abs_path';
-use JSON qw(encode_json);
+use JSON qw(encode_json decode_json);
 
 use RSVMetric;
 
@@ -299,16 +299,17 @@ EOF
   );
   my $probe_contact_check = `$curl_cmdline`;
   chomp $probe_contact_check;
+  # rename field to make life easier later
+  $probe_contact_check =~ s/\@received/received/;
   # Check to see if we've ever had a contact with this collector
-  if ($probe_contact_check =~ /"hits.*?total"\s*:\s*(\d+)/) {
-    if ($1 == 0) {
-      setCritical();
-      $run_me_root = RMR_IF_NOT_OK;
-      &appendDetailsData (<<EOF);
+  my $response = decode_json($probe_contact_check);
+  if ($response->{hits}->{total} == 0) {
+    setCritical();
+    $run_me_root = RMR_IF_NOT_OK;
+    &appendDetailsData (<<EOF);
 ERROR: Probe $probename has not been seen by Gratia collector $gracchost in more than two days.
 EOF
-      normal_exit();
-    }
+    normal_exit();
   } else {
     setWarning();
     &appendDetailsData (<<EOF);
@@ -318,8 +319,8 @@ EOF
   }
 
   my $probe_seen_by_gracchost = 0;
-  if ($probe_contact_check =~ /"\@received"\s*?:\s*?"(.*?)"/) {
-    my $probe_contact_date = ParseDate($1);
+  if (exists $response->{hits}->{hits}[0]->{_source}->{received}) {
+    my $probe_contact_date = ParseDate($response->{hits}->{hits}[0]->{_source}->{received});
     my $last_contact_string = UnixDate($probe_contact_date, "%Y-%m-%d %T %Z");
     my $cmpDateHour = DateCalc("today", "- 1 hour");
     my $cmpDateDay = DateCalc("today", "- 1 day");
