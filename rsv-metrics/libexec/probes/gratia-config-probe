@@ -276,19 +276,19 @@ EOF
   my $month = 1 + $cur_time[4];
   my $gracchost = "https://gracc.opensciencegrid.org";
   my $graccindex = sprintf "gracc.osg.raw-%04d.%02d", $year, $month;
-  my $es_query = {  "query" => { 
-                      "query_string" => {
-                        "query" => "ProbeName:\"$probename\" AND EndTime:[now-2d TO now]"
-                      },
-                    },
-                    "sort" => [ 
-                      {
-                        "\@received" =>  {
-                            "order" => "desc",
-                          },
-                      },
-                    ],
-                    "size" => 1
+  my $es_query = { query => {
+                     query_string => {
+                       query => "ProbeName:\"$probename\" AND EndTime:[now-2d TO now]"
+                     },
+                   },
+                   sort => [
+                     {
+                       '@received' =>  {
+                         order => "desc",
+                       },
+                     },
+                   ],
+                   size => 1
                  };
   my $es_json = encode_json $es_query;
   my $curl_cmdline = shellquote(
