@@ -303,7 +303,7 @@ EOF
   $probe_contact_check =~ s/\@received/received/;
   # Check to see if we've ever had a contact with this collector
   my $response = decode_json($probe_contact_check);
-  if ($response->{hits}->{total} == 0) {
+  if ($$response{hits}{total} == 0) {
     setCritical();
     $run_me_root = RMR_IF_NOT_OK;
     &appendDetailsData (<<EOF);
@@ -319,8 +319,8 @@ EOF
   }
 
   my $probe_seen_by_gracchost = 0;
-  if (exists $response->{hits}->{hits}[0]->{_source}->{received}) {
-    my $probe_contact_date = ParseDate($response->{hits}->{hits}[0]->{_source}->{received});
+  if (exists $$response{hits}{hits}[0]{_source}{received}) {
+    my $probe_contact_date = ParseDate($$response{hits}{hits}[0]{_source}{received});
     my $last_contact_string = UnixDate($probe_contact_date, "%Y-%m-%d %T %Z");
     my $cmpDateHour = DateCalc("today", "- 1 hour");
     my $cmpDateDay = DateCalc("today", "- 1 day");
