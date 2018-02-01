@@ -351,26 +351,41 @@ EOF
   # Cross-check locally configured site name matches Gratia server sitename.
   # Note: don't do this for metric probes going to the GOC.
   if ($probe_seen_by_gracchost && $current_gratia_probe_type ne "metric") {
+    my $es_query2 = {
+      query => {
+        query_string => {
+          query => "SiteName:\"$sitename\" AND ProbeName:\"$probename\" AND EndTime:[now-2d TO now]"
+        }
+      },
+      sort => [
+        {
+          '@received' => {
+            order => "desc"
+          }
+        }
+      ],
+      size => 1
+    };
+    my $es_json2 = encode_json $es_query2;
     my $curl_cmd = shellquote(
       qw(curl -q --retry 1  --connect-timeout 10 -XGET ),
       "$gracchost/q/$graccindex/_search",
       "-d",
-      qq({ "query": { "query_string": { "query": "SiteName:$sitename AND ProbeName:\\"$probename\\" AND EndTime:[now-2d TO now]" } }, "sort": [ { "\@received": { "order": "desc" } } ],"size": 1 })
+      $es_json2
     );
     my $probe_site_check = `$curl_cmd`;
-    if ($probe_site_check =~ /"hits.*total"\s*?:\s*?(\d+)/) {
-      if ($1 == 0) {
-        setWarning();
-        &appendDetailsData (<<EOF);
+    my $response2 = decode_json $probe_site_check;
+    if ($$response2{hits}{total} == 0) {
+      setWarning();
+      &appendDetailsData (<<EOF);
 WARNING: Probe $probename not found in check of probes reporting to $gracchost from $sitename.
 Check Collector SiteName translation on GRACC
 
 EOF
-      } else {
-        &appendDetailsData (<<EOF);
+    } else {
+      &appendDetailsData (<<EOF);
 Configured site name ($sitename) for probe $probename matches translation.
 EOF
-      }
     }
   }
 
