@@ -123,7 +123,7 @@ class NagiosConsumer(RSVConsumer.RSVConsumer):
         req = urllib2.Request(theurl)
         try:
             handle = urllib2.urlopen(req)
-        except IOError, e:
+        except IOError as e:
             pass
         else:
             # Here I will have to put code to deal with unauthenticated pages
@@ -169,7 +169,7 @@ class NagiosConsumer(RSVConsumer.RSVConsumer):
 
             handle = urllib2.urlopen(req)
 
-        except IOError, e:
+        except IOError as e:
             if hasattr(e, 'code') and e.code==404:
             #The NAGIOS_URL parameter is wrong
                 print "NAGIOS_URL "+URL+" returned 404 not found."

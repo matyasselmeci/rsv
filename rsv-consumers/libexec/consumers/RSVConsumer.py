@@ -69,7 +69,7 @@ class RSVConsumer:
             fd = open(self.__log_file, 'a')
             fd.write(msg)
             fd.close()
-        except IOError, e:
+        except IOError as e:
             sys.stderr.write("Failed to append to log file (%s): %s" % (self.__log_file, e))
             sys.stderr.write(msg)
 
@@ -137,7 +137,7 @@ class RSVConsumer:
                 fh = open(file_path, 'r')
                 record = fh.read()
                 fh.close()
-            except IOError, err:
+            except IOError as err:
                 self.log("ERROR: Failed to read from file '%s'. Error: %s" % (file_path, err))
                 continue
             
@@ -146,11 +146,11 @@ class RSVConsumer:
             try:
                 self.process_record(record)
                 success = True
-            except InvalidRecordError, err:
+            except InvalidRecordError as err:
                 self.log("ERROR: Invalid record in file '%s'.  Error: %s" % (file_path, err))
-            except GratiaException, err:
+            except GratiaException as err:
                 self.log("ERROR: Failed to send record '%s' via Gratia: %s" % (file_path, err))
-            except Exception, err:
+            except Exception as err:
                 self.log("ERROR: An unknown exception occurred when processing file '%s'. Error: " % file_path)
                 self.log(err)
 
@@ -158,7 +158,7 @@ class RSVConsumer:
                 failed_file = os.path.join(failed_records_dir, filename)
                 try:
                     os.rename(file_path, failed_file)
-                except OSError, err:
+                except OSError as err:
                     # If we cannot move the files then we are going to process them again
                     # So stop processing now to avoid duplicate data.
                     self.die("ERROR: Failed to move record '%s' to '%s'.  Error: %s" %
@@ -166,7 +166,7 @@ class RSVConsumer:
             else:
                 try:
                     os.remove(file_path)
-                except OSError, err:
+                except OSError as err:
                     # If we cannot remove the files then we are going to process them again
                     # So stop processing now to avoid duplicate data.
                     self.die("ERROR: Failed to remove record '%s'.  Error: %s" % (file_path, err))

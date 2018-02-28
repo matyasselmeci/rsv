@@ -77,8 +77,8 @@ class HTMLConsumer(RSVConsumer.RSVConsumer):
         if not os.access(self.__html_output_dir, os.F_OK):
             self.log("Directory for HTML output does not exist at %s.  Creating it." % self.__html_output_dir)
             try:
-                os.mkdir(self.__html_output_dir, 0755)
-            except OSError, err:
+                os.mkdir(self.__html_output_dir, 0o755)
+            except OSError as err:
                 self.die("ERROR: Could not create directory.  Error: %s" % err)
         if not os.access(self.__html_output_dir, os.R_OK):
             self.die("ERROR: Cannot read HTML output directory '%s'" % self.__html_output_dir)
@@ -103,7 +103,7 @@ class HTMLConsumer(RSVConsumer.RSVConsumer):
 
         try:
             fd = open(self.__state_file, 'r')
-        except IOError, err:
+        except IOError as err:
             # If we can't read/write to the state file we won't be able to save any
             # results, but we should still write an HTML page with the problem.
             msg = "Error trying to load state file - %s" % err
@@ -114,7 +114,7 @@ class HTMLConsumer(RSVConsumer.RSVConsumer):
         try:
             self.state = pickle.load(fd)
         except (pickle.UnpicklingError, ValueError, AttributeError,
-                IndexError, TypeError, EOFError), err:
+                IndexError, TypeError, EOFError) as err:
             msg = "Error loading (possibly corrupt) state file - %s" % err
             self.log(msg)
             # We should assume nobody will ever read the log file.  Push all error
@@ -358,12 +358,12 @@ class HTMLConsumer(RSVConsumer.RSVConsumer):
         main_page += tables
         main_page += self.html_template_footer()
 
+        main_html_file = os.path.join(self.__html_output_dir, "index.html")
         try:
-            main_html_file = os.path.join(self.__html_output_dir, "index.html")
             fp = open(main_html_file, 'w')
             fp.write(main_page)
             fp.close()
-        except IOError, err:
+        except IOError as err:
             self.log("Error writing main HTML file '%s': %s" % (main_html_file, err))
 
         return
@@ -414,12 +414,12 @@ class HTMLConsumer(RSVConsumer.RSVConsumer):
         host_page += data
         host_page += self.html_template_footer()
 
+        host_html_file = os.path.join(self.__html_output_dir, "%s.html" % host)
         try:
-            host_html_file = os.path.join(self.__html_output_dir, "%s.html" % host)
             fp = open(host_html_file, 'w')
             fp.write(host_page)
             fp.close()
-        except IOError, err:
+        except IOError as err:
             self.log("Error writing main HTML file '%s': %s" % (host_html_file, err))
 
         return

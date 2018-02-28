@@ -120,8 +120,8 @@ class JSONConsumer(RSVConsumer.RSVConsumer):
         if not os.access(self.__html_output_dir, os.F_OK):
             self.log("Directory for HTML output does not exist at %s.  Creating it." % self.__html_output_dir)
             try:
-                os.mkdir(self.__html_output_dir, 0755)
-            except OSError, err:
+                os.mkdir(self.__html_output_dir, 0o755)
+            except OSError as err:
                 self.die("ERROR: Could not create directory.  Error: %s" % err)
         if not os.access(self.__html_output_dir, os.R_OK):
             self.die("ERROR: Cannot read HTML output directory '%s'" % self.__html_output_dir)
@@ -156,7 +156,7 @@ class JSONConsumer(RSVConsumer.RSVConsumer):
 
         try:
             fd = open(self.__state_file, 'r')
-        except IOError, err:
+        except IOError as err:
             # If we can't read/write to the state file we won't be able to save any
             # results, but we should still write an HTML page with the problem.
             msg = "Error trying to load state file - %s" % err
@@ -166,10 +166,10 @@ class JSONConsumer(RSVConsumer.RSVConsumer):
 
         try:
             self.state = pickle.load(fd)
-        except EOFError, err:
+        except EOFError as err:
             # Should this be a warning?
             self.log("State file is empty")
-        except pickle.UnpicklingError, err:
+        except pickle.UnpicklingError as err:
             msg = "Error loading state file - %s" % err
             self.log(msg)
             # We should assume nobody will ever read the log file.  Push all error
@@ -229,12 +229,12 @@ class JSONConsumer(RSVConsumer.RSVConsumer):
             for metric in sorted(self.state[host]["metrics"]):
                 rows.append(self.form_metric_row(host, metric, top_level=1))
         main_json['rows'] = rows
+        main_json_file = os.path.join(self.__html_output_dir, "index.json")
         try:
-            main_json_file = os.path.join(self.__html_output_dir, "index.json")
             fp = open(main_json_file, 'w')
             json.dump(main_json, fp)
             fp.close()
-        except IOError, err:
+        except IOError as err:
             self.log("Error writing main json file '%s': %s" % (main_json_file, err))
         return
 

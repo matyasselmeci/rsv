@@ -23,8 +23,8 @@ class GratiaConsumer(RSVConsumer.RSVConsumer):
             self.log("Directory for failed gratia scripts does not exist at %s.  Creating it." %
                 self.failed_records_dir,)
             try:
-                os.mkdir(self.failed_records_dir, 0755)
-            except OSError, err:
+                os.mkdir(self.failed_records_dir, 0o755)
+            except OSError as err:
                 self.die("ERROR: Could not create directory.  Error: %s" % err)
         if not os.access(self.failed_records_dir, os.R_OK):
             self.die("ERROR: Cannot read failed records directory '%s'" % self.failed_records_dir)
@@ -43,7 +43,7 @@ class GratiaConsumer(RSVConsumer.RSVConsumer):
             self.Gratia = Gratia
             import gratia.metric.Metric as Metric
             self.Metric = Metric
-        except ImportError, err:
+        except ImportError as err:
             msg = "ERROR: Could not import Gratia python libraries: %s\n" % err
             msg += "Contents of sys.path:\n"
             msg += "\n".join(sys.path)
