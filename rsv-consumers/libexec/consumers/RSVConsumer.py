@@ -172,7 +172,7 @@ class RSVConsumer:
                     self.die("ERROR: Failed to remove record '%s'.  Error: %s" % (file_path, err))
 
 
-    def process_record(self):
+    def process_record(self, raw_record):
         """ Specific to each subclass """
         pass
 
