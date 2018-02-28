@@ -67,7 +67,7 @@ class GratiaConsumer(RSVConsumer.RSVConsumer):
         rec.Timestamp(record["timestamp"])
         rec.ServiceType(record["serviceType"])
         rec.SummaryData(record["summaryData"])
-        rec.DetailsData(record["detailsData"])
+        rec.DetailsData(record["detailsData"].replace("|", "&#124;"))
 
         # serviceURI and gatheredAt will be on "non-local" metrics
         if "serviceURI" in record and "gatheredAt" in record:
