@@ -6,11 +6,7 @@
 import os
 import time
 import calendar
-# hashlib new in 2.5, md5 not in 2.6
-try:
-  import hashlib as mymd5
-except ImportError:
-  import md5 as mymd5
+import hashlib
 
 # Add the current directory to the path:
 # auxiliary files are staged in the same directory during remote execution
@@ -24,11 +20,11 @@ from rsvprobe import shellquote_tuple
 CMD_OPENSSL = "/usr/bin/openssl"
 
 # Auxiliary functions
-def md5sum(fname):
-  """Return the md5 checksum of the file."""
+def hashfile(hasher, fname):
+  """Return the hasher checksum of the file."""
   BLOCKSIZE = 4096 * 1024
   f = open(fname,'r')
-  checksum = mymd5.md5()
+  checksum = hasher()
   while True:
     data = f.read(BLOCKSIZE)
     if not data:
@@ -37,11 +33,18 @@ def md5sum(fname):
   f.close()
   return checksum.hexdigest().lower()
 
+def md5sum(fname):
+  """Return the md5 checksum of the file."""
+  return hashfile(hashlib.md5, fname)
+
+def sha256sum(fname):
+  """Return the sha256 checksum of the file."""
+  return hashfile(hashlib.sha256, fname)
 
 class CAcertProbe(rsvprobe.RSVProbe):
   """Probe verifying the CA certificates. It runs the same tests as the old perl probe:
-- Compare the CA certs with the list of CA and md5 checksums at GOC
-- flag a warning if the md5 checksum differs from the one in the list
+- Compare the CA certs with the list of CA and sha256 checksums at GOC
+- flag a warning if the sha256 checksum differs from the one in the list
 - flag a warning is one of the IGTF CA is missing (flag --type EGEE)
 - warnings become critical errors after some hours (option --error-hours 72 as default)
 Certificates not included in the GOC list are not verified.
@@ -69,8 +72,8 @@ Expiration date and validity are not checked.
     self.error_file = os.path.join(self.tempdir, "localhost.cacert_verify.err")
     self.test_type = 'osg'
     self.help_message = """IMPORTANT NOTE: This is a probe that verifies if the CA distribution at the site is upto date
-This probe downloads a file contains a list of md5sum from a central location.
-This list is compared against the md5sum of the files in the site CA install.
+This probe downloads a file contains a list of sha256sum from a central location.
+This list is compared against the sha256sum of the files in the site CA install.
 Additionally it makes sure that all IGTF CAs are installed.
 """
     self.addopt("", "error-file=", "--error-file FILE_LOCATION \tLocation where errors should be recorded")
@@ -188,8 +191,8 @@ Additionally it makes sure that all IGTF CAs are installed.
     "Function to compare CA certificates against the list at GOC"
     source = {}
     found_cas = []
-    md5 = {}
-    file_md5sum = {}
+    sha256 = {}
+    file_sha256sum = {}
     error_hash = []
     egee_error_hash = []
 
@@ -198,14 +201,14 @@ Additionally it makes sure that all IGTF CAs are installed.
     if not os.path.isdir(certdir):
       self.return_unknown("ERROR: CA Certs Directory %s does not exist.. Setting metric to unknown." % certdir)
 
-    # Step 1: Download the md5sums for CAs in the OSG/ITB
+    # Step 1: Download the sha256sums for CAs in the OSG/ITB
     ## No tmp files are used. Is tmp subdirectory preferred? No need to handle directories
     #startdir = os.path.abspath(os.path.curdir)
     #working_dir = tempdir
 
     #Check if the file CA cers are installed from ITB or OSG, new or old format
-    local_urls = ["http://repo.grid.iu.edu/pacman/cadist/cacerts_md5sum.txt",
-                  "http://repo.grid.iu.edu/pacman/cadist/cacerts_md5sum-new.txt"]
+    local_urls = ["http://repo.grid.iu.edu/pacman/cadist/cacerts_sha256sum.txt",
+                  "http://repo.grid.iu.edu/pacman/cadist/cacerts_sha256sum-new.txt"]
     ca_format_type = 0
     ca_index = os.path.join(certdir, "INDEX.txt")
     if os.path.isfile(ca_index):
@@ -235,23 +238,23 @@ Additionally it makes sure that all IGTF CAs are installed.
     cert_files = rsvprobe.list_directory(certdir, [cert_ext])
     if not cert_files:
       self.return_unknown("ERROR: CA Certs Directory %s contains no certificate files (*.%s).. Setting metric to unknown." % (certdir, cert_ext))
-    # load md5 in a dictionary basename_without_extension->md5 (hash for v0, sitename v1)
+    # load sha256 in a dictionary basename_without_extension->sha256 (hash for v0, sitename v1)
     for f in cert_files:
       try:
-        file_md5sum[os.path.basename(f).split('.')[0]] = md5sum(f)
+        file_sha256sum[os.path.basename(f).split('.')[0]] = sha256sum(f)
       except IOError:
-        self.add_message("Could not calculate md5sums of your CA file %s. This may result in a probe error. Please verify the file." % f)
+        self.add_message("Could not calculate sha256sums of your CA file %s. This may result in a probe error. Please verify the file." % f)
         # eliminate error? file may have been deleted in the mean time, just skip?
         pass
-    # Download the ms5sum file from OSG/ITB cache
+    # Download the checksum file from OSG/ITB cache
     lines = rsvprobe.get_http_doc(local_url)
     if not lines:
-      self.return_unknown("Could not download the md5sum for CA list from OSG (%s) or the file is empty. Unable to verify CAs." % local_url)
+      self.return_unknown("Could not download the sha256sum for CA list from OSG (%s) or the file is empty. Unable to verify CAs." % local_url)
     for line in lines:
       line.strip()
       values = line.split()
       local_hash = values[1].split('.')[0].strip()
-      md5[local_hash] = values[0]
+      sha256[local_hash] = values[0]
 
     # Step 2: Get the list of Certs included in OSG from GOC website.
     #chdir($working_dir);
@@ -303,7 +306,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     }
 """
 
-    # Step 3: Check the CAs to ensure that md5sums match-up
+    # Step 3: Check the CAs to ensure that sha256sums match-up
     status_code = rsvprobe.OK
     # No counting of errors
     #error_count = 0
@@ -311,14 +314,14 @@ Additionally it makes sure that all IGTF CAs are installed.
     #ok_count = 0
     missing_count = 0 # Missing IGTF CAs (for egee test only)
 
-    for i in file_md5sum.keys():
+    for i in file_sha256sum.keys():
       # List of CAs found.
       found_cas.append(i) 
       if self.test_type.lower() == 'egee' and source[i].find('I') < 0:
         #For EGEE test we want to check only IGTF CAs
         continue
       try:
-        if file_md5sum[i] != md5[i]:
+        if file_sha256sum[i] != sha256[i]:
           # We have detected at least a warning
           status_code = rsvprobe.WARNING
           # warn/err count?
