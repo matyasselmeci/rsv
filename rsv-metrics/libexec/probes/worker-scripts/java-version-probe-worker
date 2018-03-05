@@ -15,8 +15,8 @@ print_tomcat_java () {
     # Tries to determine which Java Tomcat uses
     local tomcatv
     tomcatv=
-    rpm -q tomcat5 &> /dev/null && tomcatv=tomcat5
     rpm -q tomcat6 &> /dev/null && tomcatv=tomcat6
+    rpm -q tomcat &> /dev/null && tomcatv=tomcat
 
     [[ -z $tomcatv ]] && return $E_COMPONENT_NOT_INSTALLED
     (
