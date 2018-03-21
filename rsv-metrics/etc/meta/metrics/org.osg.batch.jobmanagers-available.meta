@@ -5,7 +5,7 @@ execute = grid
 transfer-files = /usr/libexec/rsv/probes/RSVMetric.pm
 service-type = OSG-GRAM-CE
 output-format = brief
-enable-by-default = true
+enable-by-default = false
 
 
 [org.osg.batch.jobmanagers-available env]
