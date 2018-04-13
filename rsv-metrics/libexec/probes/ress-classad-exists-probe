@@ -24,7 +24,7 @@ chomp($test_attributes);
 
 if (! $test_attributes) {
     print "CRITICAL\n";
-    print "Cannot find CE host $glue_ce_info_host_name in ReSS collector $collector. Check if the cemon on the host is configured to advertise to the $collector. For troubleshooting options visit https://twiki.grid.iu.edu/bin/view/ResourceSelection/CEMonTroubleshootingGuide.\n";
+    print "Cannot find CE host $glue_ce_info_host_name in ReSS collector $collector. Check if the cemon on the host is configured to advertise to the $collector. For troubleshooting options visit https://twiki.opensciencegrid.org/bin/view/ResourceSelection/CEMonTroubleshootingGuide.\n";
 }
 else {
     print "OK\n";

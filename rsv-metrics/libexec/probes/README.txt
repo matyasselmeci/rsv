@@ -27,16 +27,16 @@ Provided below are some relevant refererences:
 
  [0] VDT PACKAGE INSTALLATION, CONFIGURATION, TESTING OF 
      ENTIRE RSV INFRASTRUCTURE
-  http://rsv.grid.iu.edu/documentation/vdt-package.html
+  http://rsv.opensciencegrid.org/documentation/vdt-package.html
 
  [1] TEST ONLY RSV PROBES (and not complete infrastructure)
-  http://rsv.grid.iu.edu/documentation/rsv-testing.html#probes-only
+  http://rsv.opensciencegrid.org/documentation/rsv-testing.html#probes-only
 
  [2] RSV PROBE HELP PAGES (on the web)
-  http://rsv.grid.iu.edu/documentation/help/
+  http://rsv.opensciencegrid.org/documentation/help/
 
  [3] PROBES DEVELOPMENT HOME PAGE (on the web)
-  http://rsv.grid.iu.edu/documentation/
+  http://rsv.opensciencegrid.org/documentation/
 
 
 

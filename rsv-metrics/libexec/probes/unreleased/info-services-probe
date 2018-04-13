@@ -144,7 +144,7 @@ class UnknownException(Exception):
 
 
 # Global variables
-myosg_url = "http://myosg.grid.iu.edu/rgsummary/xml?datasource=summary" \
+myosg_url = "http://myosg.opensciencegrid.org/rgsummary/xml?datasource=summary" \
     "&summary_attrs_showservice=on&all_resources=on"
 
 

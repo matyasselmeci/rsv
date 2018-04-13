@@ -3,10 +3,10 @@
 Probes are specified in:
 https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
 Other useful URLS:
-https://twiki.grid.iu.edu/bin/view/ReleaseDocumentation/ValidateRSVProbes
-https://twiki.grid.iu.edu/bin/view/SoftwareTools/RsvControl
-https://twiki.grid.iu.edu/bin/view/MonitoringInformation/ConfigureRSV
-https://twiki.grid.iu.edu/bin/view/MonitoringInformation/InstallAndConfigureRsvAdvanced
+https://twiki.opensciencegrid.org/bin/view/ReleaseDocumentation/ValidateRSVProbes
+https://twiki.opensciencegrid.org/bin/view/SoftwareTools/RsvControl
+https://twiki.opensciencegrid.org/bin/view/MonitoringInformation/ConfigureRSV
+https://twiki.opensciencegrid.org/bin/view/MonitoringInformation/InstallAndConfigureRsvAdvanced
 """
 
 import os
