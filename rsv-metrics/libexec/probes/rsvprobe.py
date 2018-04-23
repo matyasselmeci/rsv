@@ -2,11 +2,6 @@
 """Base class for RSV probes
 Probes are specified in:
 https://twiki.cern.ch/twiki/bin/view/LCG/GridMonitoringProbeSpecification
-Other useful URLS:
-https://twiki.opensciencegrid.org/bin/view/ReleaseDocumentation/ValidateRSVProbes
-https://twiki.opensciencegrid.org/bin/view/SoftwareTools/RsvControl
-https://twiki.opensciencegrid.org/bin/view/MonitoringInformation/ConfigureRSV
-https://twiki.opensciencegrid.org/bin/view/MonitoringInformation/InstallAndConfigureRsvAdvanced
 """
 
 import os
