@@ -207,8 +207,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     #working_dir = tempdir
 
     #Check if the file CA cers are installed from ITB or OSG, new or old format
-    local_urls = ["http://repo.opensciencegrid.org/pacman/cadist/cacerts_sha256sum.txt",
-                  "http://repo.opensciencegrid.org/pacman/cadist/cacerts_sha256sum-new.txt"]
+    local_urls = ["http://repo.opensciencegrid.org/pacman/cadist/cacerts_sha256sum-new.txt"]
     ca_format_type = 0
     ca_index = os.path.join(certdir, "INDEX.txt")
     if os.path.isfile(ca_index):
