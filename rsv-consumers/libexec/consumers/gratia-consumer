@@ -3,6 +3,6 @@ from __future__ import print_function
 import sys
 
 print("The gratia-consumer has been removed.  Please disable it by running")
-print("    rsv-control --disable --host <YOUR RSV HOST> gratia-consumer")
-print("    rsv-control --off --host <YOUR RSV HOST> gratia-consumer")
+print("    rsv-control --disable gratia-consumer")
+print("    rsv-control --off gratia-consumer")
 sys.exit(0)
