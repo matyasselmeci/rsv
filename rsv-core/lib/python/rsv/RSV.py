@@ -612,9 +612,8 @@ def validate_config(rsv):
         if not rsv.consumer_config.has_section("consumers"):
             rsv.consumer_config.add_section("consumers")
         rsv.consumer_config.set("consumers", "enabled", "")
-        rsv.log("WARNING", "no consumers are registered in consumers.conf.  This " +
-                "means that records will not be sent to a central collector for " +
-                "availability statistics.")
+        rsv.log("WARNING", "no consumers are registered in consumers.conf. "
+                "Metric results won't be reported anywhere.")
 
     return
     
