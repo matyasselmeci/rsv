@@ -1,8 +1,15 @@
 #!/usr/bin/env python
 from __future__ import print_function
-import sys
+import time, sys
 
 print("The gratia-consumer has been removed.  Please disable it by running")
 print("    rsv-control --disable gratia-consumer")
 print("    rsv-control --off gratia-consumer")
+
+# sleep so we're not cluttering up the log file every 10 minutes; since we're
+# running this via condor-cron, we don't have to worry about running two
+# instances at the same time.
+
+time.sleep(3600)
+
 sys.exit(0)
