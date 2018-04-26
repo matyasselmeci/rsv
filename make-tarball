@@ -4,25 +4,6 @@ RSV_VERSION=$(python -c "import sys; sys.path.insert(0, 'rsv-core/lib/python'); 
 
 set -o errexit
 
-verify_svn_up_to_date () {
-    local dir
-    local files
-    local up_to_date
-    dir=$(dirname $0)
-    files=$(svn status --show-updates $dir 2>&1 | egrep -v '(\?|Status against revision:)') || up_to_date=Y
-    if [[ $up_to_date != Y ]]; then
-        echo Subversion checkout is not up-to-date
-        echo Lines:
-        echo "$files"
-        exit 1
-    fi
-}
-
-copy_rsv_files () {
-    mkdir -p rsv-$RSV_VERSION
-    cp -r rsv-consumers rsv-core rsv-metrics rsv-$RSV_VERSION/
-}
-
 create_tarball () {
     local files
     files=$(find rsv-$RSV_VERSION \( -name .git -o -name .svn \) -prune -o \( \! -name \*~ \! -name .#\* \! -name .svnignore \! -iname tags \! -type d -print \))
@@ -47,13 +28,10 @@ cleanup () {
     rm -rf rsv-$RSV_VERSION
 }
 
-if [[ $1 = --git ]]; then
+if [[ $1 = --git ]]; then  # backward compat
   shift
-  copy_rsv_files_from_git "$@"
-else
-  verify_svn_up_to_date
-  copy_rsv_files
 fi
+copy_rsv_files_from_git "$@"
 create_tarball
 print_instructions
 cleanup
