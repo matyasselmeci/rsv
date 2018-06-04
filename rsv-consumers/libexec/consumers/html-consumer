@@ -483,7 +483,7 @@ class HTMLConsumer(RSVConsumer.RSVConsumer):
            </tr>
         </table>
         !!ALERTS!!
-        <p>Note: This page is for local reference only.  If your site participates in WLCG availability you can view your status at <a href="http://myosg.grid.iu.edu">http://myosg.grid.iu.edu</a>.
+        <p>Note: This page is for local reference only.  If your site participates in WLCG availability you can view your status at <a href="http://myosg.opensciencegrid.org">http://myosg.opensciencegrid.org</a>.
         <p><a href=\"#faq\">Frequently Asked Questions</a>
     """
 

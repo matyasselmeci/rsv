@@ -11,6 +11,7 @@ from optparse import OptionParser, OptionGroup
 import RSV
 import actions
 import run_metric
+from version import __version__
 
 
 def process_options(arguments=None):
@@ -42,9 +43,8 @@ def process_options(arguments=None):
     """
 
     description = "This script is used to configure and run the RSV monitoring software."
-    version = "@@VERSION@@"
 
-    parser = OptionParser(usage=usage, description=description, version=version)
+    parser = OptionParser(usage=usage, description=description, version=__version__)
     parser.add_option("-v", "--verbose", dest="verbose", default=1, type="int", metavar="LEVEL",
                       help="Verbosity level (0-3) 0=no output, 1=normal, 2=info, 3=debug. [Default=%default]")
     parser.add_option("-u", "--host", dest="host", default=None,
