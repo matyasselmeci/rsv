@@ -3,8 +3,7 @@ localstatedir := /var
 sysconfdir := /etc
 libexecdir := $(prefix)/libexec
 datadir := $(prefix)/share
-
-
+version := $( lsb_release -r | grep -oP "[0-9]+" | head -1 )
 
 _default:
 	@echo "No default. Try 'make install'"
@@ -17,7 +16,11 @@ install:
 	# Install the Apache configuration and index files
 	install -d $(DESTDIR)/$(sysconfdir)/httpd/conf.d
 	install -d $(DESTDIR)/$(datadir)/osg/www.d/
-	install -m 0644 httpd/rsv.conf $(DESTDIR)/$(sysconfdir)/httpd/conf.d/
+	if ($(version),6)
+		install -m 0644 httpd/rsv-rhel6.conf $(DESTDIR)/$(sysconfdir)/httpd/conf.d/rsv.conf
+	else
+		install -m 0644 httpd/rsv-rhel7.conf $(DESTDIR)/$(sysconfdir)/httpd/conf.d/rsv.conf
+	endif
 	install -m 0644 httpd/rsv.site $(DESTDIR)/$(datadir)/osg/www.d/
 	# Install executables
 	install -d $(DESTDIR)/$(libexecdir)/rsv
