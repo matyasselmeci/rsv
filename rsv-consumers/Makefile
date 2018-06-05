@@ -16,7 +16,7 @@ install:
 	# Install the Apache configuration and index files
 	install -d $(DESTDIR)/$(sysconfdir)/httpd/conf.d
 	install -d $(DESTDIR)/$(datadir)/osg/www.d/
-	if ($(version),6)
+	ifeq ($(version),6)
 		install -m 0644 httpd/rsv-rhel6.conf $(DESTDIR)/$(sysconfdir)/httpd/conf.d/rsv.conf
 	else
 		install -m 0644 httpd/rsv-rhel7.conf $(DESTDIR)/$(sysconfdir)/httpd/conf.d/rsv.conf
