@@ -3,8 +3,7 @@ localstatedir := /var
 sysconfdir := /etc
 libexecdir := $(prefix)/libexec
 datadir := $(prefix)/share
-
-version=$(lsb_release -r | grep -oP "[0-9]+" | head -1)
+OSMajorVersion := $(shell lsb_release -r | grep -oP "[0-9]+" | head -1)
 
 _default:
 	@echo "No default. Try 'make install'"
@@ -17,7 +16,7 @@ install:
 	# Install the Apache configuration and index files
 	install -d $(DESTDIR)/$(sysconfdir)/httpd/conf.d
 	install -d $(DESTDIR)/$(datadir)/osg/www.d/
-	ifeq ($(version),6)
+	ifeq ($(OSMajorVersion),6)
 		install -m 0644 httpd/rsv-rhel6.conf $(DESTDIR)/$(sysconfdir)/httpd/conf.d/rsv.conf
 	else
 		install -m 0644 httpd/rsv-rhel7.conf $(DESTDIR)/$(sysconfdir)/httpd/conf.d/rsv.conf
