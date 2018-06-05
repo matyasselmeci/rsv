@@ -8,7 +8,7 @@
 
 Name:      rsv
 Summary:   RSV Meta Package
-Version:   3.18.0
+Version:   3.19.5
 Release:   1%{?dist}
 License:   Apache 2.0
 Group:     Applications/Monitoring
@@ -256,13 +256,10 @@ fi
 %attr(-,rsv,rsv) %{_localstatedir}/log/rsv/metrics
 %attr(-,rsv,rsv) %{_localstatedir}/log/rsv/probes
 
-
-
-
-
-
-
 %changelog
+* Mon Jun 04 2018 Edgar Fajardo <emfajard@ucsd.edu> - 3.19.5-1
+- Different apache configuration for RHEL6 and RHEL7 (SOFTWARE-3268)
+
 * Thu Apr 26 2018 Mátyás Selmeci <matyas@cs.wisc.edu> - 3.18.0-1
 - Disable gratia-consumer: don't turn it on by default and replace with a dummy script (SOFTWARE-3218)
 - Drop old and broken URLs (SOFTWARE-3213)

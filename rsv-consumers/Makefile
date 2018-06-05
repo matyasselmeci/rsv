@@ -3,8 +3,7 @@ localstatedir := /var
 sysconfdir := /etc
 libexecdir := $(prefix)/libexec
 datadir := $(prefix)/share
-
-
+OSMajorVersion := $(shell cat /etc/redhat-release | grep -oP '(?<= )[0-9]+(?=\.)' )
 
 _default:
 	@echo "No default. Try 'make install'"
@@ -17,7 +16,7 @@ install:
 	# Install the Apache configuration and index files
 	install -d $(DESTDIR)/$(sysconfdir)/httpd/conf.d
 	install -d $(DESTDIR)/$(datadir)/osg/www.d/
-	install -m 0644 httpd/rsv.conf $(DESTDIR)/$(sysconfdir)/httpd/conf.d/
+	install -m 0644 httpd/rsv-rhel$(OSMajorVersion).conf $(DESTDIR)/$(sysconfdir)/httpd/conf.d/rsv.conf
 	install -m 0644 httpd/rsv.site $(DESTDIR)/$(datadir)/osg/www.d/
 	# Install executables
 	install -d $(DESTDIR)/$(libexecdir)/rsv
