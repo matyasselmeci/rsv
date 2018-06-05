@@ -3,7 +3,8 @@ localstatedir := /var
 sysconfdir := /etc
 libexecdir := $(prefix)/libexec
 datadir := $(prefix)/share
-version := $( lsb_release -r | grep -oP "[0-9]+" | head -1 )
+
+version=$(lsb_release -r | grep -oP "[0-9]+" | head -1)
 
 _default:
 	@echo "No default. Try 'make install'"
