@@ -123,8 +123,8 @@ Additionally it makes sure that all IGTF CAs are installed.
     source_name = {} # list of crl files name -> data (hash0, hash1, accreditation)
     source_hash0 = {} # Old hash -> accreditation
     source_hash1 = {} # New hash -> accreditation
-    local_urls = [["http://repo.opensciencegrid.org/pacman/cadist/INDEX.txt"]
-                  ["http://repo.opensciencegrid.org/pacman/cadist/INDEX-new.txt"]
+    local_urls = [["http://repo.opensciencegrid.org/cadist/INDEX.txt"]
+                  ["http://repo.opensciencegrid.org/cadist/INDEX-new.txt"]
                  ]
     local_url = local_urls[ca_format_type][grid_type]
     # Download the CA list file from OSG/ITB cache
