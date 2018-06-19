@@ -113,55 +113,33 @@ Additionally it makes sure that all IGTF CAs are installed.
       certdir = rsvprobe.get_ca_dir()
     self.verify_CRL(certdir, self.warningHrs, self.errorHrs)
 
-  def get_osg_CAs(self, ca_format_type, grid_type):
-    "Download and parce the CA list from OSG GOC"
-    if not grid_type in [0, 1]:
-      self.return_unknown("ERROR: Unknown grid type %s. Setting metric to unknown." % grid_type)
-    if not ca_format_type in [0, 1]:
-      self.return_unknown("ERROR: CA Certs Directory has unknown certificate type %s. Setting metric to unknown." % 
-                          ca_format_type)
+  def get_osg_CAs(self):
+    "Download and parse the CA list from OSG repo"
     source_name = {} # list of crl files name -> data (hash0, hash1, accreditation)
     source_hash0 = {} # Old hash -> accreditation
     source_hash1 = {} # New hash -> accreditation
-    local_urls = [["http://repo.opensciencegrid.org/cadist/INDEX.txt"],
-                  ["http://repo.opensciencegrid.org/cadist/INDEX-new.txt"]
-                 ]
-    local_url = local_urls[ca_format_type][grid_type]
+    local_url = "http://repo.opensciencegrid.org/cadist/INDEX.txt"
     # Download the CA list file from OSG/ITB cache
     lines = rsvprobe.get_http_doc(local_url)
     if not lines:
       self.return_unknown("Could not download the CA list from OSG (%s) or the file is empty. Unable to verify CRLs." % local_url)
     ## Parsing of the CA list
-    ## type 1 format:
-    ## OldHash      NewHash      CAfile                   CAURL                                       Version   Accreditation   
+    ## OldHash      NewHash      CAfile                   CAURL                                       Version   Accreditation
     ##--------------------------------------------------------------------------------------------------------
     #75680d2e     ee64a828     AAACertificateServices.pem https://www.terena.org/activities/tcs/         1.41   I
     #3c58f906     157753a5     AddTrust-External-CA-Root.pem http://www.comodo.com/                         1.41   I
-    ## type 0 format:
-    ## Hash         Source                   URL                                      Accreditation
-    ##--------------------------------------------------------------------------------------------------------
-    #09ff08b7     CNRS2-Projets            http://igc.services.cnrs.fr/GRID-FR/       I
-    #0a12b607     UGRID                    https://ca.ugrid.org/                      I
     for line in lines:
       if not line or line.startswith('#'):
         continue
       line_content = line.split()  
-      if ca_format_type == 1:
-        # New CA format type, both old hash (hash0) and new hash (hash1), source name has extension (filename)
-        source_hash0[line_content[0]] = line_content[-1]
-        source_hash1[line_content[1]] = line_content[-1]
-        source_name[line_content[2].split('.')[0]] = { 'hash': line_content[0],
-                                                       'newhash': line_content[1],
-                                                       'accreditation': line_content[-1]
-                                                     }
-      else: # assuming type 0
-        # Assuming CA format type (type 0), only old hash (hash0), source name has no extension
-        source_hash0[line_content[0]] = line_content[-1]
-        source_name[line_content[1]] = { 'hash': line_content[0],
-                                         'newhash': None,
-                                         'accreditation': line_content[-1]
-                                       }
-    return source_name, source_hash0, source_hash1 
+      # New CA format type, both old hash (hash0) and new hash (hash1), source name has extension (filename)
+      source_hash0[line_content[0]] = line_content[-1]
+      source_hash1[line_content[1]] = line_content[-1]
+      source_name[line_content[2].split('.')[0]] = { 'hash': line_content[0],
+                                                     'newhash': line_content[1],
+                                                     'accreditation': line_content[-1]
+                                                   }
+    return source_name, source_hash0, source_hash1
 
   def parse_ca_index(self, certdir):
     "Parse INDEX.txt in CA certs directory and retrieve IndexTypeVersion, default to 0"
@@ -200,7 +178,7 @@ errHrs:    Number hours since the failing downloads before an error is issued
     #Check if the file CA certs are installed from ITB
     # grid_type: 0 - osg; 1 - itb
     grid_type = rsvprobe.get_grid_type()
-    source_name, source_hash0, source_hash1 = self.get_osg_CAs(ca_format_type, grid_type)
+    source_name, source_hash0, source_hash1 = self.get_osg_CAs()
 
     # Step 2: Get and Check time stamps on the CRL files to ensure that it has been recently downloaded
     error_count = 0
