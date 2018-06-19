@@ -213,7 +213,6 @@ errHrs:    Number hours since the failing downloads before an error is issued
     source_hash_list = source_hash0.keys()
     if ca_format_type == 1:
       source_hash_list += source_hash1.keys()
-    local_hash = ""
     for i in crl_files:
       local_hash = os.path.basename(i).split('.')[0] #remove the extension
       # List of CRLs found.
@@ -275,11 +274,6 @@ errHrs:    Number hours since the failing downloads before an error is issued
       if not os.path.isfile(os.path.join(certdir, "%s.0" % ca_info['hash'])):
         if ca_format_type != 1 or not os.path.isfile(os.path.join(certdir, "%s.0" % ca_info['newhash'])):
           continue
-      #if ca_format_type == 1:
-      #  local_hash = ca_info['newhash']
-      #else:
-      #  local_hash = ca_info['hash']
-      #if not os.path.isfile(os.path.join(certdir, "%s.0" % local_hash)):
       warning = ("MISSING: CRL file for %s (%s/%s, type %s) is missing. OSG policy requires CRL for every CA distributed by OSG." %
         (name, ca_info['newhash'], ca_info['hash'], ca_format_type))
       if missing_count == 0:
@@ -295,17 +289,14 @@ errHrs:    Number hours since the failing downloads before an error is issued
 
     # Step 4: See if the warning should be escalated to an error
     now = time.time()
-    last_update = 0
 
     out_msg = "%s CRLs tested.\n" % (error_count+warn_count+ok_count) 
     out_msg += "\t%s had not been updated for at least %s hours;\n" % (error_count, errHrs)
     out_msg += "\t%s CRLs have not been updated for at least %s hours;\n" % (warn_count,  warnHrs)
     out_msg += "\t%s CRLs have been updated with the last %s hours.\n" % (ok_count,  warnHrs)
-    #only if missing_count>0? 
     if missing_count > 0:
       out_msg += "\t%s CRL/s is/are missing.\n" % missing_count
 
-    #if status_code == 0:
     if self.status == rsvprobe.OK:
       # Remove error file if exists 
       if os.path.isfile(self.error_file):
@@ -343,7 +334,7 @@ errHrs:    Number hours since the failing downloads before an error is issued
       else:
         # Out of sync for the first time. Create error record. Return Warning.
         try:
-          lines = open(self.error_file, 'w').write("%s" % now)
+          open(self.error_file, 'w').write("%s" % now)
         except IOError:
           self.add_warning(
             "Could not record error file (%s) indicating that CRL files are out of sync. This probe may never escalate to an error stage." % 
