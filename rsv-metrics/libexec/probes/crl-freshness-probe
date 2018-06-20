@@ -343,7 +343,7 @@ errHrs:    Number hours since the failing downloads before an error is issued
     elif self.status == rsvprobe.CRITICAL:
       self.return_critical(out_msg)
     else: # self.status == rsvprobe.UNKNOWN or something else
-      self.add_msg("Probe has unexpected status")
+      self.add_message("Probe has unexpected status")
       self.return_unknown(out_msg)
 
 
