@@ -141,25 +141,6 @@ Additionally it makes sure that all IGTF CAs are installed.
                                                    }
     return source_name, source_hash0, source_hash1
 
-  def parse_ca_index(self, certdir):
-    "Parse INDEX.txt in CA certs directory and retrieve IndexTypeVersion, default to 0"
-    ca_format_type = 0
-    ca_index = os.path.join(certdir, "INDEX.txt")
-    if os.path.isfile(ca_index):
-      try: 
-        lines = open(ca_index).readlines()
-        for i in lines:
-          if i.find("IndexTypeVersion") >= 0:
-            try:
-              ca_format_type = int(i.split()[2])
-            except IndexError:
-              # When missing it is 0 (default value)
-              pass
-      except (OSError, ValueError):
-        # If I don't find the index file or don't find the keyword IndexTypeVersion assume type 0
-        pass
-    return ca_format_type
- 
   def verify_CRL(self, certdir, warnHrs, errHrs):
     """Check_Freshness_Local_CRL: Checks the last time when the CRLs were successfully downloaded
 parameters :
@@ -170,11 +151,8 @@ errHrs:    Number hours since the failing downloads before an error is issued
 """    
     #status_code = 0 # Return status code as expected by RSV for summaryData
     found_crls = []
-    ca_format_type = 0
 
     # Step 1: Get the list of Certs included in OSG from GOC website.
-    ca_format_type = self.parse_ca_index(certdir)
-
     source_name, source_hash0, source_hash1 = self.get_osg_CAs()
 
     # Step 2: Get and Check time stamps on the CRL files to ensure that it has been recently downloaded
@@ -186,8 +164,7 @@ errHrs:    Number hours since the failing downloads before an error is issued
       self.return_unknown("ERROR: CA Certs Directory %s contains no CRL files (*.r0). Aborting the probe (UNKOWN status)." % 
                           certdir)     
     source_hash_list = source_hash0.keys()
-    if ca_format_type == 1:
-      source_hash_list += source_hash1.keys()
+    source_hash_list += source_hash1.keys()
     for i in crl_files:
       local_hash = os.path.basename(i).split('.')[0] #remove the extension
       # List of CRLs found.
@@ -207,13 +184,12 @@ errHrs:    Number hours since the failing downloads before an error is issued
           pass # not in hash0
         # keep the following outside form the except to cover the case when the hash h1 is the old hash of CA cert c1
         # and new hash of CA cert c2. Is this possible?
-        if not is_igtf_cert and ca_format_type == 1:
+        if not is_igtf_cert:
           try:
             if source_hash1[local_hash].find('I') >= 0:
               is_igtf_cert = True
           except KeyError:
             pass # not in hash1
-        if not is_igtf_cert:
           if self.verbose:
             self.add_ok("EGEE test and CRL file for CA with hash %s that is not in IGTF, ignored." % local_hash)
           continue       
@@ -240,17 +216,16 @@ errHrs:    Number hours since the failing downloads before an error is issued
         # Ignore non IGTF CAs for wlcg probe
         continue
       # continue if found CRL
-      if ca_format_type == 1 and ca_info['newhash'] in found_crls:
+      if ca_info['newhash'] in found_crls:
         continue
       if ca_info['hash'] in found_crls:
         continue
-      # continue if the CA file has been removed
-      # if ca_format_type == 1 then both CA files must have been removed to continue
+      # continue if the both CA files have been removed
       if not os.path.isfile(os.path.join(certdir, "%s.0" % ca_info['hash'])):
-        if ca_format_type != 1 or not os.path.isfile(os.path.join(certdir, "%s.0" % ca_info['newhash'])):
+        if not os.path.isfile(os.path.join(certdir, "%s.0" % ca_info['newhash'])):
           continue
-      warning = ("MISSING: CRL file for %s (%s/%s, type %s) is missing. OSG policy requires CRL for every CA distributed by OSG." %
-        (name, ca_info['newhash'], ca_info['hash'], ca_format_type))
+      warning = ("MISSING: CRL file for %s (%s/%s) is missing. OSG policy requires CRL for every CA distributed by OSG." %
+        (name, ca_info['newhash'], ca_info['hash']))
       if missing_count == 0:
         warning += (
           "\n- Has fetch-crl run recently?  (See /etc/cron.d/fetch-crl*)\n"
