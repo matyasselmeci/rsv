@@ -112,6 +112,13 @@ Requires: /usr/bin/condor_ce_ping
 
 
 %install
+RSV_VERSION=$(python -c "import sys; sys.path.insert(0, 'rsv-core/lib/python'); from rsv import version; sys.stdout.write(version.__version__ + '\n')")
+if [[ $RSV_VERSION != %{version} ]]; then
+    echo "Version mismatch between RPM version (%{version}) and RSV version ($RSV_VERSION)"
+    echo "Edit rsv-core/lib/python/rsv/version.py"
+    exit 1
+fi
+
 for subpackage in rsv-core rsv-consumers rsv-metrics; do
     make -C $subpackage install DESTDIR=$RPM_BUILD_ROOT
 done
