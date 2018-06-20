@@ -175,9 +175,6 @@ errHrs:    Number hours since the failing downloads before an error is issued
     # Step 1: Get the list of Certs included in OSG from GOC website.
     ca_format_type = self.parse_ca_index(certdir)
 
-    #Check if the file CA certs are installed from ITB
-    # grid_type: 0 - osg; 1 - itb
-    grid_type = rsvprobe.get_grid_type()
     source_name, source_hash0, source_hash1 = self.get_osg_CAs()
 
     # Step 2: Get and Check time stamps on the CRL files to ensure that it has been recently downloaded
