@@ -182,7 +182,7 @@ Additionally it makes sure that all IGTF CAs are installed.
       self.return_ok(out_msg)
 
   def Check_Local_CA(self, certdir, errorHrs):
-    "Function to compare CA certificates against the list at GOC"
+    "Function to compare CA certificates against the list at OSG"
     source = {}
     found_cas = []
     sha256 = {}
@@ -195,9 +195,7 @@ Additionally it makes sure that all IGTF CAs are installed.
     if not os.path.isdir(certdir):
       self.return_unknown("ERROR: CA Certs Directory %s does not exist.. Setting metric to unknown." % certdir)
 
-    #Check if the file CA cers are installed from ITB or OSG, new or old format
-    local_urls = ["http://repo.opensciencegrid.org/cadist/cacerts_sha256sum-new.txt",
-                  "http://repo.opensciencegrid.org/cadist/cacerts_sha256sum-new.txt"]
+    # Step 1: Download the sha256sums for CAs in the OSG
     ca_format_type = 0
     ca_index = os.path.join(certdir, "INDEX.txt")
     if os.path.isfile(ca_index):
@@ -212,18 +210,12 @@ Additionally it makes sure that all IGTF CAs are installed.
               pass
       except (OSError, ValueError):
         pass
-    grid_type = rsvprobe.get_grid_type()
-    if not grid_type in [0, 1]:
-      self.return_unknown("ERROR: Unknown grid type %s. Setting metric to unknown." % grid_type) 
     #ca_format_type can be only 0,1:
     cert_ext = ".0"
-    local_url = local_urls[0]
     if ca_format_type == 1:
       cert_ext = ".pem"
-      local_url = local_urls[1]
     elif ca_format_type != 0:
       self.return_unknown("ERROR: CA Certs Directory %s has unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type))
-    self.add_message("Grid type is %s. CA format type is %s. URL with CA distribution: %s" % (rsvprobe.get_grid_type_string(grid_type), ca_format_type, local_url))
     cert_files = rsvprobe.list_directory(certdir, [cert_ext])
     if not cert_files:
       self.return_unknown("ERROR: CA Certs Directory %s contains no certificate files (*.%s).. Setting metric to unknown." % (certdir, cert_ext))
@@ -236,6 +228,8 @@ Additionally it makes sure that all IGTF CAs are installed.
         # eliminate error? file may have been deleted in the mean time, just skip?
         pass
     # Download the checksum file from OSG/ITB cache
+    local_url = "http://repo.opensciencegrid.org/cadist/cacerts_sha256sum-new.txt"
+    self.add_message("CA format type is %s. URL with CA distribution: %s" % (ca_format_type, local_url))
     lines = rsvprobe.get_http_doc(local_url)
     if not lines:
       self.return_unknown("Could not download the sha256sum for CA list from OSG (%s) or the file is empty. Unable to verify CAs." % local_url)
@@ -247,9 +241,7 @@ Additionally it makes sure that all IGTF CAs are installed.
 
     # Step 2: Get the list of Certs included in OSG from GOC website.
     #chdir($working_dir);
-    local_urls = ["http://repo.opensciencegrid.org/cadist/INDEX.txt",
-                  "http://repo.opensciencegrid.org/cadist/INDEX-new.txt"]
-    local_url = local_urls[ca_format_type]
+    local_url = "http://repo.opensciencegrid.org/cadist/INDEX.txt"
     lines = rsvprobe.get_http_doc(local_url)
     if not lines:
       self.return_unknown("Could not download the CA list from OSG (%s) or the list is empty. Unable to verify CAs." % local_url)
