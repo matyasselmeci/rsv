@@ -232,8 +232,7 @@ errHrs:    Number hours since the failing downloads before an error is issued
           "- See fetch-crl output (mailed to root by cron or sent to syslog), "
           "or try running fetch-crl by hand to inspect its output.\n"
           "- More info on troubleshooting this probe can be found at: "
-          "https://www.opensciencegrid.org/bin/view/Documentation/Release3/RsvProbeCrlFreshnessProbe\n"
-          "- For more help, submit a ticket to the GOC at: https://ticket.opensciencegrid.org/")
+          "- For more help, send email to help@opensciencegrid.org")
       self.add_warning(warning)
       missing_count += 1
 
