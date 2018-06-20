@@ -209,11 +209,11 @@ Additionally it makes sure that all IGTF CAs are installed.
         # eliminate error? file may have been deleted in the mean time, just skip?
         pass
     # Download the checksum file from OSG repo
-    local_url = "http://repo.opensciencegrid.org/cadist/cacerts_sha256sum-new.txt"
-    self.add_message("URL with CA distribution: %s" % local_url)
-    lines = rsvprobe.get_http_doc(local_url)
+    self.add_message("URL with CA distribution: %s" % rsvprobe.CA_CERT_HASH_URL)
+    lines = rsvprobe.get_http_doc(rsvprobe.CA_CERT_HASH_URL)
     if not lines:
-      self.return_unknown("Could not download the sha256sum for CA list from OSG (%s) or the file is empty. Unable to verify CAs." % local_url)
+      self.return_unknown("Could not download the sha256sum for CA list from OSG (%s) or the file is empty."
+                          " Unable to verify CAs." % rsvprobe.CA_CERT_HASH_URL)
     for line in lines:
       line.strip()
       values = line.split()
@@ -221,11 +221,10 @@ Additionally it makes sure that all IGTF CAs are installed.
       sha256[local_hash] = values[0]
 
     # Step 2: Get the list of Certs included in OSG from OSG repo
-    #chdir($working_dir);
-    local_url = "http://repo.opensciencegrid.org/cadist/INDEX.txt"
-    lines = rsvprobe.get_http_doc(local_url)
+    lines = rsvprobe.get_http_doc(rsvprobe.CA_CERT_INDEX_URL)
     if not lines:
-      self.return_unknown("Could not download the CA list from OSG (%s) or the list is empty. Unable to verify CAs." % local_url)
+      self.return_unknown("Could not download the CA list from OSG (%s) or the list is empty. Unable to verify CAs." %
+                          rsvprobe.CA_CERT_INDEX_URL)
     ## New format (remove 1 #):
     ## OldHash      NewHash      CAfile                   CAURL                                       Version   Accreditation   
     ##--------------------------------------------------------------------------------------------------------

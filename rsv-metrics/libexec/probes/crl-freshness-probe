@@ -118,11 +118,11 @@ Additionally it makes sure that all IGTF CAs are installed.
     source_name = {} # list of crl files name -> data (hash0, hash1, accreditation)
     source_hash0 = {} # Old hash -> accreditation
     source_hash1 = {} # New hash -> accreditation
-    local_url = "http://repo.opensciencegrid.org/cadist/INDEX.txt"
-    # Download the CA list file from OSG/ITB cache
-    lines = rsvprobe.get_http_doc(local_url)
+    # Download the CA list file
+    lines = rsvprobe.get_http_doc(rsvprobe.CA_CERT_INDEX_URL)
     if not lines:
-      self.return_unknown("Could not download the CA list from OSG (%s) or the file is empty. Unable to verify CRLs." % local_url)
+      self.return_unknown("Could not download the CA list from OSG (%s) or the file is empty."
+                          " Unable to verify CRLs." % rsvprobe.CA_CERT_INDEX_URL)
     ## Parsing of the CA list
     ## OldHash      NewHash      CAfile                   CAURL                                       Version   Accreditation
     ##--------------------------------------------------------------------------------------------------------
