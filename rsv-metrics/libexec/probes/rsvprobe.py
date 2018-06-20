@@ -617,3 +617,6 @@ dtype - dataType	 The type of the data: float, int, string, boolean (only 'perfo
     return ret
 
 EMPTY_METRIC = RSVMetric('UNKNOWN', 'UNKNOWN')
+
+CA_CERT_HASH_URL = "http://repo.opensciencegrid.org/cadist/cacerts_sha256sum-new.txt"
+CA_CERT_INDEX_URL = "http://repo.opensciencegrid.org/cadist/INDEX.txt"
