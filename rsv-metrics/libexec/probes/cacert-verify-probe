@@ -182,7 +182,7 @@ Additionally it makes sure that all IGTF CAs are installed.
       self.return_ok(out_msg)
 
   def Check_Local_CA(self, certdir, errorHrs):
-    "Function to compare CA certificates against the list at GOC"
+    "Function to compare CA certificates against the list at OSG"
     source = {}
     found_cas = []
     sha256 = {}
@@ -195,34 +195,8 @@ Additionally it makes sure that all IGTF CAs are installed.
     if not os.path.isdir(certdir):
       self.return_unknown("ERROR: CA Certs Directory %s does not exist.. Setting metric to unknown." % certdir)
 
-    #Check if the file CA cers are installed from ITB or OSG, new or old format
-    local_urls = ["http://repo.opensciencegrid.org/pacman/cadist/cacerts_sha256sum-new.txt"]
-    ca_format_type = 0
-    ca_index = os.path.join(certdir, "INDEX.txt")
-    if os.path.isfile(ca_index):
-      try: 
-        lines = open(ca_index).readlines()
-        for i in lines:
-          if i.find("IndexTypeVersion") >= 0:
-            try:
-              ca_format_type = int(i.split()[2])
-            except IndexError:
-              # When the line with IndexTypeVersion is missing, the type is 0 (default value)
-              pass
-      except (OSError, ValueError):
-        pass
-    grid_type = rsvprobe.get_grid_type()
-    if not grid_type in [0, 1]:
-      self.return_unknown("ERROR: Unknown grid type %s. Setting metric to unknown." % grid_type) 
-    #ca_format_type can be only 0,1:
-    cert_ext = ".0"
-    local_url = local_urls[0]
-    if ca_format_type == 1:
-      cert_ext = ".pem"
-      local_url = local_urls[1]
-    elif ca_format_type != 0:
-      self.return_unknown("ERROR: CA Certs Directory %s has unknown certificate type %s. Setting metric to unknown." % (certdir, ca_format_type))
-    self.add_message("Grid type is %s. CA format type is %s. URL with CA distribution: %s" % (rsvprobe.get_grid_type_string(grid_type), ca_format_type, local_url))
+    # Step 1: Download the sha256sums for CAs in the OSG
+    cert_ext = ".pem"
     cert_files = rsvprobe.list_directory(certdir, [cert_ext])
     if not cert_files:
       self.return_unknown("ERROR: CA Certs Directory %s contains no certificate files (*.%s).. Setting metric to unknown." % (certdir, cert_ext))
@@ -234,28 +208,23 @@ Additionally it makes sure that all IGTF CAs are installed.
         self.add_message("Could not calculate sha256sums of your CA file %s. This may result in a probe error. Please verify the file." % f)
         # eliminate error? file may have been deleted in the mean time, just skip?
         pass
-    # Download the checksum file from OSG/ITB cache
-    lines = rsvprobe.get_http_doc(local_url)
+    # Download the checksum file from OSG repo
+    self.add_message("URL with CA distribution: %s" % rsvprobe.CA_CERT_HASH_URL)
+    lines = rsvprobe.get_http_doc(rsvprobe.CA_CERT_HASH_URL)
     if not lines:
-      self.return_unknown("Could not download the sha256sum for CA list from OSG (%s) or the file is empty. Unable to verify CAs." % local_url)
+      self.return_unknown("Could not download the sha256sum for CA list from OSG (%s) or the file is empty."
+                          " Unable to verify CAs." % rsvprobe.CA_CERT_HASH_URL)
     for line in lines:
       line.strip()
       values = line.split()
       local_hash = values[1].split('.')[0].strip()
       sha256[local_hash] = values[0]
 
-    # Step 2: Get the list of Certs included in OSG from GOC website.
-    #chdir($working_dir);
-    local_urls = ["http://repo.opensciencegrid.org/pacman/cadist/INDEX.txt",
-                  "http://repo.opensciencegrid.org/pacman/cadist/INDEX-new.txt"]
-    local_url = local_urls[ca_format_type]
-    lines = rsvprobe.get_http_doc(local_url)
+    # Step 2: Get the list of Certs included in OSG from OSG repo
+    lines = rsvprobe.get_http_doc(rsvprobe.CA_CERT_INDEX_URL)
     if not lines:
-      self.return_unknown("Could not download the CA list from OSG (%s) or the list is empty. Unable to verify CAs." % local_url)
-    ## Old format (remove 1 #):
-    ## Hash         Source                   URL                                      Accreditation
-    ##--------------------------------------------------------------------------------------------------------
-    #09ff08b7     CNRS2-Projets            http://igc.services.cnrs.fr/GRID-FR/       I
+      self.return_unknown("Could not download the CA list from OSG (%s) or the list is empty. Unable to verify CAs." %
+                          rsvprobe.CA_CERT_INDEX_URL)
     ## New format (remove 1 #):
     ## OldHash      NewHash      CAfile                   CAURL                                       Version   Accreditation   
     ##--------------------------------------------------------------------------------------------------------
@@ -265,10 +234,8 @@ Additionally it makes sure that all IGTF CAs are installed.
       if not line or line.startswith('#'):
         continue
       line_content = line.split()
-      chash = line_content[0]
-      if ca_format_type == 1:
-        # New CA format type we use file names
-        chash = line_content[2].split('.')[0]
+      # New CA format type we use file names
+      chash = line_content[2].split('.')[0]
       source[chash] = line_content[-1]
 
     # Step 3: Check the CAs to ensure that sha256sums match-up

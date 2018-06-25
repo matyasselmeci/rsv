@@ -113,75 +113,34 @@ Additionally it makes sure that all IGTF CAs are installed.
       certdir = rsvprobe.get_ca_dir()
     self.verify_CRL(certdir, self.warningHrs, self.errorHrs)
 
-  def get_osg_CAs(self, ca_format_type, grid_type):
-    "Download and parce the CA list from OSG GOC"
-    if not grid_type in [0, 1]:
-      self.return_unknown("ERROR: Unknown grid type %s. Setting metric to unknown." % grid_type)
-    if not ca_format_type in [0, 1]:
-      self.return_unknown("ERROR: CA Certs Directory has unknown certificate type %s. Setting metric to unknown." % 
-                          ca_format_type)
+  def get_osg_CAs(self):
+    "Download and parse the CA list from OSG repo"
     source_name = {} # list of crl files name -> data (hash0, hash1, accreditation)
     source_hash0 = {} # Old hash -> accreditation
     source_hash1 = {} # New hash -> accreditation
-    local_urls = [["http://repo.opensciencegrid.org/pacman/cadist/INDEX.txt"]
-                  ["http://repo.opensciencegrid.org/pacman/cadist/INDEX-new.txt"]
-                 ]
-    local_url = local_urls[ca_format_type][grid_type]
-    # Download the CA list file from OSG/ITB cache
-    lines = rsvprobe.get_http_doc(local_url)
+    # Download the CA list file
+    lines = rsvprobe.get_http_doc(rsvprobe.CA_CERT_INDEX_URL)
     if not lines:
-      self.return_unknown("Could not download the CA list from OSG (%s) or the file is empty. Unable to verify CRLs." % local_url)
+      self.return_unknown("Could not download the CA list from OSG (%s) or the file is empty."
+                          " Unable to verify CRLs." % rsvprobe.CA_CERT_INDEX_URL)
     ## Parsing of the CA list
-    ## type 1 format:
-    ## OldHash      NewHash      CAfile                   CAURL                                       Version   Accreditation   
+    ## OldHash      NewHash      CAfile                   CAURL                                       Version   Accreditation
     ##--------------------------------------------------------------------------------------------------------
     #75680d2e     ee64a828     AAACertificateServices.pem https://www.terena.org/activities/tcs/         1.41   I
     #3c58f906     157753a5     AddTrust-External-CA-Root.pem http://www.comodo.com/                         1.41   I
-    ## type 0 format:
-    ## Hash         Source                   URL                                      Accreditation
-    ##--------------------------------------------------------------------------------------------------------
-    #09ff08b7     CNRS2-Projets            http://igc.services.cnrs.fr/GRID-FR/       I
-    #0a12b607     UGRID                    https://ca.ugrid.org/                      I
     for line in lines:
       if not line or line.startswith('#'):
         continue
       line_content = line.split()  
-      if ca_format_type == 1:
-        # New CA format type, both old hash (hash0) and new hash (hash1), source name has extension (filename)
-        source_hash0[line_content[0]] = line_content[-1]
-        source_hash1[line_content[1]] = line_content[-1]
-        source_name[line_content[2].split('.')[0]] = { 'hash': line_content[0],
-                                                       'newhash': line_content[1],
-                                                       'accreditation': line_content[-1]
-                                                     }
-      else: # assuming type 0
-        # Assuming CA format type (type 0), only old hash (hash0), source name has no extension
-        source_hash0[line_content[0]] = line_content[-1]
-        source_name[line_content[1]] = { 'hash': line_content[0],
-                                         'newhash': None,
-                                         'accreditation': line_content[-1]
-                                       }
-    return source_name, source_hash0, source_hash1 
+      # New CA format type, both old hash (hash0) and new hash (hash1), source name has extension (filename)
+      source_hash0[line_content[0]] = line_content[-1]
+      source_hash1[line_content[1]] = line_content[-1]
+      source_name[line_content[2].split('.')[0]] = { 'hash': line_content[0],
+                                                     'newhash': line_content[1],
+                                                     'accreditation': line_content[-1]
+                                                   }
+    return source_name, source_hash0, source_hash1
 
-  def parse_ca_index(self, certdir):
-    "Parse INDEX.txt in CA certs directory and retrieve IndexTypeVersion, default to 0"
-    ca_format_type = 0
-    ca_index = os.path.join(certdir, "INDEX.txt")
-    if os.path.isfile(ca_index):
-      try: 
-        lines = open(ca_index).readlines()
-        for i in lines:
-          if i.find("IndexTypeVersion") >= 0:
-            try:
-              ca_format_type = int(i.split()[2])
-            except IndexError:
-              # When missing it is 0 (default value)
-              pass
-      except (OSError, ValueError):
-        # If I don't find the index file or don't find the keyword IndexTypeVersion assume type 0
-        pass
-    return ca_format_type
- 
   def verify_CRL(self, certdir, warnHrs, errHrs):
     """Check_Freshness_Local_CRL: Checks the last time when the CRLs were successfully downloaded
 parameters :
@@ -192,15 +151,9 @@ errHrs:    Number hours since the failing downloads before an error is issued
 """    
     #status_code = 0 # Return status code as expected by RSV for summaryData
     found_crls = []
-    ca_format_type = 0
 
     # Step 1: Get the list of Certs included in OSG from GOC website.
-    ca_format_type = self.parse_ca_index(certdir)
-
-    #Check if the file CA certs are installed from ITB
-    # grid_type: 0 - osg; 1 - itb
-    grid_type = rsvprobe.get_grid_type()
-    source_name, source_hash0, source_hash1 = self.get_osg_CAs(ca_format_type, grid_type)
+    source_name, source_hash0, source_hash1 = self.get_osg_CAs()
 
     # Step 2: Get and Check time stamps on the CRL files to ensure that it has been recently downloaded
     error_count = 0
@@ -211,8 +164,7 @@ errHrs:    Number hours since the failing downloads before an error is issued
       self.return_unknown("ERROR: CA Certs Directory %s contains no CRL files (*.r0). Aborting the probe (UNKOWN status)." % 
                           certdir)     
     source_hash_list = source_hash0.keys()
-    if ca_format_type == 1:
-      source_hash_list += source_hash1.keys()
+    source_hash_list += source_hash1.keys()
     for i in crl_files:
       local_hash = os.path.basename(i).split('.')[0] #remove the extension
       # List of CRLs found.
@@ -232,13 +184,12 @@ errHrs:    Number hours since the failing downloads before an error is issued
           pass # not in hash0
         # keep the following outside form the except to cover the case when the hash h1 is the old hash of CA cert c1
         # and new hash of CA cert c2. Is this possible?
-        if not is_igtf_cert and ca_format_type == 1:
+        if not is_igtf_cert:
           try:
             if source_hash1[local_hash].find('I') >= 0:
               is_igtf_cert = True
           except KeyError:
             pass # not in hash1
-        if not is_igtf_cert:
           if self.verbose:
             self.add_ok("EGEE test and CRL file for CA with hash %s that is not in IGTF, ignored." % local_hash)
           continue       
@@ -265,25 +216,23 @@ errHrs:    Number hours since the failing downloads before an error is issued
         # Ignore non IGTF CAs for wlcg probe
         continue
       # continue if found CRL
-      if ca_format_type == 1 and ca_info['newhash'] in found_crls:
+      if ca_info['newhash'] in found_crls:
         continue
       if ca_info['hash'] in found_crls:
         continue
-      # continue if the CA file has been removed
-      # if ca_format_type == 1 then both CA files must have been removed to continue
+      # continue if the both CA files have been removed
       if not os.path.isfile(os.path.join(certdir, "%s.0" % ca_info['hash'])):
-        if ca_format_type != 1 or not os.path.isfile(os.path.join(certdir, "%s.0" % ca_info['newhash'])):
+        if not os.path.isfile(os.path.join(certdir, "%s.0" % ca_info['newhash'])):
           continue
-      warning = ("MISSING: CRL file for %s (%s/%s, type %s) is missing. OSG policy requires CRL for every CA distributed by OSG." %
-        (name, ca_info['newhash'], ca_info['hash'], ca_format_type))
+      warning = ("MISSING: CRL file for %s (%s/%s) is missing. OSG policy requires CRL for every CA distributed by OSG." %
+        (name, ca_info['newhash'], ca_info['hash']))
       if missing_count == 0:
         warning += (
           "\n- Has fetch-crl run recently?  (See /etc/cron.d/fetch-crl*)\n"
           "- See fetch-crl output (mailed to root by cron or sent to syslog), "
           "or try running fetch-crl by hand to inspect its output.\n"
           "- More info on troubleshooting this probe can be found at: "
-          "https://www.opensciencegrid.org/bin/view/Documentation/Release3/RsvProbeCrlFreshnessProbe\n"
-          "- For more help, submit a ticket to the GOC at: https://ticket.opensciencegrid.org/")
+          "- For more help, send email to help@opensciencegrid.org")
       self.add_warning(warning)
       missing_count += 1
 
