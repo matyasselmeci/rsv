@@ -8,7 +8,7 @@
 
 Name:      rsv
 Summary:   RSV Meta Package
-Version:   3.19.5
+Version:   3.19.6
 Release:   1%{?dist}
 License:   Apache 2.0
 Group:     Applications/Monitoring
@@ -264,6 +264,10 @@ fi
 %attr(-,rsv,rsv) %{_localstatedir}/log/rsv/probes
 
 %changelog
+* Tue Jun 26 2018 Mátyás Selmeci <matyas@cs.wisc.edu> - 3.19.6-1
+- Fix crashes in cacert-verify-probe and crl-freshness-probe (SOFTWARE-3305)
+- Update URLs in cacert-verify-probe and crl-freshness-probe (SOFTWARE-3299)
+
 * Mon Jun 04 2018 Edgar Fajardo <emfajard@ucsd.edu> - 3.19.5-1
 - Different apache configuration for RHEL6 and RHEL7 (SOFTWARE-3268)
 
