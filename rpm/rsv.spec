@@ -118,6 +118,7 @@ if [[ $RSV_VERSION != %{version} ]]; then
     echo "Edit rsv-core/lib/python/rsv/version.py"
     exit 1
 fi
+./validate-release
 
 for subpackage in rsv-core rsv-consumers rsv-metrics; do
     make -C $subpackage install DESTDIR=$RPM_BUILD_ROOT
