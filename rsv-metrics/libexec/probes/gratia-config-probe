@@ -310,10 +310,7 @@ EOF
 ERROR: Probe $probename has not been seen by Gratia collector $gracchost in more than two days.
 EOF
     normal_exit();
-  } elsif ($$response{hits}{total}>0) {
-      # do nothing
-  }
-else {
+  } else {
     setWarning();
     &appendDetailsData (<<EOF);
 WARNING: GRACC server $gracchost not responding.
