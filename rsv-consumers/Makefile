@@ -3,7 +3,7 @@ localstatedir := /var
 sysconfdir := /etc
 libexecdir := $(prefix)/libexec
 datadir := $(prefix)/share
-OSMajorVersion := $(shell cat /etc/redhat-release | grep -oP '(?<= )[0-9]+(?=\.)' )
+OSMajorVersion := $(shell rpm -E %rhel)
 
 _default:
 	@echo "No default. Try 'make install'"

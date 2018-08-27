@@ -8,7 +8,7 @@
 
 Name:      rsv
 Summary:   RSV Meta Package
-Version:   3.19.5
+Version:   3.19.7
 Release:   1%{?dist}
 License:   Apache 2.0
 Group:     Applications/Monitoring
@@ -112,6 +112,14 @@ Requires: /usr/bin/condor_ce_ping
 
 
 %install
+RSV_VERSION=$(python -c "import sys; sys.path.insert(0, 'rsv-core/lib/python'); from rsv import version; sys.stdout.write(version.__version__ + '\n')")
+if [[ $RSV_VERSION != %{version} ]]; then
+    echo "Version mismatch between RPM version (%{version}) and RSV version ($RSV_VERSION)"
+    echo "Edit rsv-core/lib/python/rsv/version.py"
+    exit 1
+fi
+./validate-release
+
 for subpackage in rsv-core rsv-consumers rsv-metrics; do
     make -C $subpackage install DESTDIR=$RPM_BUILD_ROOT
 done
@@ -257,6 +265,13 @@ fi
 %attr(-,rsv,rsv) %{_localstatedir}/log/rsv/probes
 
 %changelog
+* Fri Jun 29 2018 Mátyás Selmeci <matyas@cs.wisc.edu> - 3.19.7-1
+- Update RHEL7 HTTPD config to work on Apache 2.4 (SOFTWARE-3268)
+
+* Tue Jun 26 2018 Mátyás Selmeci <matyas@cs.wisc.edu> - 3.19.6-1
+- Fix crashes in cacert-verify-probe and crl-freshness-probe (SOFTWARE-3305)
+- Update URLs in cacert-verify-probe and crl-freshness-probe (SOFTWARE-3299)
+
 * Mon Jun 04 2018 Edgar Fajardo <emfajard@ucsd.edu> - 3.19.5-1
 - Different apache configuration for RHEL6 and RHEL7 (SOFTWARE-3268)
 
