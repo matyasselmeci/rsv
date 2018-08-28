@@ -303,17 +303,16 @@ EOF
   $probe_contact_check =~ s/\@received/received/;
   # Check to see if we've ever had a contact with this collector
   my $response = decode_json($probe_contact_check);
-  if ($$response{hits}{total} == 0) {
-    setCritical();
-    $run_me_root = RMR_IF_NOT_OK;
-    &appendDetailsData (<<EOF);
+  if (exists $$response{hits}{total}) {
+    if ($$response{hits}{total} == 0) {
+      setCritical();
+      $run_me_root = RMR_IF_NOT_OK;
+      &appendDetailsData (<<EOF);
 ERROR: Probe $probename has not been seen by Gratia collector $gracchost in more than two days.
 EOF
-    normal_exit();
-  } elsif ($$response{hits}{total}>0) {
-      # do nothing
-  }
-else {
+      normal_exit();
+    }
+  } else {
     setWarning();
     &appendDetailsData (<<EOF);
 WARNING: GRACC server $gracchost not responding.
